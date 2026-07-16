@@ -166,8 +166,10 @@ public enum DiagramLayoutLinter {
     ///   but a line vanishing under a chip is still placement worth fixing.
     /// - `label-on-fixture` (node-graph families): an edge-label frame lands ON
     ///   a fixture — an interior bend of any edge, a crossing/junction of two
-    ///   edges, another edge-label frame, or a node box. A caption belongs on a
-    ///   clean straight stretch, not a corner or an intersection.
+    ///   edges, another edge-label frame, a node box, or within the clearance of
+    ///   a foreign edge's arrowhead tip. A caption belongs on a clean straight
+    ///   stretch with room around it, not a corner, an intersection, or crammed
+    ///   against an arrowhead.
     /// - `label-crowds-edge` (node-graph families): the straight run an edge
     ///   label sits on is barely longer than the text, leaving under `minStub`
     ///   (10pt) of visible connector on a side — the line all but vanishes.
@@ -337,6 +339,11 @@ public enum DiagramLayoutLinter {
         //       connector on a side — the line all but vanishes behind the word.
         if scene.name == "flowchart" || scene.name == "state" {
             let minStub: CGFloat = 10
+            // A caption must also breathe around an ARROWHEAD — a foreign edge's
+            // head end (its last polyline point). A label crammed against an
+            // arrowhead reads as noise even when it clears the shaft, so the same
+            // comfortable clearance the placer keeps is a hard rule here.
+            let arrowClearance: CGFloat = 10
             let edgeLabels = scene.labels.enumerated().filter { $0.element.anchorEdge != nil }
 
             // Interior bends of every edge (endpoints are node anchors, not
@@ -382,6 +389,18 @@ public enum DiagramLayoutLinter {
                     > 0.34 * label.frame.width * label.frame.height {
                     out.append(.init(.error, "label-on-fixture",
                         "label \"\(label.text)\" sits on node \"\(node.id)\""))
+                }
+                // Within the clearance of a FOREIGN arrowhead tip. The label's
+                // own route's head is exempt — its stub already reserves the run
+                // end — so only other edges' heads count.
+                for (ei, edge) in scene.edges.enumerated() where ei != label.anchorEdge {
+                    guard let tip = edge.polyline.last else { continue }
+                    let dx = max(label.frame.minX - tip.x, 0, tip.x - label.frame.maxX)
+                    let dy = max(label.frame.minY - tip.y, 0, tip.y - label.frame.maxY)
+                    if hypot(dx, dy) < arrowClearance {
+                        out.append(.init(.error, "label-on-fixture",
+                            "label \"\(label.text)\" crowds the arrowhead of edge #\(ei) at (\(Int(tip.x)),\(Int(tip.y)))"))
+                    }
                 }
             }
 

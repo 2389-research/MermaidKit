@@ -150,6 +150,80 @@ final class EdgeLabelLayoutTests: XCTestCase {
         XCTAssertEqual(hits.first?.severity, .error)
     }
 
+    /// `label-on-fixture`: a caption crammed against a FOREIGN edge's arrowhead
+    /// tip (within the clearance) must be flagged — the rule that guards the
+    /// "labels hug the arrowhead" complaint.
+    func testLabelCrowdingArrowheadIsFlagged() {
+        let w = measure("hug", DiagramLayoutEngine.labelFontSize).width
+        // Edge #1's arrowhead lands at (150,100); the caption of edge #0 is
+        // parked ~3pt to its left — clearing the shaft but crowding the head.
+        let scene = DiagramScene(
+            name: "flowchart", size: CGSize(width: 300, height: 200),
+            nodes: [.init(id: "A", frame: CGRect(x: 10, y: 40, width: 40, height: 20)),
+                    .init(id: "B", frame: CGRect(x: 150, y: 90, width: 40, height: 20))],
+            edges: [.init(polyline: [CGPoint(x: 30, y: 60), CGPoint(x: 30, y: 160)], label: "hug"),
+                    .init(polyline: [CGPoint(x: 30, y: 30), CGPoint(x: 150, y: 100)], label: nil)],
+            labels: [.init(text: "hug",
+                           frame: CGRect(x: 146 - w, y: 93, width: w, height: 14),
+                           anchorEdge: 0, backed: true)])
+        let hits = DiagramLayoutLinter.lint(scene).filter { $0.kind == "label-on-fixture" }
+        XCTAssertTrue(hits.contains { $0.detail.contains("arrowhead") },
+            "a caption crammed against a foreign arrowhead must be flagged")
+    }
+
+    // MARK: - Route quality on the real back-edge layout
+
+    /// #3 — the `fail` back edge (`Decide -> Draft`) must have NO needless zag:
+    /// a straightened route of at most a single bend on each axis, never the
+    /// tiny sideways step the old router left between a diamond vertex and its
+    /// dummy channel.
+    func testFailEdgeHasNoZag() throws {
+        guard case .flowchart(let chart) = MermaidParser.parse(backEdgeSource) else { return XCTFail() }
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+        let fail = try XCTUnwrap(layout.edges.first { $0.label == "fail" })
+        // No interior segment is a tiny cross-axis jog (< the zag threshold)
+        // sitting between two longer perpendicular runs.
+        let p = fail.points
+        for k in 1..<(max(p.count - 2, 1)) where k + 2 < p.count {
+            let a = p[k - 1], b = p[k], c = p[k + 1], d = p[k + 2]
+            let stepX = abs(b.x - c.x), stepY = abs(b.y - c.y)
+            // b→c horizontal jog flanked by two vertical runs?
+            if stepY < 0.5, stepX > 0.5, stepX <= DiagramLayoutEngine.flowchartMinJog,
+               abs(a.x - b.x) < 0.5, abs(c.x - d.x) < 0.5 {
+                XCTFail("fail edge has a \(Int(stepX))pt horizontal zag at \(b)")
+            }
+            if stepX < 0.5, stepY > 0.5, stepY <= DiagramLayoutEngine.flowchartMinJog,
+               abs(a.y - b.y) < 0.5, abs(c.y - d.y) < 0.5 {
+                XCTFail("fail edge has a \(Int(stepY))pt vertical zag at \(b)")
+            }
+        }
+    }
+
+    /// #2 — the `reject` back edge (`Approve -> Draft`) must exit Approve's EAST
+    /// face and return up a side channel clear of the node stack, so its route
+    /// never runs under the `success` caption.
+    func testRejectExitsEastSideChannel() throws {
+        guard case .flowchart(let chart) = MermaidParser.parse(backEdgeSource) else { return XCTFail() }
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+        let reject = try XCTUnwrap(layout.edges.first { $0.label == "reject" })
+        let approve = try XCTUnwrap(layout.nodes.first { $0.id == "Approve" })
+        // Exits the east (right) face of Approve.
+        let start = reject.points[0]
+        XCTAssertEqual(start.x, approve.frame.maxX, accuracy: 1.0,
+            "reject should leave Approve's east face, not its top")
+        // The return run sits in a gutter to the RIGHT of every node.
+        let maxNodeX = layout.nodes.map { $0.frame.maxX }.max() ?? 0
+        let gutterX = reject.points.map(\.x).max() ?? 0
+        XCTAssertGreaterThan(gutterX, maxNodeX - 0.5, "reject return isn't in a side gutter")
+        // It does not run under the success caption.
+        let success = try XCTUnwrap(layout.edges.first { $0.label == "success" })
+        let sp = try XCTUnwrap(success.labelPoint)
+        for (a, b) in zip(reject.points, reject.points.dropFirst()) {
+            XCTAssertGreaterThan(distanceToSegment(sp, a, b), 12,
+                "reject route passes under the success label")
+        }
+    }
+
     /// The state fixture (composite states + choice/fork/join + cycles) — whose
     /// adjacent-layer labels used to land on jogs and stack on top of each
     /// other — is now clean of both new rules.

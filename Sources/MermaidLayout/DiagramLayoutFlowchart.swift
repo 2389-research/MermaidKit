@@ -21,6 +21,10 @@ extension DiagramLayoutEngine {
     private static let flowchartPortSep: CGFloat = 20
     /// Track spacing for concurrent edge jogs crossing the same layer gap.
     private static let flowchartJogTrack: CGFloat = 10
+    /// A cross-axis step at or below this reads as a needless zag, not a real
+    /// jog — below the port/track separations (20/10) it can never be one, so
+    /// `straightenJogs` collapses it onto a straight run.
+    static let flowchartMinJog: CGFloat = 8
     /// Minimum visible connector stub on each side of an edge label: a labeled
     /// edge reserves `labelExtent + 2*stub` along its straight run so the line
     /// always reads on both sides of the caption.
@@ -144,7 +148,8 @@ extension DiagramLayoutEngine {
         // 5. Route each edge through its chain's waypoints.
         let (placedEdges, crossLimit) = routeChains(
             chart: chart, chains: chains, frames: placement.frames,
-            horizontal: horizontal, crossExtent: placement.crossExtent
+            horizontal: horizontal, crossExtent: placement.crossExtent,
+            backEdges: backEdges
         )
 
         // 6. Place edge labels clear of node boxes and each other.
@@ -205,18 +210,26 @@ extension DiagramLayoutEngine {
             backArrow: edge.backArrow, labelPoint: point)
     }
 
-    /// Places one caption on the LONGEST clean straight (axis-aligned) run of
-    /// each route — never on a vertex/bend — then collision-avoids: a candidate
-    /// overlapping a node frame, an already-placed label, an edge bend, or an
-    /// edge crossing, or leaving less than `flowchartLabelStub` of visible
-    /// connector on either side of the caption, is penalized so the label slides
-    /// along the run, nudges perpendicular, or falls back to the next-longest
-    /// run until it sits on a clean, uncluttered stretch. `labelSizes[i]` is the
-    /// measured caption of route i (nil = unlabeled → no anchor). Deterministic:
-    /// runs rank by length with the model-order segment index breaking ties, and
-    /// routes are placed in model order, so no hashed iteration reaches the
-    /// geometry (issue #1). Shared by the flowchart pipeline and the layered
-    /// (state/class/ER) router, so both place captions the same way.
+    /// Comfortable clearance a caption keeps from any obstacle it does not sit
+    /// on — an arrowhead tip, a foreign node box, another caption. Matched to the
+    /// stub minimum so a label visibly breathes on every side (~1 cell).
+    static let flowchartLabelGap: CGFloat = 12
+
+    /// Places each caption at the MIDPOINT of a straight (axis-aligned) run of
+    /// its route — the default — and nudges only when that midpoint violates a
+    /// clearance. The clearance obstacles are the things a reader should see
+    /// *around* the word: other edges' arrowhead tips (the endpoint region, not
+    /// just the shaft), node boxes, other captions, and the interior bends /
+    /// crossings of any route. When the midpoint is clear the label stays put;
+    /// when it is not, the label first slides ALONG the run (staying as close to
+    /// the midpoint as it can while keeping `flowchartLabelStub` of connector on
+    /// each side), then nudges PERPENDICULAR, and only as a last resort falls
+    /// back to the next-longest run. `labelSizes[i]` is the measured caption of
+    /// route i (nil = unlabeled → no anchor). Deterministic: runs rank by length
+    /// with the model-order segment index breaking ties, candidate offsets are a
+    /// fixed sweep, and routes are placed in model order, so no hashed iteration
+    /// reaches the geometry (issue #1). Shared by the flowchart pipeline and the
+    /// layered (state/class/ER) router, so both place captions the same way.
     static func placeRunLabels(
         routes: [[CGPoint]],
         labelSizes: [CGSize?],
@@ -228,6 +241,21 @@ extension DiagramLayoutEngine {
         var bends: [CGPoint] = []
         for pts in routes where pts.count > 2 { bends.append(contentsOf: pts[1..<(pts.count - 1)]) }
         let crossings = routeCrossingPoints(routes)
+        // Arrowhead tips: the head end of every route (last point). Treated as a
+        // small obstacle REGION, not just a point, so a label keeps clear of the
+        // arrowhead rather than hugging it. A route's own tips are excluded when
+        // scoring it — its own stub already reserves space at the run ends.
+        let arrowTips: [(route: Int, p: CGPoint)] = routes.indices.compactMap {
+            routes[$0].count >= 2 ? ($0, routes[$0].last!) : nil
+        }
+        let gap = flowchartLabelGap
+
+        // Distance from a point to the nearest edge of a rect (0 inside/on it).
+        func pointRectDistance(_ p: CGPoint, _ r: CGRect) -> CGFloat {
+            let dx = max(r.minX - p.x, 0, p.x - r.maxX)
+            let dy = max(r.minY - p.y, 0, p.y - r.maxY)
+            return hypot(dx, dy)
+        }
 
         var anchors = [CGPoint?](repeating: nil, count: routes.count)
         var labelRects: [CGRect] = []
@@ -236,6 +264,7 @@ extension DiagramLayoutEngine {
             guard let sz = labelSizes[i], routes[i].count >= 2 else { continue }
             let pts = routes[i]
             let w = sz.width + 6, h = sz.height + 2
+            let ownTips = [pts.first!, pts.last!]
 
             // Straight runs of this route (segments; the polyline is already
             // collinear-simplified, so each segment is a maximal run).
@@ -271,11 +300,21 @@ extension DiagramLayoutEngine {
                 let along = run.horizontal ? w : h        // caption extent along the run
                 let perp = run.horizontal ? h : w         // caption extent across the run
                 let mid = (run.lo + run.hi) / 2
-                // Slide the caption along the run (keeping a stub) to dodge a
-                // mid-run crossing; nudge across it only as a last resort.
+                // Slide range along the run that keeps a full stub on each side;
+                // a fine sweep so the label can settle JUST clear of an obstacle
+                // instead of jumping to the far end. da = 0 is always the
+                // midpoint (the default), and the |da| penalty keeps it there
+                // unless a clearance forces a move.
                 let slack = max(0, (run.hi - run.lo) / 2 - along / 2 - flowchartLabelStub)
-                let alongShifts: [CGFloat] = slack > 1 ? [0, slack, -slack] : [0]
-                let perpNudges: [CGFloat] = [0, perp / 2 + 5, -(perp / 2 + 5)]
+                var alongShifts: [CGFloat] = [0]
+                if slack > 1 {
+                    let steps = 12
+                    for s in 1...steps {
+                        let v = slack * CGFloat(s) / CGFloat(steps)
+                        alongShifts.append(v); alongShifts.append(-v)
+                    }
+                }
+                let perpNudges: [CGFloat] = [0, perp / 2 + gap / 2, -(perp / 2 + gap / 2)]
                 for da in alongShifts {
                     for dp in perpNudges {
                         let cAlong = mid + da
@@ -288,9 +327,17 @@ extension DiagramLayoutEngine {
                         let probe = rect.insetBy(dx: -1, dy: -1)
                         for v in bends where probe.contains(v) { score += 120 }
                         for x in crossings where probe.contains(x) { score += 120 }
+                        // Arrowhead clearance: a foreign arrowhead tip within the
+                        // comfortable gap of the caption frame is an obstacle.
+                        for tip in arrowTips where tip.route != i {
+                            if ownTips.contains(where: { hypot($0.x - tip.p.x, $0.y - tip.p.y) < 0.5 }) { continue }
+                            let d = pointRectDistance(tip.p, rect)
+                            if d < gap { score += (gap - d) * 6 }
+                        }
                         // Stub on each side of the caption on this run.
                         let stub = min((cAlong - along / 2) - run.lo, run.hi - (cAlong + along / 2))
                         if stub < flowchartLabelStub { score += (flowchartLabelStub - stub) * 6 }
+                        score += abs(da) * 1.4           // stay at the MIDPOINT
                         score += abs(dp) * 1.5           // prefer sitting ON the line
                         score += CGFloat(rank) * 2       // prefer the longer run
                         if rect.minX < flowchartMargin || rect.minY < flowchartMargin { score += 1_000 }
@@ -454,7 +501,8 @@ extension DiagramLayoutEngine {
         chains: [[String]],
         frames: [String: CGRect],
         horizontal: Bool,
-        crossExtent: CGFloat
+        crossExtent: CGFloat,
+        backEdges: Set<Int> = []
     ) -> (edges: [FlowchartLayout.PlacedEdge], crossLimit: CGFloat) {
         let shapeOf = Dictionary(uniqueKeysWithValues: chart.nodes.map { ($0.id, $0.shape) })
 
@@ -694,6 +742,25 @@ extension DiagramLayoutEngine {
         // box — aside to restore the minimum separation.
         separateRuns(&routes, horizontal: horizontal, minSep: flowchartPortSep)
 
+        // Straighten needless zags: a waypoint (a diamond vertex vs. its dummy
+        // channel, a stub vs. a face port) can step a run sideways by only a
+        // cell before it resumes straight. Collapse that tiny jog so the run is
+        // one straight stretch, never introducing a step where the ends could be
+        // joined straight.
+        straightenJogs(&routes, horizontal: horizontal, maxJog: flowchartMinJog)
+
+        // A back edge that still threads UP THROUGH the node stack (a multi-bend
+        // zigzag re-entering the occupied column, with its label crossing the
+        // forward edges) reads far cleaner as a C: exit the source's side face,
+        // run the return in a gutter clear of every node, and enter the target's
+        // same face. Applied only when the gutter route is node-clear AND has
+        // strictly fewer bends AND no more crossings — so a back edge that
+        // already routes cleanly on the boundary (few bends) is left alone and
+        // no fixture regresses.
+        rerouteBackEdgesThroughGutter(
+            &routes, backEdges: backEdges, chart: chart, frames: frames,
+            horizontal: horizontal)
+
         var placedEdges: [FlowchartLayout.PlacedEdge] = []
         var crossLimit = flowchartMargin + crossExtent
         for f in frames.values { crossLimit = max(crossLimit, horizontal ? f.maxY : f.maxX) }
@@ -808,6 +875,167 @@ extension DiagramLayoutEngine {
 
     private static func offsetCross(_ p: CGPoint, by d: CGFloat, horizontal: Bool) -> CGPoint {
         horizontal ? CGPoint(x: p.x, y: p.y + d) : CGPoint(x: p.x + d, y: p.y)
+    }
+
+    /// Reroutes a back edge that threads through the node stack into a clean side
+    /// channel. For each back edge whose current polyline zigzags (more than a
+    /// single bend), it builds a candidate on each side of the layout — exit the
+    /// source's side face, run the return along the main axis in a gutter set
+    /// clear of every node, and enter the target's same face — then adopts the
+    /// candidate ONLY when it is node-clear, has strictly fewer bends, and adds
+    /// no crossings, choosing the side with fewer crossings (ties → the nearer
+    /// gutter). A back edge already routing cleanly on the boundary is untouched,
+    /// so nothing regresses. Deterministic: back edges are processed in index
+    /// order and side selection is a fixed comparison.
+    static func rerouteBackEdgesThroughGutter(
+        _ routes: inout [[CGPoint]],
+        backEdges: Set<Int>,
+        chart: Flowchart,
+        frames: [String: CGRect],
+        horizontal: Bool
+    ) {
+        guard !backEdges.isEmpty else { return }
+        func crossHi(_ f: CGRect) -> CGFloat { horizontal ? f.maxY : f.maxX }
+        func crossLo(_ f: CGRect) -> CGFloat { horizontal ? f.minY : f.minX }
+        func mainMid(_ f: CGRect) -> CGFloat { horizontal ? f.midX : f.midY }
+        func makePoint(cross: CGFloat, main: CGFloat) -> CGPoint {
+            horizontal ? CGPoint(x: main, y: cross) : CGPoint(x: cross, y: main)
+        }
+        // Gutters and node-clearance use only REAL nodes: dummy channels are
+        // invisible reserved space, not obstacles, so the gutter hugs the node
+        // stack instead of the widest dummy.
+        let realFrames = chart.nodes.compactMap { frames[$0.id] }
+        let realIDs = Set(chart.nodes.map(\.id))
+        guard let gutterEast = realFrames.map(crossHi).max().map({ $0 + flowchartPortSep }),
+              let gutterWest = realFrames.map(crossLo).min().map({ $0 - flowchartPortSep }) else { return }
+
+        // Straight segment (a,b) travels >6pt inside rect r's interior?
+        func passesThrough(_ a: CGPoint, _ b: CGPoint, _ r: CGRect) -> Bool {
+            let inner = r.insetBy(dx: 2, dy: 2)
+            guard inner.width > 0, inner.height > 0 else { return false }
+            // Orthogonal segments only here: clip the 1-D overlap on each axis.
+            let loX = min(a.x, b.x), hiX = max(a.x, b.x)
+            let loY = min(a.y, b.y), hiY = max(a.y, b.y)
+            let ox = max(0, min(hiX, inner.maxX) - max(loX, inner.minX))
+            let oy = max(0, min(hiY, inner.maxY) - max(loY, inner.minY))
+            return ox > 6 && oy > 6
+        }
+        func nodeClear(_ route: [CGPoint], skip: Set<String>) -> Bool {
+            for (id, f) in frames where realIDs.contains(id) && !skip.contains(id) {
+                for k in 0..<(route.count - 1) where passesThrough(route[k], route[k + 1], f) {
+                    return false
+                }
+            }
+            return true
+        }
+        func bendCount(_ route: [CGPoint]) -> Int { max(route.count - 2, 0) }
+        func crossings(_ route: [CGPoint], against ignore: Int) -> Int {
+            var n = 0
+            for (j, other) in routes.enumerated() where j != ignore && other.count >= 2 {
+                for a in 0..<(route.count - 1) {
+                    for b in 0..<(other.count - 1) where segmentCrossPoint(route[a], route[a + 1], other[b], other[b + 1]) != nil {
+                        n += 1
+                    }
+                }
+            }
+            return n
+        }
+
+        for index in backEdges.sorted() where index < chart.edges.count {
+            let route = routes[index]
+            guard route.count >= 2, bendCount(route) > 1 else { continue }
+            let edge = chart.edges[index]
+            guard let fs = frames[edge.from], let ft = frames[edge.to] else { continue }
+            let skip: Set<String> = [edge.from, edge.to]
+            let curBends = bendCount(route)
+            let curCross = crossings(route, against: index)
+
+            var chosen: [CGPoint]?
+            var chosenCross = Int.max
+            var chosenGutterDist = CGFloat.greatestFiniteMagnitude
+            for east in [true, false] {
+                let channel = east ? gutterEast : gutterWest
+                // A west gutter that would fall off the canvas can't be used (we
+                // can't shift the whole layout from here).
+                if !east && channel < flowchartMargin { continue }
+                let sCross = east ? crossHi(fs) : crossLo(fs)
+                let tCross = east ? crossHi(ft) : crossLo(ft)
+                let p0 = makePoint(cross: sCross, main: mainMid(fs))
+                let p3 = makePoint(cross: tCross, main: mainMid(ft))
+                // A diamond source/target attaches at its side vertex, which is
+                // exactly (crossHi/Lo, mainMid) on this face — so the same
+                // construction lands on the vertex with no special case.
+                let cand = simplifyCollinear([
+                    p0,
+                    makePoint(cross: channel, main: mainMid(fs)),
+                    makePoint(cross: channel, main: mainMid(ft)),
+                    p3,
+                ])
+                guard nodeClear(cand, skip: skip) else { continue }
+                guard bendCount(cand) < curBends else { continue }
+                let candCross = crossings(cand, against: index)
+                guard candCross <= curCross else { continue }
+                let gutterDist = abs(channel - (east ? crossHi(fs) : crossLo(fs)))
+                if candCross < chosenCross || (candCross == chosenCross && gutterDist < chosenGutterDist) {
+                    chosen = cand; chosenCross = candCross; chosenGutterDist = gutterDist
+                }
+            }
+            if let cand = chosen { routes[index] = cand }
+        }
+    }
+
+    /// Removes a needless zag: a segment `b→c` that steps the route sideways
+    /// (across the main axis) by at most `maxJog` while the runs before (`a→b`)
+    /// and after (`c→d`) both travel ALONG the main axis. The two runs are then
+    /// collinear-ish — the jog only exists because a waypoint (a diamond vertex,
+    /// a face-port channel) sat a cell off the neighbouring run's track. Snap the
+    /// two runs onto one track so the route reads straight. Only a run whose FAR
+    /// end is an interior bend is moved, so a run anchored on a node border never
+    /// detaches; when both are movable the longer run's track wins (least visual
+    /// change). A few passes let a collapse that exposes another tiny jog settle.
+    static func straightenJogs(_ routes: inout [[CGPoint]], horizontal: Bool, maxJog: CGFloat) {
+        func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
+        func main(_ p: CGPoint) -> CGFloat { horizontal ? p.x : p.y }
+        func setCross(_ p: CGPoint, _ c: CGFloat) -> CGPoint {
+            horizontal ? CGPoint(x: p.x, y: c) : CGPoint(x: c, y: p.y)
+        }
+        for e in routes.indices {
+            var pts = routes[e]
+            var pass = 0
+            while pass < 6, pts.count >= 4 {
+                pass += 1
+                var collapsed = false
+                for k in 1..<(pts.count - 2) {
+                    let a = pts[k - 1], b = pts[k], c = pts[k + 1], d = pts[k + 2]
+                    // b→c is a small cross step with no main travel (a pure jog).
+                    let step = abs(cross(b) - cross(c))
+                    guard step > 0.5, step <= maxJog, abs(main(b) - main(c)) < 0.5 else { continue }
+                    // Both neighbours must be main-axis runs (constant cross).
+                    guard abs(cross(a) - cross(b)) < 0.5, abs(cross(c) - cross(d)) < 0.5,
+                          abs(main(a) - main(b)) > 0.5, abs(main(c) - main(d)) > 0.5 else { continue }
+                    let beforeMovable = (k - 1) >= 1               // a is an interior bend
+                    let afterMovable = (k + 2) <= pts.count - 2    // d is an interior bend
+                    let beforeLen = abs(main(a) - main(b)), afterLen = abs(main(c) - main(d))
+                    let moveAfter: Bool
+                    if afterMovable && beforeMovable { moveAfter = afterLen <= beforeLen }
+                    else if afterMovable { moveAfter = true }
+                    else if beforeMovable { moveAfter = false }
+                    else { continue }                              // neither: can't straighten safely
+                    if moveAfter {                                 // after-run onto the before track
+                        pts[k + 1] = setCross(c, cross(b))
+                        pts[k + 2] = setCross(d, cross(b))
+                    } else {                                       // before-run onto the after track
+                        pts[k - 1] = setCross(a, cross(c))
+                        pts[k] = setCross(b, cross(c))
+                    }
+                    collapsed = true
+                    break
+                }
+                pts = simplifyCollinear(pts)
+                if !collapsed { break }
+            }
+            routes[e] = pts
+        }
     }
 
     /// The point on `rect`'s border where the ray from its center toward
