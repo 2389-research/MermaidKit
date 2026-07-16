@@ -255,14 +255,18 @@ public enum ASCIIRenderer {
     public static func asciiRenderFlowchart(_ chart: Flowchart,
                                             color: ASCIIColorMode = .plain,
                                             background: TerminalBackground = .dark) -> String? {
-        let diagram = MermaidDiagram.flowchart(chart)
-        let scene = DiagramScene.lower(diagram, measure: ASCIIMetrics.measurer)
+        // Lay out ONCE, then lower that same layout to the scene. For a
+        // flowchart, `DiagramScene.lower(_:measure:)` does exactly this —
+        // layout, then `from(_:)` — and injects no title label (a flowchart
+        // carries none), so lowering the layout we already hold is
+        // behaviour-identical while avoiding a redundant second layout pass.
+        let layout = DiagramLayoutEngine.layout(chart, measure: ASCIIMetrics.measurer)
+        let scene = DiagramScene.from(layout, measure: ASCIIMetrics.measurer)
         // The scene keeps each node's *identifier* (A, B) as its id, having
         // dropped the display label AND shape during lowering. Recover both from
         // the same layout so boxes read "Start" (not "A") and a decision node
         // draws as a diamond (not a rectangle). Geometry still comes wholly from
         // the scene.
-        let layout = DiagramLayoutEngine.layout(chart, measure: ASCIIMetrics.measurer)
         var labelForID: [String: String] = [:]
         var shapeForID: [String: Flowchart.NodeShape] = [:]
         for n in layout.nodes {

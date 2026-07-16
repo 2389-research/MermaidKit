@@ -211,7 +211,10 @@ public enum TerminalCapabilities {
             let remainingMs = Int32(max(0, deadline.timeIntervalSinceNow * 1000))
             var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
             guard poll(&pfd, 1, remainingMs) > 0 else { break }
-            let n = read(fd, &buf, buf.count)
+            // Read into the array's backing storage explicitly. `read` takes a
+            // raw pointer, so hand it the element buffer's base address and byte
+            // count rather than relying on an implicit `&array` conversion.
+            let n = buf.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
             guard n > 0 else { break }
             reply.append(contentsOf: buf[0..<n])
             if terminated(reply) { break }
