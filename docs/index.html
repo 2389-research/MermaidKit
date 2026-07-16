@@ -44,6 +44,125 @@
     font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased;
   }
+  /* Iridescent mermaid-scale backdrop: a fixed full-page layer behind all content,
+     low-key so text/cards stay the focus. Stacked-radial-gradient scallop geometry;
+     teal scales under an aqua/lavender/coral/teal sweep. Fainter in light, a touch
+     stronger in dark. Purely decorative — pointer-events:none, z-index behind flow. */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.20;
+    --u:2.3vmin;
+    --c1:#ebfdff; --c2:#123c4a; --c3:#2fb0a2;
+    --c4:rgba(18,60,74,.30); --c5:rgba(18,60,74,.24); --c6:rgba(18,60,74,.24);
+    --draw-mid:#fff0 0 calc(var(--u)*3.25), var(--c4) calc(var(--u)*3.5), #fff0 calc(var(--u)*3.75) 100%;
+    --draw-left:#fff0 0 calc(var(--u)*3.25), var(--c5) calc(var(--u)*3.5), #fff0 calc(var(--u)*3.75) 100%;
+    --draw-right:#fff0 0 calc(var(--u)*3.25), var(--c6) calc(var(--u)*3.5), #fff0 calc(var(--u)*3.75) 100%;
+    --draw-white:var(--c1) calc(var(--u)*3.58) calc(var(--u)*3.62), #fff0 calc(var(--u)*3.66) 100%;
+    --p1:var(--c1) calc(var(--u)*3.5), var(--c3) calc(var(--u)*3.9), #fff0 calc(var(--u)*4) 100%;
+    --p2:var(--c1) calc(var(--u)*3.75), #fff0 calc(var(--u)*4) 100%;
+    --c0:circle at 0%; --c50:circle at 50%; --c100:circle at 100%;
+    --gp:50%/calc(var(--u)*10) calc(var(--u)*10);
+    background:
+      repeating-linear-gradient(66deg,
+        rgba(57,214,197,.55) 0, rgba(201,182,255,.5) 7vmin,
+        rgba(255,143,163,.42) 14vmin, rgba(58,100,183,.4) 21vmin,
+        rgba(57,214,197,.55) 28vmin),
+      radial-gradient(var(--c50) -36%, var(--p1)) var(--gp),
+      radial-gradient(var(--c100) -34%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -30%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -26%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -22%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -18%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -14%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -10%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -6%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) -2%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 2%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 6%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 8%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c100) 10%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 12%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c100) 14%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c0) -34%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -30%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -26%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -22%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -18%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -14%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -10%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -6%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) -2%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 2%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 6%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 8%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c0) 10%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 12%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c0) 14%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c100) 12%, var(--p2)) var(--gp),
+      radial-gradient(var(--c100) 15%, var(--p1)) var(--gp),
+      radial-gradient(var(--c0) 12%, var(--p2)) var(--gp),
+      radial-gradient(var(--c0) 15%, var(--p1)) var(--gp),
+      radial-gradient(var(--c50) -22%, var(--draw-mid)) var(--gp),
+      linear-gradient(180deg, #fff0 0 1%, var(--c2) 1%, var(--c1) 14%, #fff0 15% 100%) var(--gp),
+      radial-gradient(var(--c50) -18%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) -14%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) -10%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) -6%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) -2%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 2%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 6%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 10%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 14%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 18%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 22%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 26%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 30%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 34%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 38%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 42%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 46%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 36%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c50) 50%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 40%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c50) 54%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 56%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c50) 58%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 60%, var(--draw-white)) var(--gp),
+      radial-gradient(var(--c50) 62%, var(--draw-mid)) var(--gp),
+      radial-gradient(var(--c50) 61%, var(--p2)) var(--gp),
+      radial-gradient(var(--c50) 64%, var(--p1)) var(--gp),
+      radial-gradient(var(--c100) 30%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 34%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 38%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 42%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 46%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 50%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 54%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 58%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 62%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 66%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 70%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 74%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 78%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 82%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c100) 86%, var(--draw-right)) var(--gp),
+      radial-gradient(var(--c0) 30%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 34%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 38%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 42%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 46%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 50%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 54%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 58%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 62%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 66%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 70%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 74%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 78%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 82%, var(--draw-left)) var(--gp),
+      radial-gradient(var(--c0) 86%, var(--draw-left)) var(--gp),
+      linear-gradient(0deg, var(--c1) 0 30%, var(--c2) 50%, var(--c1) 50% 80%, var(--c2) calc(100% - 1px), var(--c1) calc(100% - 1px) 100%) var(--gp);
+  }
+  @media (prefers-color-scheme:dark){ body::before{opacity:.30} }
   a{color:var(--accent); text-decoration:none}
   a:hover{text-decoration:underline}
   .wrap{max-width:var(--maxw); margin:0 auto; padding:0 20px}
