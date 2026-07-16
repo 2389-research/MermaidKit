@@ -77,7 +77,7 @@ public struct TerminalEnvironment: Sendable {
             termProgram: env["TERM_PROGRAM"],
             kittyWindowID: env["KITTY_WINDOW_ID"],
             hasGhosttyMarker: ghostty,
-            stdoutIsTTY: isatty(fileno(stdout)) != 0,
+            stdoutIsTTY: isatty(STDOUT_FILENO) != 0,
             colorFGBG: env["COLORFGBG"])
     }
 }
