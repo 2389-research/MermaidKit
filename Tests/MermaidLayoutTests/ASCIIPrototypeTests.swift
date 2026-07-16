@@ -53,18 +53,20 @@ final class ASCIIPrototypeTests: XCTestCase {
 
     // MARK: shape-aware rendering
 
-    /// A decision `{}` node must be visibly NOT a rectangle. It uses angled
-    /// corner slashes and chevron sides; a plain `[]` node next to it keeps the
-    /// square box glyphs. Asserting both distinguishes shape from rectangle.
+    /// A decision `{}` node must be visibly NOT a rectangle. It draws as a clean
+    /// hexagon: sloped top/bottom corners with straight `│` sides between (no
+    /// repeated chevrons). A plain `[]` node next to it keeps the square box
+    /// glyphs. Asserting both distinguishes shape from rectangle.
     func testDecisionNodeRendersDistinctFromRectangle() {
         let out = ASCIIRenderer.asciiRenderFlowchart("""
         flowchart TD
         A[Start] --> B{Choice}
         """)
         let ascii = try! XCTUnwrap(out)
-        // Diamond markers present.
-        XCTAssertTrue(ascii.contains("╱") && ascii.contains("╲"), "decision node should draw sloped corners")
-        XCTAssertTrue(ascii.contains("<") && ascii.contains(">"), "decision node should draw chevron sides")
+        // Hexagon: sloped corners present, straight vertical sides, no chevrons.
+        XCTAssertTrue(ascii.contains("╱") && ascii.contains("╲"), "decision node should draw sloped hexagon corners")
+        XCTAssertTrue(ascii.contains("│"), "hexagon uses straight vertical sides")
+        XCTAssertFalse(ascii.contains("<") || ascii.contains(">"), "hexagon must not use chevron sides")
         // The rectangle node still keeps square corners.
         XCTAssertTrue(ascii.contains("┌") && ascii.contains("┘"), "rectangle node keeps square corners")
     }
@@ -99,6 +101,58 @@ final class ASCIIPrototypeTests: XCTestCase {
     func testPlainModeHasNoEscapes() {
         let out = ASCIIRenderer.asciiRenderFlowchart("flowchart TD\nA[Start] --> B{Choice}", color: .plain)
         XCTAssertFalse(try! XCTUnwrap(out).contains("\u{1B}"), "plain mode emits no ANSI escapes")
+    }
+
+    // MARK: background-adaptive palette
+
+    /// Edges (the structure color) brighten on a dark background — the deep teal
+    /// #123C4A (SGR 18;60;74) is nearly invisible on black, so it lifts to the
+    /// brighter #2FA39B (SGR 47;163;155). A light background keeps the deep teal.
+    func testStructurePaletteBrightensOnDarkBackground() {
+        let dark = ASCIIRenderer.asciiRenderFlowchart(
+            "flowchart TD\nA[Start] --> B[End]", color: .truecolor, background: .dark)
+        XCTAssertTrue(try! XCTUnwrap(dark).contains("\u{1B}[38;2;47;163;155m"),
+                      "edges use the brightened teal on a dark background")
+        let light = ASCIIRenderer.asciiRenderFlowchart(
+            "flowchart TD\nA[Start] --> B[End]", color: .truecolor, background: .light)
+        XCTAssertTrue(try! XCTUnwrap(light).contains("\u{1B}[38;2;18;60;74m"),
+                      "edges keep the deep teal on a light background")
+    }
+
+    // MARK: background detection (OSC 11 / COLORFGBG)
+
+    func testOSC11ParsingAndClassification() {
+        // 16-bit-per-channel reply, ST-terminated: pure black → dark.
+        let black = try! XCTUnwrap(
+            TerminalCapabilities.parseOSC11Color("\u{1b}]11;rgb:0000/0000/0000\u{1b}\\"))
+        XCTAssertEqual(TerminalCapabilities.classifyBackground(r: black.r, g: black.g, b: black.b), .dark)
+        // Pure white, BEL-terminated → light.
+        let white = try! XCTUnwrap(
+            TerminalCapabilities.parseOSC11Color("\u{1b}]11;rgb:ffff/ffff/ffff\u{07}"))
+        XCTAssertEqual(TerminalCapabilities.classifyBackground(r: white.r, g: white.g, b: white.b), .light)
+        // 8-bit-per-channel channels parse too (deep teal → dark).
+        let teal = try! XCTUnwrap(TerminalCapabilities.parseOSC11Color("rgb:12/3c/4a"))
+        XCTAssertEqual(TerminalCapabilities.classifyBackground(r: teal.r, g: teal.g, b: teal.b), .dark)
+        XCTAssertNil(TerminalCapabilities.parseOSC11Color("no color here"))
+    }
+
+    func testColorFGBGFallback() {
+        XCTAssertEqual(TerminalCapabilities.backgroundFromCOLORFGBG("15;0"), .dark)     // bg 0
+        XCTAssertEqual(TerminalCapabilities.backgroundFromCOLORFGBG("0;15"), .light)    // bg 15
+        XCTAssertEqual(TerminalCapabilities.backgroundFromCOLORFGBG("0;default;7"), .light)
+        XCTAssertNil(TerminalCapabilities.backgroundFromCOLORFGBG("garbage"))
+    }
+
+    func testDetectBackgroundHonorsExplicitTheme() {
+        // Not a TTY → no OSC 11 query; explicit dark/light win outright.
+        let piped = TerminalEnvironment(stdoutIsTTY: false, colorFGBG: "0;15")
+        XCTAssertEqual(TerminalCapabilities.detectBackground(theme: .dark, env: piped), .dark)
+        XCTAssertEqual(TerminalCapabilities.detectBackground(theme: .light, env: piped), .light)
+        // auto (piped) falls through to COLORFGBG.
+        XCTAssertEqual(TerminalCapabilities.detectBackground(theme: .auto, env: piped), .light)
+        // auto with nothing to go on defaults to dark.
+        XCTAssertEqual(TerminalCapabilities.detectBackground(
+            theme: .auto, env: TerminalEnvironment(stdoutIsTTY: false)), .dark)
     }
 
     // MARK: capability detection

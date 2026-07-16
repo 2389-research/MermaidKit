@@ -18,6 +18,7 @@ import MermaidRender
 struct Options {
     var mode: String = "auto"          // kitty | box | plain | auto
     var color: ColorPreference = .auto // auto | always | never
+    var theme: ThemePreference = .auto // auto | dark | light
     var path: String?                  // nil → read stdin
     var help = false
 }
@@ -42,6 +43,9 @@ func parseArgs(_ argv: [String]) -> Options? {
         case a == "--color" || a.hasPrefix("--color="):
             guard let v = value(after: "--color"), let c = ColorPreference(rawValue: v) else { return nil }
             o.color = c
+        case a == "--theme" || a.hasPrefix("--theme="):
+            guard let v = value(after: "--theme"), let t = ThemePreference(rawValue: v) else { return nil }
+            o.theme = t
         case a.hasPrefix("-"):
             FileHandle.standardError.write(Data("unknown flag: \(a)\n".utf8))
             return nil
@@ -57,7 +61,7 @@ let usage = """
 mermaidkit-term — render a Mermaid flowchart to the terminal
 
 USAGE:
-  mermaidkit-term [FILE] [--mode kitty|box|plain|auto] [--color auto|always|never]
+  mermaidkit-term [FILE] [--mode kitty|box|plain|auto] [--color auto|always|never] [--theme auto|dark|light]
   cat diagram.mmd | mermaidkit-term --mode box --color always
 
 MODES (capability ladder):
@@ -68,10 +72,15 @@ MODES (capability ladder):
 
 COLOR (--color): auto = on when stdout is a TTY and $COLORTERM is truecolor/24bit.
 
+THEME (--theme): auto detects the terminal background (OSC 11 query on /dev/tty,
+  then $COLORFGBG, then a dark default). Dark backgrounds get a brightened
+  structure palette and the dark PNG theme; light backgrounds keep the deep teal.
+
 PALETTE MAPPING (mermaid palette → element):
   seafoam  #39D6C5  node borders + labels
   lavender #C9B6FF  decision nodes (borders + label)
-  deep teal #123C4A edges + subgraph boxes (muted)
+  structure         edges + subgraph boxes — deep teal #123C4A on light,
+                    brightened to #2FA39B on dark
   coral    #FF8FA3  arrowheads + edge captions
 """
 
@@ -106,6 +115,7 @@ func run() -> Int32 {
     }
 
     let env = TerminalEnvironment.current()
+    let background = TerminalCapabilities.detectBackground(theme: opts.theme, env: env)
 
     // Resolve the mode.
     let mode: TerminalRenderMode
@@ -121,10 +131,11 @@ func run() -> Int32 {
 
     switch mode {
     case .kitty:
-        return renderKitty(source)
+        return renderKitty(source, background: background)
     case .coloredBox, .plainBox:
         let colorOn = (mode == .coloredBox)
-        guard let out = ASCIIRenderer.asciiRenderFlowchart(source, color: colorOn ? .truecolor : .plain) else {
+        guard let out = ASCIIRenderer.asciiRenderFlowchart(
+            source, color: colorOn ? .truecolor : .plain, background: background) else {
             FileHandle.standardError.write(Data("not a flowchart (this demo is flowchart-scoped)\n".utf8))
             return 1
         }
@@ -136,9 +147,10 @@ func run() -> Int32 {
 /// Tier 1: rasterize the diagram to PNG and stream it via the Kitty graphics
 /// protocol. Falls back to a colored box render if the rasterizer is
 /// unavailable or the source doesn't render.
-func renderKitty(_ source: String) -> Int32 {
+func renderKitty(_ source: String, background: TerminalBackground) -> Int32 {
     #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
-    if let png = MermaidRenderer.pngData(source: source, theme: DiagramTheme(prefersDark: false)) {
+    if let png = MermaidRenderer.pngData(source: source,
+                                         theme: DiagramTheme(prefersDark: background == .dark)) {
         FileHandle.standardOutput.write(Data(KittyGraphics.encode(pngData: png).utf8))
         FileHandle.standardOutput.write(Data("\n".utf8))
         return 0
@@ -147,7 +159,7 @@ func renderKitty(_ source: String) -> Int32 {
     #else
     FileHandle.standardError.write(Data("kitty mode needs the raster backend; falling back to box render\n".utf8))
     #endif
-    if let out = ASCIIRenderer.asciiRenderFlowchart(source, color: .truecolor) {
+    if let out = ASCIIRenderer.asciiRenderFlowchart(source, color: .truecolor, background: background) {
         print(out)
         return 0
     }

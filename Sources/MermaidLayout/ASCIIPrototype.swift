@@ -60,7 +60,11 @@ public struct ANSIColor: Equatable, Sendable {
 /// runs the colored output (this process can't see it), so the mapping is
 /// documented here and mirrored in the demo CLI's `--help`.
 public enum MermaidPalette {
-    public static let deepTeal = ANSIColor(hex: 0x123C4A)   // muted structure
+    public static let deepTeal = ANSIColor(hex: 0x123C4A)   // muted structure (light bg)
+    /// Structure color lifted toward the seafoam/aqua for dark terminals: the
+    /// deep teal (#123C4A) is nearly invisible on black, so edges + subgraph
+    /// boxes use this brighter teal when the background is dark.
+    public static let brightTeal = ANSIColor(hex: 0x2FA39B)
     public static let seafoam  = ANSIColor(hex: 0x39D6C5)   // node borders/labels
     public static let coral    = ANSIColor(hex: 0xFF8FA3)   // arrowheads/highlights
     public static let lavender = ANSIColor(hex: 0xC9B6FF)   // decision nodes
@@ -69,8 +73,11 @@ public enum MermaidPalette {
     static func nodeColor(_ shape: Flowchart.NodeShape) -> ANSIColor {
         shape == .diamond ? lavender : seafoam
     }
-    static let containerColor = deepTeal   // subgraph boxes recede
-    static let edgeColor = deepTeal        // wires: muted
+    /// Structure color (edges + subgraph boxes), brightened on dark backgrounds
+    /// and kept as the deep teal on light ones.
+    static func structureColor(background: TerminalBackground) -> ANSIColor {
+        background == .dark ? brightTeal : deepTeal
+    }
     static let arrowColor = coral          // arrowheads: highlight
     static let labelColor = coral          // edge captions / free labels
 }
@@ -227,7 +234,8 @@ public enum ASCIIRenderer {
     /// for non-flowchart sources (POC scope). `color` selects plain Unicode or
     /// Tier-4 truecolor.
     public static func asciiRenderFlowchart(_ source: String,
-                                            color: ASCIIColorMode = .plain) -> String? {
+                                            color: ASCIIColorMode = .plain,
+                                            background: TerminalBackground = .dark) -> String? {
         guard let diagram = MermaidParser.parse(source) else { return nil }
         guard case .flowchart(let chart) = diagram else { return nil }
         let scene = DiagramScene.lower(diagram, measure: ASCIIMetrics.measurer)
@@ -243,18 +251,22 @@ public enum ASCIIRenderer {
             if !n.label.isEmpty { labelForID[n.id] = n.label }
             shapeForID[n.id] = n.shape
         }
-        return draw(scene, labelForID: labelForID, shapeForID: shapeForID, color: color)
+        return draw(scene, labelForID: labelForID, shapeForID: shapeForID,
+                    color: color, background: background)
     }
 
     /// Draw an already-lowered flowchart scene. `labelForID`/`shapeForID` supply
     /// human display text and node outline keyed by the scene node's id.
+    /// `background` picks the structure color (brightened on dark terminals).
     static func draw(_ scene: DiagramScene,
                      labelForID: [String: String] = [:],
                      shapeForID: [String: Flowchart.NodeShape] = [:],
-                     color: ASCIIColorMode = .plain) -> String {
+                     color: ASCIIColorMode = .plain,
+                     background: TerminalBackground = .dark) -> String {
         let cols = min(400, col(scene.size.width) + 1)
         let rows = min(400, row(scene.size.height) + 1)
         let canvas = Canvas(cols: cols, rows: rows, colorMode: color)
+        let structure = MermaidPalette.structureColor(background: background)
 
         // 1. Reserve + outline solid node boxes first, so edges drawn later are
         //    dropped over box interiors/borders. Containers only get an outline
@@ -262,12 +274,12 @@ public enum ASCIIRenderer {
         for node in scene.nodes {
             let shape = node.isContainer ? nil : shapeForID[node.id]
             drawBox(node, label: labelForID[node.id] ?? node.id, shape: shape,
-                    on: canvas, reserveInterior: !node.isContainer)
+                    on: canvas, reserveInterior: !node.isContainer, structure: structure)
         }
 
         // 2. Rasterize edges into the bit plane, then cap them with arrowheads.
         for edge in scene.edges {
-            drawEdge(edge, on: canvas)
+            drawEdge(edge, on: canvas, edgeColor: structure)
         }
 
         // 3. Free-standing labels (edge captions, subgraph headers). Written as
@@ -289,13 +301,13 @@ public enum ASCIIRenderer {
     /// rectangle in a monospace grid.
     private static func drawBox(_ node: DiagramScene.Node, label: String,
                                 shape: Flowchart.NodeShape?, on canvas: Canvas,
-                                reserveInterior: Bool) {
+                                reserveInterior: Bool, structure: ANSIColor) {
         let c0 = col(node.frame.minX), c1 = col(node.frame.maxX)
         let r0 = row(node.frame.minY), r1 = row(node.frame.maxY)
         guard c1 > c0, r1 > r0 else { return }
 
         let effectiveShape = shape ?? .rectangle
-        let stroke = node.isContainer ? MermaidPalette.containerColor
+        let stroke = node.isContainer ? structure
                                       : MermaidPalette.nodeColor(effectiveShape)
 
         // Reserve the whole footprint (interior + border) for solid nodes so no
@@ -366,16 +378,17 @@ public enum ASCIIRenderer {
             corners("◜", "◝", "◟", "◞")
             sideCaps("(", ")")
         case .diamond:
-            // Decision: angular. Sloped corners + chevron sides read as a
-            // hexagon/diamond silhouette, unmistakably not a rectangle.
+            // Decision: a clean hexagon. Sloped top (╱────╲) and bottom
+            // (╲────╱) corners with straight │ sides between — unmistakably not
+            // a rectangle, and tidy (no repeated chevrons on every row).
             corners("╱", "╲", "╲", "╱")
-            sideCaps("<", ">")
         }
     }
 
     // MARK: edge
 
-    private static func drawEdge(_ edge: DiagramScene.Edge, on canvas: Canvas) {
+    private static func drawEdge(_ edge: DiagramScene.Edge, on canvas: Canvas,
+                                 edgeColor: ANSIColor) {
         // Snap polyline vertices to cells, then expand into a contiguous cell
         // path (orthogonal L-moves between consecutive vertices).
         let pts = edge.polyline.map { (r: row($0.y), c: col($0.x)) }
@@ -403,7 +416,6 @@ public enum ASCIIRenderer {
 
         // OR reciprocal direction bits for each adjacent pair (dropped on
         // reserved cells, so the run stops at a box border).
-        let edgeColor = MermaidPalette.edgeColor
         for i in 0..<(dedup.count - 1) {
             let a = dedup[i], b = dedup[i + 1]
             if b.c > a.c { canvas.addBits(a.r, a.c, Canvas.Dir.right, color: edgeColor); canvas.addBits(b.r, b.c, Canvas.Dir.left, color: edgeColor) }
