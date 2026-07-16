@@ -194,6 +194,16 @@
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
   }
   p code{background:var(--code-bg); padding:.12em .38em; border-radius:5px; font-size:.88em}
+  /* Swift syntax tokens — mermaid palette (hand-tokenized, no highlighter dependency) */
+  pre .tk{color:#c2415c} pre .tt{color:#0a6f68} pre .ts{color:#6a4fc0} pre .ta{color:#2f6f68} pre .tc{color:var(--muted); font-style:italic}
+  @media (prefers-color-scheme:dark){ pre .tk{color:#ff9bad} pre .tt{color:#5fe3c0} pre .ts{color:#c9b6ff} pre .ta{color:#8fb8b2} }
+  /* Documentation cards */
+  .doccards{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px}
+  .doccard{display:block; text-decoration:none; background:var(--card-glass); border:1px solid var(--card-bd); border-radius:12px; padding:15px 17px; transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease}
+  .doccard:hover{border-color:var(--accent-ui); transform:translateY(-2px); box-shadow:0 10px 26px -16px rgba(18,60,74,.4); text-decoration:none}
+  .doccard b{display:block; color:var(--fg); font-size:.96rem; margin-bottom:4px; letter-spacing:-.01em}
+  .doccard b::after{content:" ↗"; color:var(--accent); font-weight:500}
+  .doccard span{display:block; color:var(--muted); font-size:.87rem; line-height:1.45}
 
   /* Header */
   header.top{border-bottom:1px solid var(--line); position:sticky; top:0; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(8px); z-index:5}
@@ -337,6 +347,7 @@
     <a href="#lint" class="hide-sm">Quality</a>
     <a href="#api" class="hide-sm">API</a>
     <a href="#install" class="hide-sm">Install</a>
+    <a href="#docs" class="hide-sm">Docs</a>
     <a href="https://github.com/2389-research/MermaidKit">GitHub</a>
   </nav>
 </div></header>
@@ -365,20 +376,20 @@
       <h2>Drop it into SwiftUI.</h2>
       <p class="lead">A `MermaidView` follows light/dark automatically, sizes to the diagram, caches renders, and describes itself to VoiceOver. That's the whole integration.</p>
       <div class="kicker" style="margin-top:22px">Install</div>
-<pre>.package(
-  url: "https://github.com/2389-research/MermaidKit.git",
-  from: "1.0.0"
+<pre>.<span class="tt">package</span>(
+  <span class="ta">url:</span> <span class="ts">"https://github.com/2389-research/MermaidKit.git"</span>,
+  <span class="ta">from:</span> <span class="ts">"1.0.0"</span>
 )</pre>
     </div>
     <div>
-<pre>import MermaidRender
+<pre><span class="tk">import</span> <span class="tt">MermaidRender</span>
 
-MermaidView("""
+<span class="tt">MermaidView</span>(<span class="ts">"""</span>
 flowchart TD
     A[Start] --&gt; B{Choice}
     B --&gt;|yes| C[Do it]
     B --&gt;|no| D[Skip]
-""")</pre>
+<span class="ts">"""</span>)</pre>
     </div>
   </div>
 </div></section>
@@ -496,6 +507,24 @@ flowchart TD
     <div><h3>What you wrote is what parses</h3><p>A dedicated "parser honesty" effort eliminated silent content loss and phantom content across the parsers — each fix pinned by a regression test using the exact previously-broken syntax.</p></div>
     <div><h3>Apple and Linux, one code path</h3><p>The same layout and per-type draw code renders through a single <code>CGContext</code> seam: CoreGraphics/CoreText on Apple, Silica/Cairo/FontConfig on Linux.</p></div>
     <div><h3>Honest support matrix</h3><p>The README states plainly what parses, what's ignored, and what's a known gap worth filing. An SVG backend and lower OS floors sit at the top of the roadmap.</p></div>
+  </div>
+</div></section>
+
+<section id="docs"><div class="wrap glass">
+  <div class="kicker">Read the docs</div>
+  <h2>Documented as carefully as it's built.</h2>
+  <p class="lead">Guides, deep-dive engineering notes, and the full history — all on GitHub.</p>
+  <div class="doccards">
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidRender/MermaidRender.docc/GettingStarted.md"><b>Getting Started</b><span>Render your first diagram in one line, then pick the right API for your app.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidLayout/MermaidLayout.docc/HeadlessLayout.md"><b>Headless Layout</b><span>Parse → layout → scene geometry with no rendering — frames, polylines, label boxes.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidLayout/MermaidLayout.docc/SceneGeometryAndLinting.md"><b>Scene Geometry &amp; the Linter</b><span>How every diagram lowers to a checkable scene, and the invariants CI enforces.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidRender/MermaidRender.docc/Theming.md"><b>Theming</b><span>Re-skin all 30 diagram types at once with a single DiagramTheme value.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidRender/MermaidRender.docc/EmbeddingInTextViews.md"><b>Embedding in Text Views</b><span>Drop a diagram into an NSAttributedString, VoiceOver description included.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidLayout/MermaidLayout.docc/AddingADiagramType.md"><b>Adding a Diagram Type</b><span>The three small pieces — parser, layout, renderer — behind every type.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/linux-rendering-via-silica.md"><b>Linux Rendering via Silica</b><span>How the one CoreGraphics seam maps to Cairo/FontConfig for headless Linux output.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/mermaid-coverage-audit.md"><b>Mermaid Coverage Audit</b><span>What each type parses, what's ignored, and where the known gaps are.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CONTRIBUTING.md"><b>Contributing</b><span>The lay of the land, the geometry-first review bar, and developing on Linux.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release through 1.0, with the reasoning behind each change.</span></a>
   </div>
 </div></section>
 
