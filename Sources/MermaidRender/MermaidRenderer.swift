@@ -130,15 +130,17 @@ public enum MermaidRenderer {
         #endif
     }
 
-    /// The diagram rasterized to a straight-alpha RGBA pixel grid sized for the
+    /// The diagram rasterized to an opaque RGBA pixel grid sized for the
     /// half-block terminal renderer (Tier 3). `targetWidth` is the pixel width
     /// (= terminal columns); the height is derived to preserve the diagram's
-    /// aspect (each half-cell is roughly square) and rounded up to an even count
-    /// so every cell owns a full top/bottom pixel pair.
+    /// aspect (each half-cell is roughly square), rounded to the nearest pixel
+    /// and then bumped up to an even count so every cell owns a full top/bottom
+    /// pixel pair.
     ///
     /// The image is composited over `background` (the theme canvas color) so the
-    /// returned pixels are fully opaque — transparent margins take the terminal
-    /// theme's own background and the raster carries no premultiplied surprises.
+    /// returned pixels are fully opaque. The backing buffer is `premultipliedLast`,
+    /// but with every pixel at alpha 255 the RGB values equal their straight-alpha
+    /// form — transparent margins take the theme canvas and carry no surprises.
     /// Returns the flat RGBA byte buffer plus its dimensions, or nil when the
     /// source doesn't render or the platform lacks a CGImage path.
     public static func rgbaRaster(source: String, theme: DiagramTheme,
