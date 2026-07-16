@@ -87,6 +87,50 @@ enum DiagramRenderer {
     private static let cache = RenderCache(totalCostLimit: 64 << 20)
     #endif
 
+    #if canImport(AppKit)
+    /// EVALUATION (perf/srgb-backing): when true, the AppKit raster backing is
+    /// an explicit 8-bit sRGB `CGBitmapContext` instead of the display-default
+    /// wide-gamut f16 handler-backed `NSImage`. The hot compositing leaf on
+    /// fill-heavy types (sankey) is literally f16 (`vImage…ARGB16F`); an 8-bit
+    /// sRGB surface is ~4× less compositing bandwidth. Diagrams use flat sRGB
+    /// theme tints, so no wide-gamut content is at stake — but this trades away
+    /// the ability to preserve P3 colors a host might theme with, so it is
+    /// gated for evaluation, not merged. The eval harness toggles it to diff
+    /// both surfaces in one process (issue #1: cross-process f16 is nondeterministic).
+    nonisolated(unsafe) static var sRGBBackingStore = true
+
+    /// Renders `draw` into an 8-bit sRGB bitmap at 2× (retina) and wraps the
+    /// resulting `CGImage` in an `NSImage`. The CTM matches `NSImage(flipped:
+    /// true)` — retina scale, then a top-left-origin y-down flip — so the
+    /// shared draw code needs no changes. Nil if the context can't be made.
+    private static func sRGBBackingImage(
+        canvasSize: CGSize, originX: CGFloat, originY: CGFloat,
+        appearance: NSAppearance?, draw: @escaping (CGContext) -> Void
+    ) -> NSImage? {
+        let scale: CGFloat = 2
+        let pxW = Int((canvasSize.width * scale).rounded(.up))
+        let pxH = Int((canvasSize.height * scale).rounded(.up))
+        guard pxW > 0, pxH > 0,
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: pxW, height: pxH,
+                                  bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.translateBy(x: 0, y: canvasSize.height)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.translateBy(x: originX, y: originY)
+        let ns = NSGraphicsContext(cgContext: ctx, flipped: true)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ns
+        let render = { draw(ctx) }
+        if let appearance { appearance.performAsCurrentDrawingAppearance(render) } else { render() }
+        NSGraphicsContext.restoreGraphicsState()
+        guard let cg = ctx.makeImage() else { return nil }
+        return NSImage(cgImage: cg, size: canvasSize)
+    }
+    #endif
+
     /// A rendered attachment for mermaid source, or nil when the dialect
     /// isn't supported yet (caller keeps the styled-source fallback).
 
@@ -341,16 +385,24 @@ enum DiagramRenderer {
 
             #if canImport(AppKit)
             let appearance = NSAppearance(named: theme.prefersDark ? .darkAqua : .aqua)
-            let image = NSImage(size: canvasSize, flipped: true) { _ in
-                guard let context = NSGraphicsContext.current?.cgContext else { return false }
-                context.translateBy(x: originX, y: originY)
-                let render = { draw(context) }
-                if let appearance {
-                    appearance.performAsCurrentDrawingAppearance(render)
-                } else {
-                    render()
+            let image: NSImage
+            if sRGBBackingStore {
+                guard let srgb = sRGBBackingImage(canvasSize: canvasSize, originX: originX,
+                                                  originY: originY, appearance: appearance, draw: draw)
+                else { return nil }
+                image = srgb
+            } else {
+                image = NSImage(size: canvasSize, flipped: true) { _ in
+                    guard let context = NSGraphicsContext.current?.cgContext else { return false }
+                    context.translateBy(x: originX, y: originY)
+                    let render = { draw(context) }
+                    if let appearance {
+                        appearance.performAsCurrentDrawingAppearance(render)
+                    } else {
+                        render()
+                    }
+                    return true
                 }
-                return true
             }
             #else
             // Pin trait resolution to the theme's appearance: without this,
