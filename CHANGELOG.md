@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.0
+
+Performance and metadata refinements — additive and output-identical. The public
+API and layout are unchanged except for one new convenience method.
+
+- **New: `MermaidParser.parseWithMetadata(_:)`** — parse a source and get the
+  extracted YAML front-matter (`title`, `accTitle`, `accDescr`) back in one call
+  as `(diagram, DiagramMetadata)`, avoiding a second scan over the source.
+- **Perf: shared-pipeline fixes** — rendered output is byte-identical (verified
+  against the draw-vs-scene conformance ratchet): text measurement is now
+  memoized, so each label is typeset once instead of at both layout and draw;
+  the render cache key hashes the source once and keys by reference rather than
+  rebuilding an interpolated string on every call.
+- The one profiled optimization that *didn't* pan out — an 8-bit sRGB render
+  backing store — was measured ~2× slower than the f16 default on Apple silicon
+  and rejected; kept as a documented negative result.
+- **Docs**: a full performance memo (`docs/notes/performance.md`) with
+  methodology, per-type numbers, and where the time goes; a
+  terminal-rendering-capabilities note; and the coverage audit reconciled
+  against 1.0. Project site: https://2389-research.github.io/MermaidKit/
+
 ## 1.0.0
 
 Stable release. The public API is frozen: the entry points (`MermaidParser`,
