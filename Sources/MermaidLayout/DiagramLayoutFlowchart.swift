@@ -117,7 +117,8 @@ extension DiagramLayoutEngine {
                          breadth: crossBreadth, minGap: flowchartNodeGap,
                          center: &crossCenter)
         let placement = placeFlowchartFrames(
-            layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal)
+            layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal,
+            layerGap: flowchartLayerGap)
 
         // 5. Route each edge through its chain's waypoints.
         let (placedEdges, crossLimit) = routeChains(
@@ -253,9 +254,9 @@ extension DiagramLayoutEngine {
         layers: [[String]],
         sizes: [String: CGSize],
         crossCenter: [String: CGFloat],
-        horizontal: Bool
+        horizontal: Bool,
+        layerGap: CGFloat
     ) -> (frames: [String: CGRect], mainContentEnd: CGFloat, crossExtent: CGFloat) {
-        let layerGap = flowchartLayerGap
         let margin = flowchartMargin
 
         // Normalize BK's relative coordinates so the min cross edge = margin.

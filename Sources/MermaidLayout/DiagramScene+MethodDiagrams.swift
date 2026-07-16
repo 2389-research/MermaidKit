@@ -10,7 +10,7 @@ extension DiagramScene {
     /// Fishbone: the head is a node; spine/ribs/twigs are edges; every cause
     /// and sub-cause text is a free-standing label.
     static func from(_ layout: IshikawaLayout, measure: DiagramTextMeasurer) -> DiagramScene {
-        var nodes: [Node] = [Node(id: layout.problem, frame: layout.headFrame)]
+        let nodes: [Node] = [Node(id: layout.problem, frame: layout.headFrame)]
         var edges: [Edge] = [Edge(polyline: [layout.spineStart, layout.spineEnd], label: nil)]
         var labels: [Label] = []
         for rib in layout.ribs {

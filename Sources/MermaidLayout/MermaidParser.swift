@@ -1044,7 +1044,7 @@ public enum MermaidParser {
             }
             if line.hasPrefix("create participant ") || line.hasPrefix("create actor ") {
                 let isActor = line.hasPrefix("create actor ")
-                var declaration = String(line.dropFirst(isActor ? 13 : 19))
+                let declaration = String(line.dropFirst(isActor ? 13 : 19))
                 let id: String
                 if let asRange = declaration.range(of: " as ") {
                     id = String(declaration[..<asRange.lowerBound]).trimmingCharacters(in: .whitespaces)

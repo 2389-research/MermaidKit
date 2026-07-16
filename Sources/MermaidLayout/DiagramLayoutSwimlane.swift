@@ -48,12 +48,15 @@ extension DiagramLayoutEngine {
         //    the same way the flowchart pipeline does: cycles must not wedge
         //    the solver).
         let ids = diagram.nodes.map(\.id)
-        var seen = Set<String>()
-        var acyclic: [(String, String)] = []
-        for edge in diagram.edges where edge.from != edge.to {
-            acyclic.append((edge.from, edge.to))
-        }
-        _ = seen
+        // Drop self-loops, find the back-edges of the remaining digraph, and
+        // strip them so the layering solver only sees a DAG.
+        let forwardCandidates = diagram.edges
+            .filter { $0.from != $0.to }
+            .map { ($0.from, $0.to) }
+        let backEdges = backEdgeIndices(ids: ids, edges: forwardCandidates)
+        let acyclic = forwardCandidates.enumerated()
+            .filter { !backEdges.contains($0.offset) }
+            .map { $0.element }
         let layerOf = assignLayers(ids: ids, edges: acyclic)
 
         // 2. Column widths: widest node in each column.

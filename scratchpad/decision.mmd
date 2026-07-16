@@ -1,0 +1,6 @@
+flowchart TD
+    A[Start] --> B{Ready?}
+    B -->|yes| C(Process)
+    B -->|no| D([Wait])
+    C --> E((Done))
+    D --> B
