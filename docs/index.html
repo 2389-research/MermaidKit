@@ -271,8 +271,9 @@
   @media (max-width:640px){ .glass{padding:28px 18px; border-radius:18px} }
 
   /* Self-checking section — lint report + explanations */
-  .lintgrid{display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:26px; align-items:start; margin-top:22px}
-  @media (max-width:860px){.lintgrid{grid-template-columns:1fr}}
+  /* Stacked: full-width terminal report on top, explanations below it */
+  .lintgrid{margin-top:22px}
+  .lintgrid .lintreport{max-width:900px; margin:0 0 28px}
   .lintreport{
     background:#0b1420; color:#c7d3e6; border-radius:14px; overflow:hidden;
     border:1px solid rgba(140,170,210,.16); box-shadow:0 18px 46px -22px rgba(0,0,0,.6);
@@ -294,14 +295,14 @@
   .lintreport .ln{color:#c7d3e6}
   .lintreport .pass{color:#5fe3c0}
 
-  .lintwhat{margin:0; padding:0; list-style:none}
-  .lintwhat li{padding:8px 0; border-bottom:1px solid var(--card-bd); font-size:.92rem; color:var(--muted)}
+  .lintwhat{margin:0 0 22px; padding:0; list-style:none; column-width:330px; column-gap:38px}
+  .lintwhat li{padding:8px 0; border-bottom:1px solid var(--card-bd); font-size:.92rem; color:var(--muted); break-inside:avoid}
   .lintwhat li:last-child{border-bottom:0}
   .lintwhat code{color:var(--accent); background:var(--code-bg); padding:.1em .4em; border-radius:5px; font-size:.82em}
   .lintwhat b{color:var(--fg); font-weight:600}
   .lintwhy{margin-top:22px}
   .lintwhy h3{font-size:1.02rem; margin:0 0 .5em}
-  .whycards{display:grid; gap:12px}
+  .whycards{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px}
   .whycards .why{background:var(--card-glass); border:1px solid var(--card-bd); border-left:3px solid var(--accent-ui); border-radius:10px; padding:13px 15px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
   .whycards .why b{color:var(--fg)}
   .whycards .why p{margin:.2em 0 0; color:var(--muted); font-size:.9rem}
