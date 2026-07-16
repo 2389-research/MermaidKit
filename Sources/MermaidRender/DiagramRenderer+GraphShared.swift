@@ -289,6 +289,21 @@ extension DiagramRenderer {
         return p
     }
 
+    /// A horizontal hexagon (flat top/bottom, pointed left/right ends): the
+    /// fork/join cell used for Dippin `parallel` nodes.
+    static func hexagonPath(_ f: CGRect) -> CGPath {
+        let inset = min(f.width * 0.22, f.height / 2)
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: f.minX, y: f.midY))
+        p.addLine(to: CGPoint(x: f.minX + inset, y: f.minY))
+        p.addLine(to: CGPoint(x: f.maxX - inset, y: f.minY))
+        p.addLine(to: CGPoint(x: f.maxX, y: f.midY))
+        p.addLine(to: CGPoint(x: f.maxX - inset, y: f.maxY))
+        p.addLine(to: CGPoint(x: f.minX + inset, y: f.maxY))
+        p.closeSubpath()
+        return p
+    }
+
     /// A self-bracketed horizontal hairline (compartment separators).
     static func strokeHLine(
         y: CGFloat, from x0: CGFloat, to x1: CGFloat, color: PlatformColor, in context: CGContext

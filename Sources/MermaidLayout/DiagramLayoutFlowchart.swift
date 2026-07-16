@@ -225,6 +225,11 @@ extension DiagramLayoutEngine {
             switch node.shape {
             case .diamond:
                 size = CGSize(width: size.width * 1.3, height: size.height * 1.5)
+            case .hexagon:
+                // Pointed ends eat horizontal room — widen so the label clears.
+                size.width += size.height
+            case .subroutine:
+                size.width += 16   // room for the twin inner rails
             case .circle:
                 let d = max(size.width, size.height)
                 size = CGSize(width: d, height: d)
@@ -338,6 +343,13 @@ extension DiagramLayoutEngine {
                 case .circle, .stateStart, .stateEnd:
                     let dx = (f.width / 2) * sqrt(max(0, 1 - pow((y - f.midY) / hh, 2)))
                     x = rightOrBottom ? f.midX + dx : f.midX - dx
+                case .hexagon:
+                    // Left/right ends are pointed: pull an off-center port in
+                    // along the sloped side (same inset as `hexagonPath`) so it
+                    // lands on the visible outline, not a phantom box edge.
+                    let hexInset = min(f.width * 0.22, f.height / 2)
+                    let frac = min(abs(y - f.midY) / hh, 1)
+                    x = rightOrBottom ? f.maxX - hexInset * frac : f.minX + hexInset * frac
                 default: break
                 }
                 return CGPoint(x: x, y: y)

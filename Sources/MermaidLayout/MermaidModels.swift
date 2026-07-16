@@ -25,6 +25,8 @@ public struct Flowchart: Hashable, Sendable {
         case diamond        // A{Label}
         case circle         // A((Label))
         case cylinder       // A[(Label)] — database
+        case hexagon        // A{{Label}} — a fork/preparation cell
+        case subroutine     // A[[Label]] — a call to a predefined sub-process
         case stateStart     // state diagram [*] as a source: filled dot
         case stateEnd       // state diagram [*] as a target: ringed dot
     }

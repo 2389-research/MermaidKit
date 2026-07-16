@@ -296,9 +296,16 @@ enum DiagramRenderer {
     static func renderImage(source: String, theme: DiagramTheme,
                             spacing: DiagramSpacing = .regular) -> PlatformImage? {
         guard let (diagram, metadata) = MermaidParser.parseWithMetadata(source) else { return nil }
+        return renderImage(diagram: diagram, title: metadata.title, theme: theme, spacing: spacing)
+    }
+
+    /// Linux raster backend for an already-parsed diagram (the DOT/terminal
+    /// path) — same Cairo pipeline as the source-string entry, no Mermaid parse.
+    static func renderImage(diagram: MermaidDiagram, title: String?,
+                            theme: DiagramTheme, spacing: DiagramSpacing = .regular) -> PlatformImage? {
         let (size, edgePolylines, draw) = captionedPlan(
             renderPlan(for: diagram, theme: theme, spacing: spacing),
-            caption: metadata.title, diagram: diagram, theme: theme)
+            caption: title, diagram: diagram, theme: theme)
         guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
         // The bitmap surface is whole pixels (ceil), so canvasSize is fractional
         // slightly smaller than the surface. Fill the FULL pixel rect, not
@@ -322,6 +329,40 @@ enum DiagramRenderer {
     #endif
 
     #if canImport(AppKit) || canImport(UIKit)
+    /// Rasterizes an already-parsed diagram (no Mermaid parse, no cache) to a
+    /// native image, sharing the exact `renderPlan`/`captionedPlan`/`paddedCanvas`
+    /// pipeline used for a Mermaid source. The DOT/terminal render path.
+    static func image(for diagram: MermaidDiagram, title: String?,
+                      theme: DiagramTheme, spacing: DiagramSpacing = .regular) -> PlatformImage? {
+        let (size, edgePolylines, draw) = captionedPlan(
+            renderPlan(for: diagram, theme: theme, spacing: spacing),
+            caption: title, diagram: diagram, theme: theme)
+        guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
+        #if canImport(AppKit)
+        let appearance = NSAppearance(named: theme.prefersDark ? .darkAqua : .aqua)
+        let image = NSImage(size: canvasSize, flipped: true) { _ in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.translateBy(x: originX, y: originY)
+            let render = { draw(context) }
+            if let appearance { appearance.performAsCurrentDrawingAppearance(render) } else { render() }
+            return true
+        }
+        image.accessibilityDescription = MermaidAltText.describe(diagram)
+        #else
+        let traits = UITraitCollection(userInterfaceStyle: theme.prefersDark ? .dark : .light)
+        var format = UIGraphicsImageRendererFormat.preferred()
+        traits.performAsCurrent { format = .preferred() }
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
+        let image = renderer.image { rendererContext in
+            traits.performAsCurrent {
+                rendererContext.cgContext.translateBy(x: originX, y: originY)
+                draw(rendererContext.cgContext)
+            }
+        }
+        #endif
+        return image
+    }
+
     static func attachmentString(source: String, theme: DiagramTheme,
                                  spacing: DiagramSpacing = .regular) -> NSAttributedString? {
         // Cache first: a hit must not pay a re-parse of up-to-50KB source

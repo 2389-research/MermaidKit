@@ -120,11 +120,29 @@ extension DiagramRenderer {
                 path = CGPath(ellipseIn: node.frame, transform: nil)
             case .diamond:
                 path = diamondPath(node.frame)
+            case .hexagon:
+                path = hexagonPath(node.frame)
+            case .subroutine:
+                path = CGPath(roundedRect: node.frame, cornerWidth: 4, cornerHeight: 4, transform: nil)
             case .cylinder: // handled above with a continue; keep exhaustive
                 path = CGPath(roundedRect: node.frame, cornerWidth: 4, cornerHeight: 4, transform: nil)
             }
             context.restoreGState()
             fillStrokeShape(path, fill: fill, stroke: stroke, in: context)
+
+            // Subroutine: the twin inner rails that make a `[[ … ]]` box.
+            if node.shape == .subroutine {
+                let inset: CGFloat = min(6, node.frame.width / 4)
+                context.saveGState()
+                context.setStrokeColor(resolvedCGColor(stroke))
+                context.setLineWidth(1)
+                for x in [node.frame.minX + inset, node.frame.maxX - inset] {
+                    context.move(to: CGPoint(x: x, y: node.frame.minY))
+                    context.addLine(to: CGPoint(x: x, y: node.frame.maxY))
+                }
+                context.strokePath()
+                context.restoreGState()
+            }
 
             drawText(node.label, center: CGPoint(x: node.frame.midX, y: node.frame.midY),
                      size: 12, weight: .medium, color: theme.ink, in: context)
