@@ -225,7 +225,12 @@ private final class DOTParserImpl {
     private var subgraphs: [String: Flowchart.Subgraph] = [:]
     private var subgraphOrder: [String] = []
     private var clusterStack: [String] = []
+    // Every entered `{ … }` subgraph scope, cluster or not (anonymous / non-
+    // cluster scopes push `nil`). `clusterStack` only holds clusters, so it
+    // can't tell "root" from "inside an anonymous subgraph"; this can.
+    private var scopeStack: [String?] = []
     private var membership: [String: String] = [:]
+    private var membershipDepth: [String: Int] = [:]
 
     private var graphRankdir: String?
     private var anonCount = 0
@@ -274,7 +279,12 @@ private final class DOTParserImpl {
 
         _ = parseStmtList(Defaults(), depth: 0)
 
-        guard !aborted else { return nil }
+        // A well-formed graph closes its outer brace and has nothing after it;
+        // `digraph { A` (EOF first) and `digraph { A } garbage` (trailing
+        // tokens) both violate the malformed-input contract.
+        guard !aborted, cur?.kind == .rbrace else { return nil }
+        advance()
+        guard cur == nil else { return nil }
 
         // Edge endpoints that named a subgraph id minted a phantom node; drop
         // those and scrub any membership list they slipped into (mirrors
@@ -313,7 +323,10 @@ private final class DOTParserImpl {
             parseStmt(&defs, &members, depth: depth)
             if pos == before { advance() }   // guarantee forward progress
         }
-        return members
+        // Endpoints of a `{ … } -> x` fan are a node *set*: dedupe (order-
+        // preserving) so `{ a a } -> b` doesn't emit the edge twice.
+        var seen = Set<String>()
+        return members.filter { seen.insert($0).inserted }
     }
 
     private func parseStmt(_ defs: inout Defaults, _ members: inout [String], depth: Int) {
@@ -389,9 +402,11 @@ private final class DOTParserImpl {
             clusterStack.append(regID)
             clusterID = regID
         }
+        scopeStack.append(clusterID)   // nil for anonymous / non-cluster scopes
 
         let members = parseStmtList(defs, depth: depth + 1)
 
+        scopeStack.removeLast()
         if clusterID != nil, !clusterStack.isEmpty { clusterStack.removeLast() }
         if let e = cur, e.kind == .rbrace { advance() }
         return members
@@ -447,8 +462,15 @@ private final class DOTParserImpl {
         let style = (attrs["style"] ?? "").lowercased()
         let dashed = style.contains("dashed") || style.contains("dotted")
         let dir = (attrs["dir"] ?? (directed ? "forward" : "none")).lowercased()
-        let hasArrow = dir != "none"
-        let backArrow = (dir == "both")
+        // All four DOT directions: `back` points at the tail, `both` at both.
+        let hasArrow: Bool
+        let backArrow: Bool
+        switch dir {
+        case "none": hasArrow = false; backArrow = false
+        case "back": hasArrow = false; backArrow = true
+        case "both": hasArrow = true;  backArrow = true
+        default:     hasArrow = true;  backArrow = false   // forward / unknown
+        }
         edges.append(Flowchart.Edge(from: from, to: to,
                                     label: (label?.isEmpty == true) ? nil : label,
                                     dashed: dashed, hasArrow: hasArrow, backArrow: backArrow))
@@ -485,23 +507,31 @@ private final class DOTParserImpl {
         case "node": defs.node.merge(attrs) { _, new in new }
         case "edge": defs.edge.merge(attrs) { _, new in new }
         case "graph":
-            if let rd = attrs["rankdir"], clusterStack.isEmpty { graphRankdir = rd }
-            if let lbl = attrs["label"], let top = clusterStack.last, subgraphs[top] != nil {
-                subgraphs[top]!.label = mapLabel(lbl)
-            }
+            if let rd = attrs["rankdir"] { setRankdirForCurrentScope(rd) }
+            if let lbl = attrs["label"] { setLabelForCurrentScope(lbl) }
         default: break
         }
     }
 
     private func applyGraphAttr(key: String, value: String) {
         switch key.lowercased() {
-        case "rankdir":
-            if clusterStack.isEmpty { graphRankdir = value }
-        case "label":
-            if let top = clusterStack.last, subgraphs[top] != nil {
-                subgraphs[top]!.label = mapLabel(value)
-            }
+        case "rankdir": setRankdirForCurrentScope(value)
+        case "label":   setLabelForCurrentScope(value)
         default: break
+        }
+    }
+
+    /// `rankdir` only steers the whole chart when set at root scope; inside any
+    /// subgraph (cluster or not) it's local and ignored by this front-end.
+    private func setRankdirForCurrentScope(_ value: String) {
+        if scopeStack.isEmpty { graphRankdir = value }
+    }
+
+    /// `label` names the *immediate* enclosing scope, and only when that scope
+    /// is a cluster — a nested scope must not overwrite an outer cluster's label.
+    private func setLabelForCurrentScope(_ value: String) {
+        if let immediate = scopeStack.last, let cluster = immediate, subgraphs[cluster] != nil {
+            subgraphs[cluster]!.label = mapLabel(value)
         }
     }
 
@@ -514,18 +544,32 @@ private final class DOTParserImpl {
         let shape = shapeFrom(merged["shape"])
 
         if var existing = nodes[id] {
-            if rawLabel != nil { existing.label = label }
-            if merged["shape"] != nil { existing.shape = shape }
+            // Only an *explicit* later attr updates an established node; a
+            // default in scope (`node[label=…]`) must not overwrite it.
+            if let explicit = attrs["label"] { existing.label = mapLabel(explicit) }
+            if let explicit = attrs["shape"] { existing.shape = shapeFrom(explicit) }
             nodes[id] = existing
         } else {
             nodes[id] = Flowchart.Node(id: id, label: label, shape: shape)
             order.append(id)
         }
-        // The first cluster a node textually appears in claims it (inner wins
-        // over outer; an inside reference wins over an earlier outside one).
-        if let top = clusterStack.last, subgraphs[top] != nil, membership[id] == nil {
-            membership[id] = top
-            subgraphs[top]!.nodeIDs.append(id)
+        // A node belongs to the innermost cluster it textually appears in: a
+        // reference deeper than the current claim (e.g. `x` in an outer cluster
+        // then again in a nested one) reassigns it to the inner cluster.
+        if let top = clusterStack.last, subgraphs[top] != nil {
+            let depth = clusterStack.count
+            if let prev = membership[id] {
+                if depth > (membershipDepth[id] ?? 0), prev != top {
+                    subgraphs[prev]?.nodeIDs.removeAll { $0 == id }
+                    membership[id] = top
+                    membershipDepth[id] = depth
+                    subgraphs[top]!.nodeIDs.append(id)
+                }
+            } else {
+                membership[id] = top
+                membershipDepth[id] = depth
+                subgraphs[top]!.nodeIDs.append(id)
+            }
         }
     }
 
@@ -573,6 +617,7 @@ private final class DOTParserImpl {
         case "ellipse", "oval":                         return .rounded
         case "cylinder":                                return .cylinder
         case "stadium":                                 return .stadium
+        case "hexagon":                                 return .hexagon
         // box/rect/square/record/Mrecord/plaintext/none and unknowns → rect.
         default:                                        return .rectangle
         }

@@ -309,6 +309,61 @@ final class DippinParserTests: XCTestCase {
         XCTAssertNil(DippinParser.parse(src))
     }
 
+    // MARK: review regressions
+
+    func testInlineCommentDoesNotInjectFanEdge() {
+        // The `->` lives inside a comment, so no phantom `A` edge is created.
+        let chart = parse("""
+        workflow X
+          parallel P # -> A
+          agent B
+          edges
+            P -> B
+        """)
+        XCTAssertNil(edge(chart, "P", "A"))
+        XCTAssertFalse(chart.nodes.contains { $0.id == "A" })
+    }
+
+    func testFanEdgeRedeclarationIsDeduped() {
+        // `parallel P -> A, B` plus explicit `P -> A` / `P -> B` = one edge each.
+        let chart = parse("""
+        workflow X
+          parallel P -> A, B
+          agent A
+          agent B
+          edges
+            P -> A
+            P -> B
+        """)
+        XCTAssertEqual(chart.edges.filter { $0.from == "P" && $0.to == "A" }.count, 1)
+        XCTAssertEqual(chart.edges.filter { $0.from == "P" && $0.to == "B" }.count, 1)
+    }
+
+    func testAttributedRedeclarationOfFanEdgeStaysDistinct() {
+        // An attributed redeclaration (`when …`) is a distinct edge, not a dupe.
+        let chart = parse("""
+        workflow X
+          parallel P -> A
+          agent A
+          edges
+            P -> A when ctx.x == "go"
+        """)
+        XCTAssertEqual(chart.edges.filter { $0.from == "P" && $0.to == "A" }.count, 2)
+    }
+
+    func testEscapedQuoteInWhenConditionSurvives() {
+        // A `\"` and a `#` inside the double-quoted condition must not split the
+        // token or be mistaken for an inline comment.
+        let chart = parse(#"""
+        workflow X
+          agent A
+          agent B
+          edges
+            A -> B when ctx.msg == "say \"#go\""
+        """#)
+        XCTAssertEqual(edge(chart, "A", "B")?.label, ##"say "#go""##)
+    }
+
     // MARK: full pipeline — parse → layout → scene lints clean
 
     func testParseLayoutSceneLintsClean() {

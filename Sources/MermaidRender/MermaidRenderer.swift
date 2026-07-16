@@ -169,11 +169,20 @@ public enum MermaidRenderer {
         #endif
     }
 
+    /// Upper bound (pixels) on a raster's width and derived height — a cap in
+    /// the spirit of `MermaidParser.maxTextSize`/`maxEdges` that keeps a hostile
+    /// `targetWidth` from trapping or exhausting memory.
+    static let maxRasterDimension = 4096
+
     #if canImport(AppKit) || canImport(UIKit)
     private static func raster(from img: PlatformImage, targetWidth: Int,
                                background: (r: UInt8, g: UInt8, b: UInt8))
         -> (pixels: [UInt8], width: Int, height: Int)? {
-        guard targetWidth > 0 else { return nil }
+        // Cap the requested width like the parser input caps: an unbounded
+        // `targetWidth` would trap on the `Double`→`Int` height conversion or
+        // exhaust memory allocating `bytesPerRow * h`. A terminal is at most a
+        // few hundred columns wide, so 4096 px is comfortably generous.
+        guard (1...maxRasterDimension).contains(targetWidth) else { return nil }
         #if canImport(AppKit)
         var rect = CGRect(origin: .zero, size: img.size)
         guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
@@ -184,7 +193,12 @@ public enum MermaidRenderer {
         guard srcW > 0, srcH > 0 else { return nil }
 
         let w = targetWidth
-        var h = Int((Double(w) * Double(srcH) / Double(srcW)).rounded())
+        // Derive height in `Double` and reject any non-finite / out-of-range
+        // result before the `Int` conversion so an extreme aspect ratio can't
+        // trap or blow the allocation.
+        let hd = (Double(w) * Double(srcH) / Double(srcW)).rounded()
+        guard hd.isFinite, hd <= Double(maxRasterDimension) else { return nil }
+        var h = Int(hd)
         if h < 2 { h = 2 }
         if h % 2 != 0 { h += 1 }  // even → whole top/bottom cell pairs
 

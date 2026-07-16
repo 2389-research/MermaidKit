@@ -1,8 +1,8 @@
 // Regression coverage for the "never trap on a parsed diagram" contract as it
 // applies to the non-Mermaid front-ends (Dippin, DOT). A parsed `Flowchart`
 // wrapped in a `MermaidDiagram` must render to `pngData` for both themes without
-// trapping — no force-unwrap on a back-edge, an `exit:`-only node, or a shape
-// with no measured size may reach the layout/scene/draw path.
+// trapping — no force-unwrap on a conditional back-edge (a loop-back into an
+// earlier node) or a typed shape may reach the layout/scene/draw path.
 #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
 import XCTest
 @testable import MermaidRender
@@ -11,8 +11,8 @@ import XCTest
 final class GraphFrontendRenderTests: XCTestCase {
 
     /// The Dippin workflow that surfaced the report: conditional back-edges
-    /// (TestsPass -> Draft, Approve -> Draft) plus a node reached only through a
-    /// loop-back. Must parse and render (non-nil PNG) in light and dark.
+    /// (TestsPass -> Draft, Approve -> Draft) that loop back into the start node.
+    /// Must parse and render (non-nil PNG) in light and dark.
     func testDippinWorkflowRendersBothThemes() throws {
         let src = """
         workflow Review
@@ -68,5 +68,33 @@ final class GraphFrontendRenderTests: XCTestCase {
                            "not a PNG (prefersDark=\(prefersDark))")
         }
     }
+
+    #if canImport(AppKit) || canImport(UIKit)
+    /// `rgbaRaster` must bound `targetWidth` like the parser input caps: a
+    /// pathological width can't be allowed to trap the height conversion or
+    /// exhaust memory. A sane width still rasters.
+    func testRasterWidthIsBounded() throws {
+        let chart = try XCTUnwrap(DOTParser.parse("digraph G { A -> B; B -> C; }"))
+        let diagram = MermaidDiagram.flowchart(chart)
+        let theme = DiagramTheme(prefersDark: false)
+        let bg: (r: UInt8, g: UInt8, b: UInt8) = (255, 255, 255)
+
+        // Absurd widths are rejected up front (no trap, no allocation).
+        XCTAssertNil(MermaidRenderer.rgbaRaster(diagram: diagram, theme: theme,
+                                                targetWidth: Int.max, background: bg))
+        XCTAssertNil(MermaidRenderer.rgbaRaster(diagram: diagram, theme: theme,
+                                                targetWidth: MermaidRenderer.maxRasterDimension + 1,
+                                                background: bg))
+        XCTAssertNil(MermaidRenderer.rgbaRaster(diagram: diagram, theme: theme,
+                                                targetWidth: 0, background: bg))
+
+        // A reasonable width still produces a correctly sized buffer.
+        let raster = try XCTUnwrap(
+            MermaidRenderer.rgbaRaster(diagram: diagram, theme: theme,
+                                       targetWidth: 200, background: bg))
+        XCTAssertEqual(raster.width, 200)
+        XCTAssertEqual(raster.pixels.count, raster.width * raster.height * 4)
+    }
+    #endif
 }
 #endif

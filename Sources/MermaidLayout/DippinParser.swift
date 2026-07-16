@@ -75,6 +75,11 @@ private final class DippinParserImpl {
     private var sawWorkflow = false
     private var aborted = false
 
+    // Connections synthesized by `parallel`/`fan_in` fan sugar, so a legacy v1
+    // file that also spells the same edge out in its `edges` block doesn't emit
+    // a duplicate connector (which would also inflate the `maxEdges` count).
+    private var fanEdges: Set<String> = []
+
     init(source: String) {
         var out: [Line] = []
         for raw in source.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -216,14 +221,16 @@ private final class DippinParserImpl {
 
     // MARK: parallel / fan_in
 
-    private func parseParallel(line: String, words: [String], memberIndent: Int) {
+    private func parseParallel(line rawLine: String, words: [String], memberIndent: Int) {
         advance()
         guard words.count >= 2 else { skipChildBlock(parentIndent: memberIndent); return }
         let id = words[1]
         declare(id, kind: .parallel)
-        // Inline form: `parallel Fan -> A, B, C`.
+        // Inline form: `parallel Fan -> A, B, C`. Strip any inline comment first
+        // so `parallel Fan # -> A` can't inject a phantom edge from a comment.
+        let line = stripInlineComment(rawLine)
         if let arrow = line.range(of: "->") {
-            for t in commaList(String(line[arrow.upperBound...])) { addEdge(id, t, label: nil) }
+            for t in commaList(String(line[arrow.upperBound...])) { addFanEdge(from: id, to: t) }
         }
         // Block form: `branch: <NodeID>` lines are fan-out targets; their nested
         // config fields are skipped.
@@ -233,19 +240,21 @@ private final class DippinParserImpl {
             let key = bareKeyword(firstWord(l.text))
             let value = fieldValue(l.text)
             advance()
-            if key == "branch", !value.isEmpty { addEdge(id, dequote(value), label: nil) }
+            if key == "branch", !value.isEmpty { addFanEdge(from: id, to: dequote(value)) }
             if value.isEmpty || key == "branch" { skipChildBlock(parentIndent: branchIndent) }
             if aborted { return }
         }
     }
 
-    private func parseFanIn(line: String, words: [String], memberIndent: Int) {
+    private func parseFanIn(line rawLine: String, words: [String], memberIndent: Int) {
         advance()
         guard words.count >= 2 else { skipChildBlock(parentIndent: memberIndent); return }
         let id = words[1]
         declare(id, kind: .fanIn)
+        // Strip inline comments before the `<-` scan (see `parseParallel`).
+        let line = stripInlineComment(rawLine)
         if let arrow = line.range(of: "<-") {
-            for s in commaList(String(line[arrow.upperBound...])) { addEdge(s, id, label: nil) }
+            for s in commaList(String(line[arrow.upperBound...])) { addFanEdge(from: s, to: id) }
         }
         // fan_in has no block body in the grammar; defensively skip any.
         skipChildBlock(parentIndent: memberIndent)
@@ -271,6 +280,11 @@ private final class DippinParserImpl {
         let dst = firstWord(rhs)
         guard !dst.isEmpty else { return }
         let attrText = String(rhs.dropFirst(dst.count)).trimmingCharacters(in: .whitespaces)
+
+        // A plain, attribute-free redeclaration of a fan-generated edge is a
+        // no-op (v1 files may repeat the fan targets in `edges`). An attributed
+        // edge (`when …`, `label: …`, …) between the same pair stays distinct.
+        if attrText.isEmpty, fanEdges.contains(edgeKey(from, dst)) { return }
 
         let attr = parseEdgeAttrs(attrText)
         var label = attr.label ?? (attr.when.isEmpty ? nil : cleanCondition(attr.when))
@@ -362,6 +376,15 @@ private final class DippinParserImpl {
         if edges.count > MermaidParser.maxEdges { aborted = true }
     }
 
+    /// Adds a fan-sugar edge and records the connection so a later plain,
+    /// attribute-free redeclaration of the same pair in `edges` is suppressed.
+    private func addFanEdge(from: String, to: String) {
+        addEdge(from, to, label: nil)
+        fanEdges.insert(edgeKey(from, to))
+    }
+
+    private func edgeKey(_ from: String, _ to: String) -> String { from + "\u{1}" + to }
+
     /// Applies the display label + a small subtitle line (an agent's model, a
     /// subgraph/manager_loop's referenced file) once the whole workflow is read.
     private func finalizeLabels() {
@@ -450,41 +473,71 @@ private final class DippinParserImpl {
     }
 
     /// Removes an inline comment: a `#` that is at line start or preceded by
-    /// whitespace and not inside a quote.
+    /// whitespace and not inside a quote. Quote scanning is escape-aware — a
+    /// backslash escapes the next char inside a double-quoted region and a
+    /// doubled `''` is a literal quote inside a single-quoted one — so a `#`
+    /// (or a `\"`) inside a string never ends the string or the line early.
     private func stripInlineComment(_ s: String) -> String {
+        let chars = Array(s)
         var quote: Character?
         var prevWasSpace = true
         var out = ""
-        for ch in s {
+        var i = 0
+        while i < chars.count {
+            let ch = chars[i]
             if let q = quote {
-                if ch == q { quote = nil }
-                out.append(ch); prevWasSpace = false; continue
+                out.append(ch)
+                if q == "\"", ch == "\\", i + 1 < chars.count {
+                    out.append(chars[i + 1]); i += 2; continue     // escaped char
+                }
+                if ch == q {
+                    if q == "'", i + 1 < chars.count, chars[i + 1] == "'" {
+                        out.append(chars[i + 1]); i += 2; continue  // '' → literal '
+                    }
+                    quote = nil
+                }
+                prevWasSpace = false; i += 1; continue
             }
-            if ch == "\"" || ch == "'" { quote = ch; out.append(ch); prevWasSpace = false; continue }
+            if ch == "\"" || ch == "'" { quote = ch; out.append(ch); prevWasSpace = false; i += 1; continue }
             if ch == "#" && prevWasSpace { break }
             out.append(ch)
             prevWasSpace = (ch == " " || ch == "\t")
+            i += 1
         }
         return out.trimmingCharacters(in: .whitespaces)
     }
 
-    /// Splits on whitespace but keeps a `"…"`/`'…'` region as one token.
+    /// Splits on whitespace but keeps a `"…"`/`'…'` region as one token, with
+    /// the same escape awareness as `stripInlineComment` so `label: "a \" b"`
+    /// stays a single token.
     private func quotedTokens(_ s: String) -> [String] {
+        let chars = Array(s)
         var out: [String] = []
         var buf = ""
         var quote: Character?
-        for ch in s {
+        var i = 0
+        while i < chars.count {
+            let ch = chars[i]
             if let q = quote {
                 buf.append(ch)
-                if ch == q { quote = nil }
-                continue
+                if q == "\"", ch == "\\", i + 1 < chars.count {
+                    buf.append(chars[i + 1]); i += 2; continue
+                }
+                if ch == q {
+                    if q == "'", i + 1 < chars.count, chars[i + 1] == "'" {
+                        buf.append(chars[i + 1]); i += 2; continue
+                    }
+                    quote = nil
+                }
+                i += 1; continue
             }
-            if ch == "\"" || ch == "'" { quote = ch; buf.append(ch); continue }
+            if ch == "\"" || ch == "'" { quote = ch; buf.append(ch); i += 1; continue }
             if ch == " " || ch == "\t" {
                 if !buf.isEmpty { out.append(buf); buf = "" }
             } else {
                 buf.append(ch)
             }
+            i += 1
         }
         if !buf.isEmpty { out.append(buf) }
         return out
@@ -499,12 +552,24 @@ private final class DippinParserImpl {
             .filter { !$0.isEmpty }
     }
 
+    /// Strips one layer of surrounding quotes and decodes the escapes the
+    /// scanners preserved: `\"`/`\\` inside `"…"`, and `''` inside `'…'`.
     private func dequote(_ s: String) -> String {
-        var t = s.trimmingCharacters(in: .whitespaces)
-        if t.count >= 2, let f = t.first, (f == "\"" || f == "'"), t.hasSuffix(String(f)) {
-            t = String(t.dropFirst().dropLast())
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard t.count >= 2, let f = t.first, (f == "\"" || f == "'"), t.hasSuffix(String(f)) else { return t }
+        let inner = String(t.dropFirst().dropLast())
+        if f == "\"" {
+            var out = ""
+            var esc = false
+            for ch in inner {
+                if esc { out.append(ch); esc = false; continue }
+                if ch == "\\" { esc = true; continue }
+                out.append(ch)
+            }
+            if esc { out.append("\\") }
+            return out
         }
-        return t
+        return inner.replacingOccurrences(of: "''", with: "'")
     }
 
     /// A concise edge label from a `when` condition. A single equality

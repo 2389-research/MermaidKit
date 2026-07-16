@@ -343,6 +343,13 @@ extension DiagramLayoutEngine {
                 case .circle, .stateStart, .stateEnd:
                     let dx = (f.width / 2) * sqrt(max(0, 1 - pow((y - f.midY) / hh, 2)))
                     x = rightOrBottom ? f.midX + dx : f.midX - dx
+                case .hexagon:
+                    // Left/right ends are pointed: pull an off-center port in
+                    // along the sloped side (same inset as `hexagonPath`) so it
+                    // lands on the visible outline, not a phantom box edge.
+                    let hexInset = min(f.width * 0.22, f.height / 2)
+                    let frac = min(abs(y - f.midY) / hh, 1)
+                    x = rightOrBottom ? f.maxX - hexInset * frac : f.minX + hexInset * frac
                 default: break
                 }
                 return CGPoint(x: x, y: y)

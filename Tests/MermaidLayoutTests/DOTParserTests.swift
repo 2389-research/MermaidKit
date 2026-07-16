@@ -303,6 +303,73 @@ final class DOTParserTests: XCTestCase {
         XCTAssertNil(DOTParser.parse("digraph { { \(left) } -> { \(right) } }"))
     }
 
+    // MARK: review regressions
+
+    func testDirBackPointsAtTail() {
+        let chart = parse("digraph { A -> B [dir=back] }")
+        XCTAssertFalse(chart.edges[0].hasArrow)   // no head arrow
+        XCTAssertTrue(chart.edges[0].backArrow)   // tail arrow only
+    }
+
+    func testHexagonShape() {
+        let chart = parse("digraph { A [shape=hexagon] }")
+        XCTAssertEqual(chart.nodes.first?.shape, .hexagon)
+    }
+
+    func testDuplicateSubgraphEndpointsCollapse() {
+        // `{ a a } -> b` is a node *set*: one edge, not two.
+        let chart = parse("digraph { { a a } -> b }")
+        XCTAssertEqual(chart.edges.count, 1)
+    }
+
+    func testMissingClosingBraceIsNil() {
+        XCTAssertNil(DOTParser.parse("digraph { A -> B"))
+    }
+
+    func testTrailingTokensAfterCloseIsNil() {
+        XCTAssertNil(DOTParser.parse("digraph { A -> B } garbage"))
+    }
+
+    func testInnermostClusterClaimsRepeatedNode() {
+        // `x` is named in the outer cluster first, then again in the nested one;
+        // the innermost cluster should own it.
+        let chart = parse(#"""
+        digraph {
+          subgraph cluster_a { label="A"; x; subgraph cluster_b { label="B"; x } }
+        }
+        """#)
+        let inner = chart.subgraphs.first { $0.label == "B" }
+        let outer = chart.subgraphs.first { $0.label == "A" }
+        XCTAssertEqual(inner?.nodeIDs, ["x"])
+        XCTAssertEqual(outer?.nodeIDs, [])
+    }
+
+    func testAnonymousSubgraphRankdirDoesNotSteerRoot() {
+        // A `rankdir` inside a non-cluster scope is local — the chart stays TB.
+        let chart = parse("digraph { { rankdir=LR; a -> b } c }")
+        XCTAssertEqual(chart.direction, .topDown)
+    }
+
+    func testNestedLabelDoesNotOverwriteOuterCluster() {
+        let chart = parse(#"""
+        digraph {
+          subgraph cluster_a {
+            label="A";
+            subgraph cluster_b { label="B"; x }
+          }
+        }
+        """#)
+        XCTAssertEqual(chart.subgraphs.first { $0.nodeIDs == ["x"] }?.label, "B")
+        XCTAssertTrue(chart.subgraphs.contains { $0.label == "A" })
+    }
+
+    func testDefaultDoesNotOverwriteEstablishedNode() {
+        // `A` gets an explicit label; a later `node[label=…]` default in scope
+        // when `A` is referenced again must not clobber it.
+        let chart = parse(#"digraph { A [label="custom"]; node [label="default"]; A -> B }"#)
+        XCTAssertEqual(chart.nodes.first { $0.id == "A" }?.label, "custom")
+    }
+
     // MARK: full pipeline — parse → layout → scene lints clean
 
     func testParseLayoutSceneLintsClean() {
