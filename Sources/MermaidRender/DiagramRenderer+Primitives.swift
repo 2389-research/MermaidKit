@@ -18,6 +18,23 @@ extension DiagramRenderer {
     static func font(_ size: CGFloat, weight: PlatformFont.Weight = .regular) -> CTFont {
         PlatformFont.systemFont(ofSize: size, weight: weight) as CTFont
     }
+
+    /// Memoizes single-line text metrics by `(string, size, weight)`. Layout
+    /// measures every label and the multi-line draw path measures again for
+    /// line heights, so the same string is typeset for measurement two or more
+    /// times per render; the cache turns the repeats into a dictionary hit.
+    /// The system font is deterministic, so a cached `CGSize` is bit-identical
+    /// to a fresh `CTLineGetTypographicBounds` — the memo is output-invisible.
+    /// `NSCache` is thread-safe (renders can run on a detached task) and self-
+    /// bounding under memory pressure; `countLimit` caps steady-state entries.
+    private final class MeasureCache: @unchecked Sendable {
+        private final class Box { let size: CGSize; init(_ s: CGSize) { size = s } }
+        private let store = NSCache<NSString, Box>()
+        init() { store.countLimit = 8192 }
+        func size(forKey key: NSString) -> CGSize? { store.object(forKey: key)?.size }
+        func set(_ size: CGSize, forKey key: NSString) { store.setObject(Box(size), forKey: key) }
+    }
+    private static let measureCache = MeasureCache()
     #endif
 
     /// Measures `text`, honoring `<br/>`/`\n` line breaks: the width is the
@@ -39,6 +56,8 @@ extension DiagramRenderer {
     /// Measures a single visual line (no line-break handling).
     private static func measureLine(_ text: String, size: CGFloat, weight: PlatformFont.Weight) -> CGSize {
         #if canImport(AppKit) || canImport(UIKit)
+        let key = "\(size)|\(weight.rawValue)|\(text)" as NSString
+        if let cached = measureCache.size(forKey: key) { return cached }
         let attributed = NSAttributedString(string: text, attributes: [
             kCTFontAttributeName as NSAttributedString.Key: font(size, weight: weight),
         ])
@@ -46,7 +65,9 @@ extension DiagramRenderer {
         var ascent: CGFloat = 0
         var descent: CGFloat = 0
         let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
-        return CGSize(width: width, height: ascent + descent)
+        let result = CGSize(width: width, height: ascent + descent)
+        measureCache.set(result, forKey: key)
+        return result
         #else
         // Linux: measure with Silica's FontConfig-resolved font metrics.
         // `descent` is negative below the baseline, so height = ascent − descent

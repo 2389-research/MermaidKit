@@ -33,6 +33,41 @@ enum DiagramRenderer {
         }
     }
 
+    /// Cache key that hashes its inputs ONCE (in `init`) and keeps the source
+    /// by reference for exact equality. The old key interpolated the full
+    /// source into a fresh `"mermaid|…|\(source)"` string on every call — an
+    /// O(source length) allocation + copy paid even on cache *hits* (each
+    /// SwiftUI `body` pass). This keeps the source `String` (copy-on-write, no
+    /// copy), precomputes the hash so `NSCache` bucket lookup is O(1), and only
+    /// walks the source in `isEqual:` on an actual hash collision or a true
+    /// match — so hit/miss semantics are byte-for-byte the old key's, just
+    /// without the per-call concatenation.
+    private final class RenderKey: NSObject, NSCopying {
+        let source: String
+        let theme: String
+        let spacing: String
+        private let precomputedHash: Int
+        init(source: String, theme: String, spacing: String) {
+            self.source = source
+            self.theme = theme
+            self.spacing = spacing
+            var hasher = Hasher()
+            hasher.combine(theme)
+            hasher.combine(spacing)
+            hasher.combine(source)
+            self.precomputedHash = hasher.finalize()
+            super.init()
+        }
+        override var hash: Int { precomputedHash }
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? RenderKey else { return false }
+            return precomputedHash == other.precomputedHash
+                && theme == other.theme && spacing == other.spacing && source == other.source
+        }
+        // Immutable, so a "copy" (NSCache retains keys via NSCopying) is self.
+        func copy(with zone: NSZone? = nil) -> Any { self }
+    }
+
     /// NSCache is documented thread-safe ("you can add, remove, and query
     /// items in the cache from different threads without having to lock the
     /// cache yourself") but predates Sendable; this wrapper carries that
@@ -40,10 +75,10 @@ enum DiagramRenderer {
     /// rendering many large diagrams can't accumulate unbounded image memory
     /// (NSCache also evicts under system memory pressure).
     private final class RenderCache: @unchecked Sendable {
-        private let store = NSCache<NSString, Entry>()
+        private let store = NSCache<RenderKey, Entry>()
         init(totalCostLimit: Int) { store.totalCostLimit = totalCostLimit }
-        func object(forKey key: NSString) -> Entry? { store.object(forKey: key) }
-        func setObject(_ entry: Entry, forKey key: NSString, cost: Int) {
+        func object(forKey key: RenderKey) -> Entry? { store.object(forKey: key) }
+        func setObject(_ entry: Entry, forKey key: RenderKey, cost: Int) {
             store.setObject(entry, forKey: key, cost: cost)
         }
     }
@@ -228,10 +263,11 @@ enum DiagramRenderer {
     /// format at once.
     static func captionedPlan(
         _ plan: (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void),
-        source: String, diagram: MermaidDiagram, theme: DiagramTheme
+        caption: String?, diagram: MermaidDiagram, theme: DiagramTheme
     ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
-        guard diagram.titleText == nil,
-              let caption = MermaidParser.metadata(in: source).title
+        // `caption` is the front-matter `title:` the parser already extracted
+        // (threaded in via `parseWithMetadata`), not a re-scan of the source.
+        guard diagram.titleText == nil, let caption
         else { return plan }
         let band: CGFloat = 26
         let width = max(plan.size.width, measure(caption, size: 12.5, weight: .semibold).width + 16)
@@ -259,10 +295,10 @@ enum DiagramRenderer {
     /// output type differ.
     static func renderImage(source: String, theme: DiagramTheme,
                             spacing: DiagramSpacing = .regular) -> PlatformImage? {
-        guard let diagram = MermaidParser.parse(source) else { return nil }
+        guard let (diagram, metadata) = MermaidParser.parseWithMetadata(source) else { return nil }
         let (size, edgePolylines, draw) = captionedPlan(
             renderPlan(for: diagram, theme: theme, spacing: spacing),
-            source: source, diagram: diagram, theme: theme)
+            caption: metadata.title, diagram: diagram, theme: theme)
         guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
         // The bitmap surface is whole pixels (ceil), so canvasSize is fractional
         // slightly smaller than the surface. Fill the FULL pixel rect, not
@@ -290,17 +326,17 @@ enum DiagramRenderer {
                                  spacing: DiagramSpacing = .regular) -> NSAttributedString? {
         // Cache first: a hit must not pay a re-parse of up-to-50KB source
         // (MermaidView evaluates this on every SwiftUI body pass).
-        let key = "mermaid|\(theme.fingerprint)|\(spacing.fingerprint)|\(source)" as NSString
+        let key = RenderKey(source: source, theme: theme.fingerprint, spacing: spacing.fingerprint)
         if let cached = cache.object(forKey: key) {
             return attributedString(for: cached)
         }
-        guard let diagram = MermaidParser.parse(source) else { return nil }
+        guard let (diagram, metadata) = MermaidParser.parseWithMetadata(source) else { return nil }
 
         let entry: Entry
         do {
             let (size, edgePolylines, draw) = captionedPlan(
                 renderPlan(for: diagram, theme: theme, spacing: spacing),
-                source: source, diagram: diagram, theme: theme)
+                caption: metadata.title, diagram: diagram, theme: theme)
             guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
 
             #if canImport(AppKit)

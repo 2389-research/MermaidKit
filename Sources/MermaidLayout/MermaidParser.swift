@@ -118,13 +118,30 @@ public enum MermaidParser {
     /// Parses D1 diagram types; nil for unsupported types or unparseable
     /// input (the caller falls back to styled source).
     public static func parse(_ source: String) -> MermaidDiagram? {
+        parseWithMetadata(source)?.diagram
+    }
+
+    /// Parses a diagram AND returns the front-matter/accessibility metadata the
+    /// same pass extracted — so a caller that needs both (the render pipeline
+    /// caption path) pays a single `stripMetadata` scan instead of parsing and
+    /// then re-scanning the whole source with `metadata(in:)`. `parse` is this
+    /// with the metadata discarded.
+    public static func parseWithMetadata(
+        _ source: String
+    ) -> (diagram: MermaidDiagram, metadata: DiagramMetadata)? {
         guard source.count <= maxTextSize else { return nil }
         // YAML front-matter (`---\ntitle: ...\n---`) precedes the header in
         // doc examples; without stripping it, `---` became the header and
         // every config-bearing example fell back to styled source. The same
         // pass removes `accTitle:`/`accDescr:` statements so no dialect ever
-        // sees them as content (they read back via `metadata(in:)`).
-        let source = stripMetadata(from: source).body
+        // sees them as content (they read back via the returned metadata).
+        let (body, metadata) = stripMetadata(from: source)
+        guard let diagram = parseBody(body) else { return nil }
+        return (diagram, metadata)
+    }
+
+    /// Dispatches an already-metadata-stripped body to the per-dialect parsers.
+    private static func parseBody(_ source: String) -> MermaidDiagram? {
         let lines = source
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }

@@ -21,9 +21,9 @@ extension DiagramRenderer {
     /// nil for unparseable sources, exactly like the raster APIs.
     static func pdfData(source: String, theme: DiagramTheme,
                         spacing: DiagramSpacing = .regular) -> Data? {
-        guard let diagram = MermaidParser.parse(source) else { return nil }
+        guard let (diagram, metadata) = MermaidParser.parseWithMetadata(source) else { return nil }
         let plan = captionedPlan(renderPlan(for: diagram, theme: theme, spacing: spacing),
-                                 source: source, diagram: diagram, theme: theme)
+                                 caption: metadata.title, diagram: diagram, theme: theme)
         guard let (canvasSize, originX, originY) =
                 paddedCanvas(size: plan.size, edgePolylines: plan.edgePolylines) else { return nil }
 
