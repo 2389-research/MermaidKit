@@ -296,6 +296,58 @@ final class EdgeLabelLayoutTests: XCTestCase {
         }
     }
 
+    /// #4 — the `fail` and `reject` back-edge captions sit on parallel VERTICAL
+    /// channels at similar heights. Their x-positions are routing-fixed, so they
+    /// can't move apart horizontally; the placer must STAGGER them vertically —
+    /// sliding the later/rightmost caption (`reject`) DOWN along its own run —
+    /// until they clear the comfort gap. Before the fix both centered on their
+    /// arrow-free midpoints ~8pt apart vertically and read as crowded.
+    func testFailRejectLabelsStaggerVertically() throws {
+        guard case .flowchart(let chart) = MermaidParser.parse(backEdgeSource) else { return XCTFail() }
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+
+        func frame(_ label: String) throws -> CGRect {
+            let e = try XCTUnwrap(layout.edges.first { $0.label == label }, "\(label): missing edge")
+            let lp = try XCTUnwrap(e.labelPoint, "\(label): missing anchor")
+            let sz = measure(label, DiagramLayoutEngine.labelFontSize)
+            return CGRect(x: lp.x - (sz.width + 6) / 2, y: lp.y - (sz.height + 2) / 2,
+                          width: sz.width + 6, height: sz.height + 2)
+        }
+        let fail = try frame("fail")
+        let reject = try frame("reject")
+
+        // They crowd horizontally (channel x's overlap or sit within the gap), so
+        // the comfort clearance must come from a VERTICAL stagger.
+        let dxGap = max(fail.minX - reject.maxX, reject.minX - fail.maxX, 0)
+        XCTAssertLessThan(dxGap, DiagramLayoutEngine.flowchartLabelGap,
+                          "fail/reject don't crowd horizontally — this fixture no longer exercises the stagger")
+        let dyGap = max(fail.minY - reject.maxY, reject.minY - fail.maxY, 0)
+        XCTAssertGreaterThanOrEqual(dyGap, DiagramLayoutEngine.flowchartLabelGap,
+            "fail/reject captions crowd: only \(Int(dyGap))pt of vertical clearance, need \(Int(DiagramLayoutEngine.flowchartLabelGap))")
+        // The stagger pushes the later caption (reject) DOWN, not fail UP.
+        XCTAssertGreaterThan(reject.minY, fail.maxY, "reject should sit below fail")
+
+        // reject stays ON its straight run with a full stub each side (round-3
+        // guarantee preserved — the stagger doesn't shove it onto a bend).
+        let e = try XCTUnwrap(layout.edges.first { $0.label == "reject" })
+        let lp = try XCTUnwrap(e.labelPoint)
+        var run: (a: CGPoint, b: CGPoint, d: CGFloat)?
+        for (a, b) in zip(e.points, e.points.dropFirst()) {
+            let d = distanceToSegment(lp, a, b)
+            if run == nil || d < run!.d { run = (a, b, d) }
+        }
+        let seg = try XCTUnwrap(run)
+        XCTAssertLessThanOrEqual(seg.d, 3, "reject floated off its route after staggering")
+        let horiz = abs(seg.a.x - seg.b.x) >= abs(seg.a.y - seg.b.y)
+        let lo = horiz ? min(seg.a.x, seg.b.x) : min(seg.a.y, seg.b.y)
+        let hi = horiz ? max(seg.a.x, seg.b.x) : max(seg.a.y, seg.b.y)
+        let along = horiz ? reject.width : reject.height
+        let c = horiz ? lp.x : lp.y
+        let stub = min((c - along / 2) - lo, hi - (c + along / 2))
+        XCTAssertGreaterThanOrEqual(stub, DiagramLayoutEngine.flowchartLabelStub,
+            "reject leaves only \(Int(stub))pt of connector after staggering")
+    }
+
     /// The state fixture (composite states + choice/fork/join + cycles) — whose
     /// adjacent-layer labels used to land on jogs and stack on top of each
     /// other — is now clean of both new rules.

@@ -352,6 +352,21 @@ extension DiagramLayoutEngine {
                         let v = slack * CGFloat(s) / CGFloat(steps)
                         alongShifts.append(v); alongShifts.append(-v)
                     }
+                    // Comfort-stagger candidates: the MINIMAL slide along this run
+                    // that clears the comfort gap just past an already-placed
+                    // caption (measuring on the run's OWN axis). The uniform sweep
+                    // above is coarse — its first step can overshoot into a
+                    // neighbouring node's clearance and lose to the crowded
+                    // midpoint — so we add the exact offset that opens a comfort
+                    // gap and nothing more. The DOWN/RIGHT slide is offered first
+                    // so the later, further-along caption is the one that yields.
+                    for l in labelRects {
+                        let lLo = run.horizontal ? l.minX : l.minY
+                        let lHi = run.horizontal ? l.maxX : l.maxY
+                        let down = (lHi + gap + along / 2 + 0.5) - mid
+                        let up   = (lLo - gap - along / 2 - 0.5) - mid
+                        for s in [down, up] where abs(s) <= slack { alongShifts.append(s) }
+                    }
                 }
                 let perpNudges: [CGFloat] = [0, perp / 2 + gap / 2, -(perp / 2 + gap / 2)]
                 for da in alongShifts {
@@ -362,7 +377,26 @@ extension DiagramLayoutEngine {
                         let rect = CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h)
                         var score: CGFloat = 0
                         for o in obstacles { score += overlapArea(rect, o) * 4 }
-                        for l in labelRects { score += overlapArea(rect, l) * 3 }
+                        for l in labelRects {
+                            score += overlapArea(rect, l) * 3
+                            // Comfort gap: two captions that don't overlap but sit
+                            // within `gap` of each other on BOTH axes still read as
+                            // crowded (e.g. `fail`/`reject` on parallel vertical
+                            // back-edge channels — routing-fixed x's, similar y's).
+                            // `sep` is the clearance on the better-separated axis; a
+                            // shortfall is penalized so the label slides ALONG its
+                            // own run to open the gap. Sliding along the run is the
+                            // cheapest move, so the stagger lands on the crowding
+                            // axis: parallel vertical runs stagger vertically (the
+                            // sweep tries the DOWN shift first, so the later/rightmost
+                            // caption is pushed down), parallel horizontal runs
+                            // stagger horizontally. Only bites when the gap is
+                            // violated; otherwise it is 0 and the label stays put.
+                            let dxGap = max(l.minX - rect.maxX, rect.minX - l.maxX, 0)
+                            let dyGap = max(l.minY - rect.maxY, rect.minY - l.maxY, 0)
+                            let sep = max(dxGap, dyGap)
+                            if sep < gap { score += (gap - sep) * 8 }
+                        }
                         let probe = rect.insetBy(dx: -1, dy: -1)
                         for v in bends where probe.contains(v) { score += 120 }
                         for x in crossings where probe.contains(x) { score += 120 }
