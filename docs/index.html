@@ -38,7 +38,7 @@
     }
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
+  html{scroll-behavior:smooth; scroll-padding-top:74px}
   body{
     margin:0; background:var(--bg); color:var(--fg);
     font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -191,10 +191,9 @@
   .hero h1{font-size:clamp(2.2rem,6vw,3.4rem); margin:0 0 .35em}
   .tag{color:var(--muted); font-size:clamp(1.05rem,2.4vw,1.3rem); max-width:640px; margin:0 auto 1.4em}
   .hook{display:inline-flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:1.6em}
-  .hook span{font-size:.82rem; font-weight:560; padding:5px 12px; border-radius:999px; border:1px solid transparent}
-  .hook span:nth-child(1){color:var(--pill-teal-fg); background:var(--pill-teal-bg); border-color:var(--pill-teal-bd)}
-  .hook span:nth-child(2){color:var(--pill-coral-fg); background:var(--pill-coral-bg); border-color:var(--pill-coral-bd)}
-  .hook span:nth-child(3){color:var(--pill-lav-fg); background:var(--pill-lav-bg); border-color:var(--pill-lav-bd)}
+  /* One consistent pill — three positive traits shouldn't read as three
+     different signals (the coral one looked like a warning). */
+  .hook span{font-size:.82rem; font-weight:560; padding:5px 12px; border-radius:999px; color:var(--pill-teal-fg); background:var(--pill-teal-bg); border:1px solid var(--pill-teal-bd)}
   .cta{display:inline-flex; gap:12px; flex-wrap:wrap; justify-content:center}
   .btn{padding:11px 20px; border-radius:10px; font-weight:560; font-size:.95rem; border:1px solid var(--line)}
   .btn.primary{background:var(--btn-bg); color:var(--btn-fg); border-color:var(--btn-bg)}
