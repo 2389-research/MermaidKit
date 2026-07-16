@@ -235,8 +235,8 @@
   .kicker{font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); font-weight:640; margin-bottom:10px}
 
   /* Gallery — CSS multi-column masonry: variable-height tiles pack tightly */
-  .grid{column-gap:18px; column-width:340px}
-  .grid figure{break-inside:avoid; margin:0 0 18px; width:100%; background:var(--card-glass); border:1px solid var(--card-bd); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; backdrop-filter:blur(8px) saturate(1.3); -webkit-backdrop-filter:blur(8px) saturate(1.3); box-shadow:0 6px 22px -14px rgba(18,60,74,.28)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); grid-auto-rows:8px; gap:0 18px}
+  .grid figure{margin:0; grid-row-end:span 40; width:100%; background:var(--card-glass); border:1px solid var(--card-bd); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; backdrop-filter:blur(8px) saturate(1.3); -webkit-backdrop-filter:blur(8px) saturate(1.3); box-shadow:0 6px 22px -14px rgba(18,60,74,.28)}
   .grid img{width:100%; height:auto; display:block; background:var(--bg); cursor:zoom-in}
   .grid figcaption{padding:11px 14px; font-size:.83rem; color:var(--muted); border-top:1px solid var(--card-bd); background:var(--card-glass)}
   .grid figcaption b{color:var(--fg); font-weight:600}
@@ -331,11 +331,12 @@
 <body>
 
 <header class="top"><div class="wrap">
-  <span class="brand"><img class="mark" src="images/logo.svg" alt="" width="26" height="26"><b>Mermaid</b>Kit</span>
+  <span class="brand"><img class="mark" src="images/logo.svg" alt="" width="26" height="26"><span class="wm"><b>Mermaid</b>Kit</span></span>
   <nav>
-    <a href="#gallery">Gallery</a>
-    <a href="#lint" class="hide-sm">Self-checking</a>
+    <a href="#gallery">Examples</a>
+    <a href="#lint" class="hide-sm">Quality</a>
     <a href="#api" class="hide-sm">API</a>
+    <a href="#install" class="hide-sm">Install</a>
     <a href="https://github.com/2389-research/MermaidKit">GitHub</a>
   </nav>
 </div></header>
@@ -543,6 +544,23 @@ flowchart TD
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape' && lb.classList.contains('open')) close();
   });
+  // Masonry: give each gallery tile a grid-row span matching its height, so tiles
+  // pack by shortest column at every width. (CSS multi-column balanced by height
+  // and starved later columns when a couple of tiles were very tall.)
+  var grid=document.querySelector('.grid');
+  function layout(){
+    if(!grid) return;
+    var rh=8, gap=18;
+    grid.querySelectorAll('figure').forEach(function(f){
+      f.style.gridRowEnd='span '+Math.max(1,Math.ceil((f.getBoundingClientRect().height+gap)/rh));
+    });
+  }
+  if(grid){
+    grid.querySelectorAll('img').forEach(function(img){ if(!img.complete) img.addEventListener('load',layout); });
+    window.addEventListener('load',layout);
+    var rt; window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(layout,120); });
+    layout();
+  }
 })();
 </script>
 
