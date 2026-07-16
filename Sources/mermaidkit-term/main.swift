@@ -22,7 +22,7 @@ import MermaidRender
 
 struct Options {
     var mode: String = "auto"          // kitty | halfblock | box | plain | auto
-    var format: String = "auto"        // mermaid | dot | auto
+    var format: String = "auto"        // mermaid | dot | dippin | auto
     var color: ColorPreference = .auto // auto | always | never
     var theme: ThemePreference = .auto // auto | dark | light
     var width: Int?                    // halfblock target columns (nil → detect)
@@ -49,7 +49,7 @@ func parseArgs(_ argv: [String]) -> Options? {
             o.mode = v
         case a == "--format" || a.hasPrefix("--format="):
             guard let v = value(after: "--format"),
-                  ["mermaid", "dot", "auto"].contains(v) else { return nil }
+                  ["mermaid", "dot", "dippin", "auto"].contains(v) else { return nil }
             o.format = v
         case a == "--color" || a.hasPrefix("--color="):
             guard let v = value(after: "--color"), let c = ColorPreference(rawValue: v) else { return nil }
@@ -76,14 +76,19 @@ mermaidkit-term — render a Mermaid flowchart to the terminal
 
 USAGE:
   mermaidkit-term [FILE] [--mode kitty|halfblock|box|plain|auto] [--width COLS]
-                  [--format mermaid|dot|auto]
+                  [--format mermaid|dot|dippin|auto]
                   [--color auto|always|never] [--theme auto|dark|light]
   cat diagram.mmd | mermaidkit-term --mode halfblock --width 100
   cat pipeline.dot | mermaidkit-term --format dot --mode plain
+  mermaidkit-term workflow.dip --mode plain
 
-FORMAT (--format): auto detects Graphviz DOT by a .dot/.gv file extension or a
-  leading strict/graph/digraph … { content sniff, else parses Mermaid. DOT is
-  parsed to the same Flowchart IR, so every mode renders it.
+FORMAT (--format): auto detects Dippin by a .dip extension or a leading
+  `workflow <Name>` header; else Graphviz DOT by a .dot/.gv extension or a
+  leading strict/graph/digraph … { content sniff; else parses Mermaid. DOT and
+  Dippin are parsed to the same Flowchart IR, so every mode renders them. A
+  Dippin node kind maps to a distinct shape: agent=rect, tool=cylinder,
+  human=stadium, conditional=diamond, parallel=hexagon, fan_in=circle,
+  subgraph=subroutine [[ ]], manager_loop=rounded.
 
 MODES (capability ladder):
   auto      detect: kitty-graphics if Kitty/Ghostty, else half-block if truecolor, else plain
@@ -140,21 +145,35 @@ func run() -> Int32 {
         return 1
     }
 
-    // Resolve the input format. DOT is parsed up-front to the shared Flowchart
-    // IR so every render mode below drives the same pipeline as Mermaid.
-    let isDOT: Bool
+    // Resolve the input format. DOT and Dippin are parsed up-front to the shared
+    // Flowchart IR so every render mode below drives the same pipeline as Mermaid.
+    enum Frontend { case mermaid, dot, dippin }
+    let frontend: Frontend
     switch opts.format {
-    case "dot":     isDOT = true
-    case "mermaid": isDOT = false
-    default:        isDOT = looksLikeDOT(source, path: opts.path)  // auto
+    case "dot":     frontend = .dot
+    case "dippin":  frontend = .dippin
+    case "mermaid": frontend = .mermaid
+    default:        // auto: .dip beats DOT beats Mermaid
+        if looksLikeDippin(source, path: opts.path) { frontend = .dippin }
+        else if looksLikeDOT(source, path: opts.path) { frontend = .dot }
+        else { frontend = .mermaid }
     }
     var dotDiagram: MermaidDiagram?
-    if isDOT {
+    switch frontend {
+    case .dot:
         guard let chart = DOTParser.parse(source) else {
             FileHandle.standardError.write(Data("could not parse DOT source\n".utf8))
             return 1
         }
         dotDiagram = .flowchart(chart)
+    case .dippin:
+        guard let chart = DippinParser.parse(source) else {
+            FileHandle.standardError.write(Data("could not parse Dippin source\n".utf8))
+            return 1
+        }
+        dotDiagram = .flowchart(chart)
+    case .mermaid:
+        break
     }
 
     let env = TerminalEnvironment.current()
@@ -195,6 +214,21 @@ func run() -> Int32 {
         print(rendered)
         return 0
     }
+}
+
+/// Sniffs whether a source is Dippin: a `.dip` file extension, or a leading
+/// `workflow <Name>` header (optionally after a `dip <int>` version line), once
+/// blank/comment lines are skipped. Mermaid and DOT never open with `workflow`.
+func looksLikeDippin(_ source: String, path: String?) -> Bool {
+    if let path = path, path.lowercased().hasSuffix(".dip") { return true }
+    for rawLine in source.split(separator: "\n", omittingEmptySubsequences: false) {
+        let line = rawLine.trimmingCharacters(in: .whitespaces)
+        if line.isEmpty || line.hasPrefix("#") { continue }
+        let first = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)?.lowercased()
+        if first == "dip" { continue }   // format-version line precedes the header
+        return first == "workflow"
+    }
+    return false
 }
 
 /// Sniffs whether a source is Graphviz DOT: a `.dot`/`.gv` extension, or a

@@ -363,12 +363,22 @@ public enum ASCIIRenderer {
 
         // Interior label, centered. For a solid node the id (or recovered label)
         // is its centred text; for a container it's the subgraph header (also
-        // lowered as a Label). Skip empty/synthetic.
+        // lowered as a Label). A `\n` in the label (e.g. a Dippin agent's model
+        // subtitle) stacks over the extra interior rows the taller box reserves;
+        // lines beyond the interior height are clamped away, never over a border.
         let interiorCols = c1 - c0 - 1
         if reserveInterior, interiorCols > 0 {
             let midR = (r0 + r1) / 2
-            place(text: label, centerCol: (c0 + c1) / 2, centerRow: midR,
-                  maxCols: interiorCols, on: canvas, reserving: false, force: true, color: stroke)
+            let lines = label.components(separatedBy: "\n")
+            let interiorRows = max(1, r1 - r0 - 1)
+            let shown = min(lines.count, interiorRows)
+            let startR = midR - (shown - 1) / 2
+            let cx = (c0 + c1) / 2
+            for k in 0..<shown {
+                place(text: lines[k], centerCol: cx, centerRow: startR + k,
+                      maxCols: interiorCols, on: canvas, reserving: false,
+                      force: true, color: stroke)
+            }
         }
     }
 
@@ -391,9 +401,20 @@ public enum ASCIIRenderer {
             }
             _ = midR
         }
+        // Replace the top and bottom border runs with a cap glyph.
+        func topBottomCaps(_ ch: Character) {
+            for c in (c0 + 1)..<c1 {
+                canvas.setGlyph(r0, c, ch, color: color)
+                canvas.setGlyph(r1, c, ch, color: color)
+            }
+        }
         switch shape {
-        case .rectangle, .cylinder, .stateStart, .stateEnd:
+        case .rectangle, .stateStart, .stateEnd:
             break // sharp ┌┐└┘ from the mask is correct
+        case .cylinder:
+            // Database drum: doubled top/bottom rails (the tool node's outline).
+            corners("╒", "╕", "╘", "╛")
+            topBottomCaps("═")
         case .rounded:
             corners("╭", "╮", "╰", "╯")
         case .stadium:
@@ -409,6 +430,14 @@ public enum ASCIIRenderer {
             // (╲────╱) corners with straight │ sides between — unmistakably not
             // a rectangle, and tidy (no repeated chevrons on every row).
             corners("╱", "╲", "╲", "╱")
+        case .hexagon:
+            // Fork/join cell: the inverse slope of a decision (╲────╱ top,
+            // ╱────╲ bottom) so a parallel fan reads apart from a diamond.
+            corners("╲", "╱", "╱", "╲")
+        case .subroutine:
+            // Call to a predefined sub-process: heavy double side rails (the
+            // monospace echo of the flowchart `[[ … ]]` box).
+            sideCaps("║", "║")
         }
     }
 
