@@ -344,7 +344,7 @@ func renderHalfBlock(_ source: String, diagram: MermaidDiagram?,
         let ansi = HalfBlockRenderer.render(
             pixels: pixels, width: raster.width, height: raster.height,
             background: RGBA(bg.r, bg.g, bg.b))
-        let sizeNote = "half-block grid: \(raster.width) cols × \(raster.height / 2) rows "
+        let sizeNote = "half-block grid: \(raster.width) cols × \((raster.height + 1) / 2) rows "
             + "(\(raster.width)×\(raster.height) pixels), background \(background)\n"
         FileHandle.standardError.write(Data(sizeNote.utf8))
         print(ansi)

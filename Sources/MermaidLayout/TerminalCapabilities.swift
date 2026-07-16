@@ -105,7 +105,7 @@ public enum TerminalCapabilities {
     /// True when the terminal looks like Kitty or Ghostty — the two engines that
     /// implement the Kitty graphics protocol.
     public static func supportsKittyGraphics(_ env: TerminalEnvironment) -> Bool {
-        if let term = env.term, term == "xterm-kitty" || term == "xterm-ghostty" { return true }
+        if let term = env.term, (term == "xterm-kitty" || term == "xterm-ghostty") { return true }
         if env.kittyWindowID?.isEmpty == false { return true }
         if env.hasGhosttyMarker { return true }
         if env.termProgram?.lowercased() == "ghostty" { return true }
@@ -235,6 +235,10 @@ public enum KittyGraphics {
     /// The escape stream for `pngData`. `chunkSize` is the base64 payload cap
     /// per chunk (protocol max is 4096).
     public static func encode(pngData: Data, chunkSize: Int = 4096) -> String {
+        // A non-positive chunk never advances `offset` (infinite loop) and a
+        // negative one forms an invalid slice range (trap). Clamp to at least 1
+        // so a bad caller degrades to tiny chunks instead of hanging/crashing.
+        let chunkSize = max(1, chunkSize)
         let b64 = Array(Data(pngData).base64EncodedString().utf8)
         guard !b64.isEmpty else {
             // Zero-length transmit: a single empty terminator chunk.

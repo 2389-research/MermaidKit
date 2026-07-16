@@ -145,6 +145,16 @@ final class ASCIIPrototypeTests: XCTestCase {
         XCTAssertEqual(out, "\u{1B}[38;2;255;0;0;48;2;0;0;255m▀\u{1B}[0m")
     }
 
+    /// An odd pixel height yields ceil(height/2) text rows (the last pairs
+    /// against the background) — the contract the CLI's size note reports.
+    func testHalfBlockOddHeightRowCountIsCeil() {
+        let px = (0..<3).map { RGBA(UInt8($0), 0, 0) }  // width 1, height 3
+        let out = HalfBlockRenderer.render(pixels: px, width: 1, height: 3,
+                                           background: RGBA(0, 0, 0))
+        let rows = out.components(separatedBy: "\n").count
+        XCTAssertEqual(rows, (3 + 1) / 2, "3 pixel rows → 2 text rows (ceil), not 1")
+    }
+
     /// Transparency composites over the supplied background; a fully transparent
     /// pair blends with the terminal (reset + space) instead of painting a box.
     func testHalfBlockCompositesTransparency() {
@@ -254,5 +264,20 @@ final class ASCIIPrototypeTests: XCTestCase {
         let stream = KittyGraphics.encode(pngData: Data([1, 2, 3]), chunkSize: 4096)
         XCTAssertTrue(stream.hasPrefix("\u{1B}_Gf=100,a=T,m=0;"), "single chunk is first and last")
         XCTAssertTrue(stream.hasSuffix("\u{1B}\\"))
+    }
+
+    func testKittyEncodingNonPositiveChunkSizeDoesNotHang() {
+        // A zero/negative chunk must never loop forever or trap on a bad slice:
+        // it clamps to 1 and degrades to one-byte chunks. Reaching the asserts at
+        // all proves the loop terminated.
+        let bytes = Data([9, 8, 7, 6])
+        let asOne = KittyGraphics.encode(pngData: bytes, chunkSize: 1)
+        for badChunk in [0, -1, -100] {
+            let stream = KittyGraphics.encode(pngData: bytes, chunkSize: badChunk)
+            XCTAssertEqual(stream, asOne, "chunkSize \(badChunk) clamps to 1")
+            XCTAssertTrue(stream.hasPrefix("\u{1B}_Gf=100,a=T,m=1;"), "first of several chunks")
+            XCTAssertTrue(stream.hasSuffix("\u{1B}\\"))
+            XCTAssertEqual(stream.components(separatedBy: "m=0;").count - 1, 1, "exactly one final chunk")
+        }
     }
 }

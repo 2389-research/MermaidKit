@@ -377,7 +377,7 @@ public enum ASCIIRenderer {
             for k in 0..<shown {
                 place(text: lines[k], centerCol: cx, centerRow: startR + k,
                       maxCols: interiorCols, on: canvas, reserving: false,
-                      force: true, color: stroke)
+                      color: stroke)
             }
         }
     }
@@ -508,13 +508,13 @@ public enum ASCIIRenderer {
                               color: ANSIColor? = nil) -> PlacedSpan? {
         place(text: text, centerCol: col(centerX), centerRow: row(centerY),
               maxCols: displayColumns(text), on: canvas, reserving: reserving,
-              force: false, color: color)
+              color: color)
     }
 
     @discardableResult
     private static func place(text: String, centerCol: Int, centerRow: Int,
                               maxCols: Int, on canvas: Canvas, reserving: Bool,
-                              force: Bool, color: ANSIColor? = nil) -> PlacedSpan? {
+                              color: ANSIColor? = nil) -> PlacedSpan? {
         let firstLine = text.components(separatedBy: "\n").first ?? text
         guard !firstLine.isEmpty, maxCols > 0 else { return nil }
         var chars = Array(firstLine)
@@ -528,7 +528,6 @@ public enum ASCIIRenderer {
             let c = startCol + i
             canvas.setGlyph(centerRow, c, ch, color: color)
             if reserving { canvas.reserve(centerRow, c) }
-            _ = force
         }
         return PlacedSpan(row: centerRow, startCol: startCol,
                           endCol: startCol + chars.count - 1)
