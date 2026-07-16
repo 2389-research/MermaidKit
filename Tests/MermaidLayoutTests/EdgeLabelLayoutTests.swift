@@ -80,7 +80,7 @@ final class EdgeLabelLayoutTests: XCTestCase {
                 let along = horiz ? sz.width + 6 : sz.height + 2
                 let c = horiz ? lp.x : lp.y
                 let stub = min((c - along / 2) - lo, hi - (c + along / 2))
-                XCTAssertGreaterThanOrEqual(stub, DiagramLayoutEngine.flowchartLabelStub,
+                XCTAssertGreaterThanOrEqual(stub, DiagramLayoutEngine.edgeLabelStub,
                     "label \"\(label)\" leaves only \(Int(stub))pt of connector")
             }
         }
@@ -130,9 +130,9 @@ final class EdgeLabelLayoutTests: XCTestCase {
         //    arrowhead, and between the label edge and the source node.
         let arrowSideStub = headAtHi ? afHi - (center + along / 2) : (center - along / 2) - afLo
         let nodeSideStub  = headAtHi ? (center - along / 2) - afLo : afHi - (center + along / 2)
-        XCTAssertGreaterThanOrEqual(arrowSideStub, DiagramLayoutEngine.flowchartLabelStub,
+        XCTAssertGreaterThanOrEqual(arrowSideStub, DiagramLayoutEngine.edgeLabelStub,
             "records leaves only \(Int(arrowSideStub))pt of visible line before the arrowhead")
-        XCTAssertGreaterThanOrEqual(nodeSideStub, DiagramLayoutEngine.flowchartLabelStub,
+        XCTAssertGreaterThanOrEqual(nodeSideStub, DiagramLayoutEngine.edgeLabelStub,
             "records leaves only \(Int(nodeSideStub))pt of visible line before the source node")
     }
 
@@ -243,6 +243,26 @@ final class EdgeLabelLayoutTests: XCTestCase {
             "a caption crammed against a foreign arrowhead must be flagged")
     }
 
+    /// `edges-doubled`: two DISTINCT edges sharing a collinear vertical run that
+    /// overlaps by more than a stub render as a single doubled connector — the
+    /// degenerate geometry the back-edge gutter reroute must never emit. The
+    /// linter is the ratchet that catches it if the router ever regresses.
+    func testDoubledConnectorsAreFlagged() {
+        let scene = DiagramScene(
+            name: "flowchart", size: CGSize(width: 200, height: 200),
+            nodes: [.init(id: "A", frame: CGRect(x: 60, y: 10, width: 40, height: 20)),
+                    .init(id: "B", frame: CGRect(x: 60, y: 170, width: 40, height: 20))],
+            // Both edges run up the SAME x=150 channel over an overlapping y-span.
+            edges: [.init(polyline: [CGPoint(x: 100, y: 20), CGPoint(x: 150, y: 20),
+                                     CGPoint(x: 150, y: 120), CGPoint(x: 100, y: 120)], label: nil),
+                    .init(polyline: [CGPoint(x: 100, y: 60), CGPoint(x: 150, y: 60),
+                                     CGPoint(x: 150, y: 180), CGPoint(x: 100, y: 180)], label: nil)],
+            labels: [])
+        let hits = DiagramLayoutLinter.lint(scene).filter { $0.kind == "edges-doubled" }
+        XCTAssertEqual(hits.count, 1, "two edges doubled on a shared line must be flagged once")
+        XCTAssertEqual(hits.first?.severity, .error)
+    }
+
     // MARK: - Route quality on the real back-edge layout
 
     /// #3 — the `fail` back edge (`Decide -> Draft`) must have NO needless zag:
@@ -287,12 +307,22 @@ final class EdgeLabelLayoutTests: XCTestCase {
         let maxNodeX = layout.nodes.map { $0.frame.maxX }.max() ?? 0
         let gutterX = reject.points.map(\.x).max() ?? 0
         XCTAssertGreaterThan(gutterX, maxNodeX - 0.5, "reject return isn't in a side gutter")
-        // It does not run under the success caption.
+        // It does not run under the success caption. Check the route against the
+        // full MEASURED, clearance-expanded label frame — not merely its center:
+        // the `success` caption is wide, so a route can cut through the word while
+        // still staying >12pt from the anchor point.
         let success = try XCTUnwrap(layout.edges.first { $0.label == "success" })
         let sp = try XCTUnwrap(success.labelPoint)
+        let ssz = measure("success", DiagramLayoutEngine.labelFontSize)
+        let clearance: CGFloat = 6
+        let protectedFrame = CGRect(
+            x: sp.x - (ssz.width + 6) / 2 - clearance,
+            y: sp.y - (ssz.height + 2) / 2 - clearance,
+            width: ssz.width + 6 + 2 * clearance,
+            height: ssz.height + 2 + 2 * clearance)
         for (a, b) in zip(reject.points, reject.points.dropFirst()) {
-            XCTAssertGreaterThan(distanceToSegment(sp, a, b), 12,
-                "reject route passes under the success label")
+            XCTAssertFalse(segmentIntersectsRect(a, b, protectedFrame),
+                "reject route cuts through the success label frame")
         }
     }
 
@@ -344,7 +374,7 @@ final class EdgeLabelLayoutTests: XCTestCase {
         let along = horiz ? reject.width : reject.height
         let c = horiz ? lp.x : lp.y
         let stub = min((c - along / 2) - lo, hi - (c + along / 2))
-        XCTAssertGreaterThanOrEqual(stub, DiagramLayoutEngine.flowchartLabelStub,
+        XCTAssertGreaterThanOrEqual(stub, DiagramLayoutEngine.edgeLabelStub,
             "reject leaves only \(Int(stub))pt of connector after staggering")
     }
 
@@ -361,6 +391,23 @@ final class EdgeLabelLayoutTests: XCTestCase {
         let bad = DiagramLayoutLinter.lint(scene)
             .filter { $0.kind == "label-on-fixture" || $0.kind == "label-crowds-edge" }
         XCTAssertTrue(bad.isEmpty, "state label defects:\n" + bad.map { "  \($0.detail)" }.joined(separator: "\n"))
+    }
+
+    private func segmentIntersectsRect(_ a: CGPoint, _ b: CGPoint, _ r: CGRect) -> Bool {
+        if r.contains(a) || r.contains(b) { return true }
+        let c = [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY),
+                 CGPoint(x: r.maxX, y: r.maxY), CGPoint(x: r.minX, y: r.maxY)]
+        for i in 0..<4 where segmentsCross(a, b, c[i], c[(i + 1) % 4]) { return true }
+        return false
+    }
+
+    private func segmentsCross(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> Bool {
+        func ccw(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGFloat {
+            (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+        }
+        let d1 = ccw(p3, p4, p1), d2 = ccw(p3, p4, p2)
+        let d3 = ccw(p1, p2, p3), d4 = ccw(p1, p2, p4)
+        return ((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0))
     }
 
     private func distanceToSegment(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {

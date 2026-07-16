@@ -955,7 +955,7 @@ public enum DiagramLayoutEngine {
                 let f = fromFrame
                 let ext: CGFloat = 24
                 let labelH = (edgeLabelSizes?[ci] ?? nil)?.height ?? 0
-                let vHalf = max(min(f.height * 0.24, 13), labelH / 2 + flowchartLabelStub)
+                let vHalf = max(min(f.height * 0.24, 13), labelH / 2 + edgeLabelStub)
                 let yHi = f.midY - vHalf
                 let yLo = f.midY + vHalf
                 routes.append([
