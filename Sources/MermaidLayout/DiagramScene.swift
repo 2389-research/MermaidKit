@@ -405,7 +405,15 @@ public enum DiagramLayoutLinter {
             }
 
             // Crowding: measure the stub left on each side of the caption on the
-            // straight run it sits on (the nearest segment of its own route).
+            // ARROW-FREE run it sits on (the nearest segment of its own route,
+            // minus the arrowhead the head end eats). Measuring against the full
+            // segment let a caption sit `minStub` clear of the segment end yet
+            // still hug the arrowhead; excluding the arrowhead length first
+            // catches exactly that. Scoped to the flowchart placer, which
+            // centers on the arrow-free run (`placeRunLabels` head inset); the
+            // state placer still uses the full run, so its measure matches.
+            let headEat: CGFloat = scene.name == "flowchart"
+                ? DiagramLayoutEngine.flowchartArrowheadLen : 0
             for (_, label) in edgeLabels {
                 guard let ae = label.anchorEdge, scene.edges.indices.contains(ae) else { continue }
                 let poly = scene.edges[ae].polyline
@@ -418,8 +426,16 @@ public enum DiagramLayoutLinter {
                 }
                 guard let seg = nearest else { continue }
                 let horiz = abs(seg.a.x - seg.b.x) >= abs(seg.a.y - seg.b.y)
-                let lo = horiz ? min(seg.a.x, seg.b.x) : min(seg.a.y, seg.b.y)
-                let hi = horiz ? max(seg.a.x, seg.b.x) : max(seg.a.y, seg.b.y)
+                var lo = horiz ? min(seg.a.x, seg.b.x) : min(seg.a.y, seg.b.y)
+                var hi = horiz ? max(seg.a.x, seg.b.x) : max(seg.a.y, seg.b.y)
+                // When this is the head segment (ends at the arrowhead tip),
+                // shrink that side so the stub is measured against the visible,
+                // arrow-free connector.
+                if headEat > 0, let head = poly.last,
+                   hypot(seg.b.x - head.x, seg.b.y - head.y) < 0.5 {
+                    let bAlong = horiz ? seg.b.x : seg.b.y
+                    if abs(bAlong - hi) < 0.5 { hi -= headEat } else { lo += headEat }
+                }
                 let along = horiz ? label.frame.width : label.frame.height
                 let cc = horiz ? c.x : c.y
                 let stub = min((cc - along / 2) - lo, hi - (cc + along / 2))

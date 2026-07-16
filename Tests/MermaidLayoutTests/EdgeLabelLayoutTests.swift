@@ -86,6 +86,56 @@ final class EdgeLabelLayoutTests: XCTestCase {
         }
     }
 
+    /// The `records` case (`Source[Source] -->|records| Valid{Valid?}`): the
+    /// caption must center on the ARROW-FREE portion of its run — the segment
+    /// minus the arrowhead the head end eats — and keep at least the reserved
+    /// stub of VISIBLE (arrow-free) connector between the label edge and BOTH
+    /// the arrowhead tip and the source node. Before the fix it centered on the
+    /// full segment, so the arrowhead ate its head-side clearance and the word
+    /// hugged the arrow.
+    func testRecordsLabelCentersOnArrowFreeRun() throws {
+        guard case .flowchart(let chart) = MermaidParser.parse(shortEdgeSource) else { return XCTFail("parse") }
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+        let e = try XCTUnwrap(layout.edges.first { $0.label == "records" })
+        XCTAssertTrue(e.hasArrow, "records edge should carry an arrowhead")
+        let lp = try XCTUnwrap(e.labelPoint, "records: missing label anchor")
+        let sz = measure("records", DiagramLayoutEngine.labelFontSize)
+        let along = sz.width + 6
+
+        // The run the caption sits on (nearest segment of its own route).
+        var run: (a: CGPoint, b: CGPoint, d: CGFloat)?
+        for (a, b) in zip(e.points, e.points.dropFirst()) {
+            let d = distanceToSegment(lp, a, b)
+            if run == nil || d < run!.d { run = (a, b, d) }
+        }
+        let seg = try XCTUnwrap(run)
+        XCTAssertLessThanOrEqual(seg.d, 3, "records floats off its route")
+        let horiz = abs(seg.a.x - seg.b.x) >= abs(seg.a.y - seg.b.y)
+        XCTAssertLessThanOrEqual(horiz ? abs(seg.a.y - seg.b.y) : abs(seg.a.x - seg.b.x), 0.5,
+                                 "records run isn't axis-aligned")
+        let lo = horiz ? min(seg.a.x, seg.b.x) : min(seg.a.y, seg.b.y)
+        let hi = horiz ? max(seg.a.x, seg.b.x) : max(seg.a.y, seg.b.y)
+        // Head (arrowhead) end of this run; the other end abuts the source node.
+        let head = try XCTUnwrap(e.points.last)
+        let headAtHi = abs((horiz ? head.x : head.y) - hi) < 0.5
+        let ah = DiagramLayoutEngine.flowchartArrowheadLen
+        let afLo = headAtHi ? lo : lo + ah        // source-node side / arrow-free lo
+        let afHi = headAtHi ? hi - ah : hi        // arrow-free hi
+        let center = horiz ? lp.x : lp.y
+
+        // 1. Centered on the arrow-free midpoint.
+        XCTAssertEqual(center, (afLo + afHi) / 2, accuracy: 1.0,
+                       "records isn't centered on the arrow-free midpoint")
+        // 2. A real arrow-free stub on EACH side: between the label edge and the
+        //    arrowhead, and between the label edge and the source node.
+        let arrowSideStub = headAtHi ? afHi - (center + along / 2) : (center - along / 2) - afLo
+        let nodeSideStub  = headAtHi ? (center - along / 2) - afLo : afHi - (center + along / 2)
+        XCTAssertGreaterThanOrEqual(arrowSideStub, DiagramLayoutEngine.flowchartLabelStub,
+            "records leaves only \(Int(arrowSideStub))pt of visible line before the arrowhead")
+        XCTAssertGreaterThanOrEqual(nodeSideStub, DiagramLayoutEngine.flowchartLabelStub,
+            "records leaves only \(Int(nodeSideStub))pt of visible line before the source node")
+    }
+
     /// A labeled self-loop in the layered (state/class/ER) router must host its
     /// caption without clipping or crowding: the loop is widened to the label
     /// plus a stub on each side, and the canvas grows for the label frame. Before

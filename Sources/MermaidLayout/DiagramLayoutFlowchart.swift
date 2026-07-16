@@ -29,6 +29,14 @@ extension DiagramLayoutEngine {
     /// edge reserves `labelExtent + 2*stub` along its straight run so the line
     /// always reads on both sides of the caption.
     static let flowchartLabelStub: CGFloat = 14
+    /// Length the drawn arrowhead consumes at an edge's head end, back from the
+    /// route's last point. Matches `DiagramRenderer.drawArrowhead` (an 8.5pt
+    /// filled head) plus the 3pt gap the flowchart renderer insets the tip from
+    /// the node border (`DiagramRenderer+Flowchart`). The *labelable* run is the
+    /// straight segment MINUS this at the head end (and minus a back-arrow head
+    /// at the tail), so a caption centers on the arrow-FREE stretch instead of
+    /// hugging the arrowhead.
+    static let flowchartArrowheadLen: CGFloat = 11.5
 
     /// Lays out a flowchart with the layered (Sugiyama/dagre-style) pipeline:
     /// cycle-safe layer assignment, dummy-node channels for long edges,
@@ -126,11 +134,13 @@ extension DiagramLayoutEngine {
                          center: &crossCenter)
 
         // Reserve extra main-axis length on a layer boundary that carries a
-        // labeled adjacent-layer edge, so `labelExtent + 2*stub` fits along the
-        // straight run and the connector stays visible on each side of the
-        // caption. Only the boundary the edge actually spans grows; boundaries
-        // (and every TD label, whose along-run extent is just its line height)
-        // keep the base gap.
+        // labeled adjacent-layer edge, so the ARROW-FREE run (the straight run
+        // minus the arrowhead the head end eats) still fits `labelExtent +
+        // 2*stub` and the connector stays visible on each side of the caption.
+        // The edge's straight run spans the layer gap, so growing the gap to
+        // `arrowheadLen + labelExtent + 2*stub` guarantees an arrow-free run of
+        // `labelExtent + 2*stub` — we grow the gap up front rather than
+        // place-and-hope. Only the boundary the edge actually spans grows.
         var layerGaps = [CGFloat](repeating: flowchartLayerGap, count: max(layerCount, 1))
         for edge in chart.edges {
             guard let text = edge.label, !text.isEmpty,
@@ -139,7 +149,10 @@ extension DiagramLayoutEngine {
             let sz = measure(text, labelFontSize)
             let along = horizontal ? sz.width + 6 : sz.height + 2
             let boundary = min(lu, lv)
-            layerGaps[boundary] = max(layerGaps[boundary], along + 2 * flowchartLabelStub)
+            let headEat = edge.hasArrow ? flowchartArrowheadLen : 0
+            let tailEat = edge.backArrow ? flowchartArrowheadLen : 0
+            layerGaps[boundary] = max(
+                layerGaps[boundary], headEat + tailEat + along + 2 * flowchartLabelStub)
         }
         let placement = placeFlowchartFrames(
             layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal,
@@ -195,8 +208,15 @@ extension DiagramLayoutEngine {
             guard let label = edge.label, !label.isEmpty else { return nil }
             return measure(label, labelFontSize)
         }
+        // The head end eats the drawn arrowhead; a bidirectional edge's tail
+        // eats a second one. Subtracting these makes the placer center on the
+        // arrow-FREE run instead of the full segment (so the caption stops
+        // hugging the arrowhead).
+        let headInsets = edges.map { $0.hasArrow ? flowchartArrowheadLen : 0 }
+        let tailInsets = edges.map { $0.backArrow ? flowchartArrowheadLen : 0 }
         let anchors = placeRunLabels(routes: edges.map(\.points),
-                                     labelSizes: labelSizes, nodeFrames: nodeFrames)
+                                     labelSizes: labelSizes, nodeFrames: nodeFrames,
+                                     headInsets: headInsets, tailInsets: tailInsets)
         return zip(edges, anchors).map { edge, anchor in
             anchor.map { placed(edge, at: $0) } ?? edge
         }
@@ -230,10 +250,17 @@ extension DiagramLayoutEngine {
     /// fixed sweep, and routes are placed in model order, so no hashed iteration
     /// reaches the geometry (issue #1). Shared by the flowchart pipeline and the
     /// layered (state/class/ER) router, so both place captions the same way.
+    /// `headInsets[i]` / `tailInsets[i]` (default 0) shrink route i's labelable
+    /// run at its head end (the arrowhead the head eats) and tail end (a
+    /// back-arrow head), so the caption centers on the arrow-FREE stretch and
+    /// keeps a real stub clear of the arrowhead. Only the terminal runs — the
+    /// ones touching the route's first/last point — are shrunk.
     static func placeRunLabels(
         routes: [[CGPoint]],
         labelSizes: [CGSize?],
-        nodeFrames: [CGRect]
+        nodeFrames: [CGRect],
+        headInsets: [CGFloat] = [],
+        tailInsets: [CGFloat] = []
     ) -> [CGPoint?] {
         let obstacles = nodeFrames.map { $0.insetBy(dx: -3, dy: -3) }
         // Fixtures every caption must avoid: the interior bends of every route
@@ -265,9 +292,13 @@ extension DiagramLayoutEngine {
             let pts = routes[i]
             let w = sz.width + 6, h = sz.height + 2
             let ownTips = [pts.first!, pts.last!]
+            let hIn = i < headInsets.count ? headInsets[i] : 0
+            let tIn = i < tailInsets.count ? tailInsets[i] : 0
 
             // Straight runs of this route (segments; the polyline is already
-            // collinear-simplified, so each segment is a maximal run).
+            // collinear-simplified, so each segment is a maximal run). lo/hi are
+            // the ARROW-FREE bounds: the terminal runs are shrunk by the head /
+            // tail arrowhead so the caption centers on the arrow-free stretch.
             struct Run { let horizontal: Bool; let lo: CGFloat; let hi: CGFloat; let fixed: CGFloat; let index: Int }
             var runs: [Run] = []
             for k in 0..<(pts.count - 1) {
@@ -275,10 +306,18 @@ extension DiagramLayoutEngine {
                 let dx = abs(a.x - b.x), dy = abs(a.y - b.y)
                 guard max(dx, dy) > 0.5 else { continue }
                 let horiz = dx >= dy
+                var lo = horiz ? min(a.x, b.x) : min(a.y, b.y)
+                var hi = horiz ? max(a.x, b.x) : max(a.y, b.y)
+                func alongCoord(_ p: CGPoint) -> CGFloat { horiz ? p.x : p.y }
+                if k == 0, tIn > 0 {                       // this run touches the tail
+                    if abs(alongCoord(a) - lo) < 0.5 { lo += tIn } else { hi -= tIn }
+                }
+                if k == pts.count - 2, hIn > 0 {           // this run touches the head
+                    if abs(alongCoord(b) - hi) < 0.5 { hi -= hIn } else { lo += hIn }
+                }
+                if hi < lo { let m = (lo + hi) / 2; lo = m; hi = m }   // fully eaten: hairline
                 runs.append(Run(
-                    horizontal: horiz,
-                    lo: horiz ? min(a.x, b.x) : min(a.y, b.y),
-                    hi: horiz ? max(a.x, b.x) : max(a.y, b.y),
+                    horizontal: horiz, lo: lo, hi: hi,
                     fixed: horiz ? a.y : a.x, index: k))
             }
             guard !runs.isEmpty else {
