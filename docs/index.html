@@ -23,7 +23,15 @@
     --pill-lav-fg:#6a4fc0;   --pill-lav-bg:#c9b6ff2e;   --pill-lav-bd:#c9b6ffa6;
     --bg:#ffffff; --fg:#16181d; --muted:#5b6270; --line:#e6e8ec;
     --card:#fbfcfe; --code-bg:#f4f6fa; --code-fg:#1b1f27;
-    --radius:14px; --maxw:1080px;
+    --radius:14px; --maxw:1080px; --wide:min(1680px,94vw);
+    /* Frosted opal glass (light) — milky white, faint cool iridescent sheen */
+    --glass:color-mix(in srgb, var(--card) 72%, transparent);
+    --glass-sheen:linear-gradient(135deg, rgba(57,214,197,.10), rgba(201,182,255,.09) 52%, rgba(255,143,163,.07));
+    --glass-bd:color-mix(in srgb, #ffffff 62%, var(--line));
+    --glass-sh:0 16px 44px -20px rgba(18,60,74,.30), inset 0 1px 0 rgba(255,255,255,.55);
+    /* Inner cards — a touch more opaque so they read as cards on glass */
+    --card-glass:color-mix(in srgb, var(--card) 88%, transparent);
+    --card-bd:color-mix(in srgb, #ffffff 42%, var(--line));
   }
   @media (prefers-color-scheme:dark){
     :root{
@@ -35,6 +43,13 @@
       --pill-lav-fg:#d8caff;   --pill-lav-bg:#c9b6ff1c;   --pill-lav-bd:#c9b6ff61;
       --bg:#0e1014; --fg:#e8eaef; --muted:#9aa2b1; --line:#242833;
       --card:#161922; --code-bg:#12151c; --code-fg:#dfe3ea;
+      /* Frosted opal glass (dark) — smoky translucent glass, cool sheen */
+      --glass:color-mix(in srgb, var(--card) 64%, transparent);
+      --glass-sheen:linear-gradient(135deg, rgba(57,214,197,.11), rgba(201,182,255,.10) 52%, rgba(18,60,74,.18));
+      --glass-bd:color-mix(in srgb, #ffffff 14%, var(--line));
+      --glass-sh:0 20px 54px -22px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.06);
+      --card-glass:color-mix(in srgb, var(--card) 82%, transparent);
+      --card-bd:color-mix(in srgb, #ffffff 11%, var(--line));
     }
   }
   *{box-sizing:border-box}
@@ -170,9 +185,10 @@
   h2{font-size:1.6rem; margin:0 0 .3em}
   code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   pre{
-    background:var(--code-bg); color:var(--code-fg);
+    background:color-mix(in srgb, var(--code-bg) 90%, transparent); color:var(--code-fg);
     padding:16px 18px; border-radius:12px; overflow-x:auto;
-    font-size:13.5px; line-height:1.55; border:1px solid var(--line); margin:0;
+    font-size:13.5px; line-height:1.55; border:1px solid var(--card-bd); margin:0;
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
   }
   p code{background:var(--code-bg); padding:.12em .38em; border-radius:5px; font-size:.88em}
 
@@ -190,21 +206,22 @@
   .hero{padding:64px 0 40px; text-align:center}
   .hero h1{font-size:clamp(2.2rem,6vw,3.4rem); margin:0 0 .35em}
   .tag{color:var(--muted); font-size:clamp(1.05rem,2.4vw,1.3rem); max-width:640px; margin:0 auto 1.4em}
-  .hook{display:inline-flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:1.6em}
+  .hook{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:1.6em}
   /* One consistent pill — three positive traits shouldn't read as three
-     different signals (the coral one looked like a warning). */
+     different signals (the coral one looked like a warning). Block-level flex
+     so the pill row sits above the button row, not inline with it. */
   .hook span{font-size:.82rem; font-weight:560; padding:5px 12px; border-radius:999px; color:var(--pill-teal-fg); background:var(--pill-teal-bg); border:1px solid var(--pill-teal-bd)}
-  .cta{display:inline-flex; gap:12px; flex-wrap:wrap; justify-content:center}
+  .cta{display:flex; gap:12px; flex-wrap:wrap; justify-content:center}
   .btn{padding:11px 20px; border-radius:10px; font-weight:560; font-size:.95rem; border:1px solid var(--line)}
   .btn.primary{background:var(--btn-bg); color:var(--btn-fg); border-color:var(--btn-bg)}
   .btn.primary:hover{text-decoration:none; filter:brightness(1.1)}
   .btn.ghost:hover{text-decoration:none; border-color:var(--accent-ui); color:var(--accent)}
 
   .heroimg{margin:44px auto 0; max-width:var(--maxw)}
-  .heroimg img{width:100%; height:auto; border-radius:var(--radius); border:1px solid var(--line)}
+  .heroimg img{width:100%; height:auto; border-radius:var(--radius); border:1px solid var(--line); cursor:zoom-in}
   figure{margin:0}
 
-  section{padding:52px 0; border-top:1px solid var(--line)}
+  section{padding:52px 0; border-top:1px solid var(--line); scroll-margin-top:74px}
   section .lead{color:var(--muted); max-width:680px; margin:.2em 0 1.6em}
 
   /* Install + snippet split */
@@ -212,18 +229,16 @@
   @media (max-width:760px){.split{grid-template-columns:1fr}}
   .kicker{font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); font-weight:640; margin-bottom:10px}
 
-  /* Gallery */
-  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px}
-  .grid figure{background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column}
-  .grid figure.feature{grid-column:span 2}
-  @media (max-width:620px){.grid figure.feature{grid-column:span 1}}
-  .grid img{width:100%; height:auto; display:block; background:var(--bg)}
-  .grid figcaption{padding:11px 14px; font-size:.83rem; color:var(--muted); border-top:1px solid var(--line)}
+  /* Gallery — CSS multi-column masonry: variable-height tiles pack tightly */
+  .grid{column-gap:18px; column-width:340px}
+  .grid figure{break-inside:avoid; margin:0 0 18px; width:100%; background:var(--card-glass); border:1px solid var(--card-bd); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; backdrop-filter:blur(8px) saturate(1.3); -webkit-backdrop-filter:blur(8px) saturate(1.3); box-shadow:0 6px 22px -14px rgba(18,60,74,.28)}
+  .grid img{width:100%; height:auto; display:block; background:var(--bg); cursor:zoom-in}
+  .grid figcaption{padding:11px 14px; font-size:.83rem; color:var(--muted); border-top:1px solid var(--card-bd); background:var(--card-glass)}
   .grid figcaption b{color:var(--fg); font-weight:600}
 
   /* Numbers */
   .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px}
-  .stat{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px}
+  .stat{background:var(--card-glass); border:1px solid var(--card-bd); border-radius:12px; padding:18px; backdrop-filter:blur(8px) saturate(1.3); -webkit-backdrop-filter:blur(8px) saturate(1.3); box-shadow:0 6px 22px -16px rgba(18,60,74,.28)}
   .stat .n{font-size:1.9rem; font-weight:680; letter-spacing:-0.03em}
   .stat .l{color:var(--muted); font-size:.86rem; margin-top:3px}
 
@@ -237,6 +252,74 @@
   footer .wrap{display:flex; flex-wrap:wrap; gap:8px 22px; align-items:center}
   footer a{color:var(--muted)} footer a:hover{color:var(--fg)}
   footer .sp{margin-left:auto}
+
+  /* Wider container for the gallery on large viewports */
+  .wide{max-width:var(--wide)}
+
+  /* Frosted opal glass panel — sits over the scale shimmer so content stays readable.
+     Defined after .wrap/.wide so its padding wins on shared elements. */
+  .glass{
+    position:relative;
+    background:var(--glass-sheen), var(--glass);
+    backdrop-filter:blur(18px) saturate(1.5);
+    -webkit-backdrop-filter:blur(18px) saturate(1.5);
+    border:1px solid var(--glass-bd);
+    border-radius:22px;
+    box-shadow:var(--glass-sh);
+    padding:40px clamp(22px,4vw,44px);
+  }
+  @media (max-width:640px){ .glass{padding:28px 18px; border-radius:18px} }
+
+  /* Self-checking section — lint report + explanations */
+  .lintgrid{display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:26px; align-items:start; margin-top:22px}
+  @media (max-width:860px){.lintgrid{grid-template-columns:1fr}}
+  .lintreport{
+    background:#0b1420; color:#c7d3e6; border-radius:14px; overflow:hidden;
+    border:1px solid rgba(140,170,210,.16); box-shadow:0 18px 46px -22px rgba(0,0,0,.6);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  .lintreport .bar{display:flex; align-items:center; gap:7px; padding:9px 14px; background:rgba(255,255,255,.04); border-bottom:1px solid rgba(140,170,210,.14)}
+  .lintreport .bar i{width:11px; height:11px; border-radius:50%; display:inline-block}
+  .lintreport .bar i:nth-child(1){background:#ff6b81} .lintreport .bar i:nth-child(2){background:#f5c451} .lintreport .bar i:nth-child(3){background:#5fe3c0}
+  .lintreport .bar span{margin-left:8px; font-size:11.5px; color:#8b98ad; letter-spacing:.01em}
+  .lintreport .body{padding:14px 16px; overflow-x:auto; font-size:12.5px; line-height:1.75}
+  .lintreport .body div{white-space:pre}
+  .lintreport .cmd{color:#8b98ad; margin-bottom:6px}
+  .lintreport .cmd b{color:#c7d3e6; font-weight:600}
+  .lintreport .sev-e{color:#ff6b81; font-weight:700}
+  .lintreport .sev-w{color:#f5c451; font-weight:700}
+  .lintreport .sev-o{color:#5fe3c0; font-weight:700}
+  .lintreport .rule{color:#c9b6ff}
+  .lintreport .num{color:#7fd4ff; font-weight:600}
+  .lintreport .ln{color:#c7d3e6}
+  .lintreport .pass{color:#5fe3c0}
+
+  .lintwhat{margin:0; padding:0; list-style:none}
+  .lintwhat li{padding:8px 0; border-bottom:1px solid var(--card-bd); font-size:.92rem; color:var(--muted)}
+  .lintwhat li:last-child{border-bottom:0}
+  .lintwhat code{color:var(--accent); background:var(--code-bg); padding:.1em .4em; border-radius:5px; font-size:.82em}
+  .lintwhat b{color:var(--fg); font-weight:600}
+  .lintwhy{margin-top:22px}
+  .lintwhy h3{font-size:1.02rem; margin:0 0 .5em}
+  .whycards{display:grid; gap:12px}
+  .whycards .why{background:var(--card-glass); border:1px solid var(--card-bd); border-left:3px solid var(--accent-ui); border-radius:10px; padding:13px 15px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
+  .whycards .why b{color:var(--fg)}
+  .whycards .why p{margin:.2em 0 0; color:var(--muted); font-size:.9rem}
+  .whycards .why .t{font-size:.86rem; color:var(--accent); font-weight:640}
+
+  /* Lightbox — dependency-free click-to-zoom */
+  .lightbox{
+    position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;
+    background:rgba(9,14,20,.84); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    overflow:auto; padding:2vmin; cursor:zoom-out;
+  }
+  .lightbox.open{display:flex}
+  .lightbox.panning{align-items:flex-start; justify-content:flex-start}
+  .lightbox img{
+    max-width:96vw; max-height:92vh; object-fit:contain; cursor:zoom-in;
+    border-radius:10px; box-shadow:0 30px 90px -20px rgba(0,0,0,.75); background:#fff; margin:auto;
+  }
+  .lightbox img.actual{max-width:none; max-height:none; width:auto; height:auto; cursor:grab; border-radius:0; margin:0}
 </style>
 </head>
 <body>
@@ -251,7 +334,7 @@
   </nav>
 </div></header>
 
-<div class="hero"><div class="wrap">
+<div class="hero"><div class="wrap glass">
   <h1>Native Mermaid diagrams in Swift.</h1>
   <p class="tag">All 30 Mermaid diagram types, parsed, laid out, and rendered in pure Swift — CoreGraphics on Apple, Silica/Cairo on Linux.</p>
   <div class="hook"><span>No JavaScript</span><span>No WebView</span><span>Zero dependencies</span></div>
@@ -267,7 +350,7 @@
   </figure>
 </div></div>
 
-<section id="install"><div class="wrap">
+<section id="install"><div class="wrap glass">
   <div class="split">
     <div>
       <div class="kicker">One line to a diagram</div>
@@ -292,7 +375,7 @@ flowchart TD
   </div>
 </div></section>
 
-<section id="gallery"><div class="wrap">
+<section id="gallery"><div class="wrap wide glass">
   <div class="kicker">The examples are the project documenting itself</div>
   <h2>Thirty types. Every one a self-portrait.</h2>
   <p class="lead">The class diagram is the real public API. The sankey hero is the render pipeline. The gitgraph is the actual release history. The same 30 files are the gallery, the lint corpus, and the benchmark suite at once — so the examples can't drift from what the engine does. Follows your system theme.</p>
@@ -330,15 +413,47 @@ flowchart TD
   </div>
 </div></section>
 
-<section id="lint"><div class="wrap">
+<section id="lint"><div class="wrap glass">
   <div class="kicker">It checks its own work</div>
   <h2>Layout quality is machine-checked, not eyeballed.</h2>
-  <p class="lead">Every diagram lowers to a machine-readable geometry scene — boxes, edge routes, label frames. A geometry linter checks the invariants of good layout on every CI run: no edge through a box, no line slicing label text, no overlapping nodes, nothing off-canvas, no chart series escaping its plot. Regressions fail CI as named geometric facts, not pixel diffs.</p>
-<pre>edge #3 passes through node "DiagramScene" (165pt inside)</pre>
-  <p class="lead" style="margin-top:22px">Layout is engineered underneath: network-simplex layer assignment (the strategy Graphviz <code>dot</code> defaults to), label-space reservation during layout, chain straightening after coordinate assignment, and edit-stability proven by scene-diff tests — rename a label to same-width text and <em>nothing else moves</em>.</p>
+  <p class="lead">Every diagram lowers to a machine-readable geometry scene — boxes, edge routes, label frames. A geometry linter checks the invariants of good layout on every CI run and reports each failure as a named geometric fact, with coordinates.</p>
+  <div class="lintgrid">
+    <div class="lintreport" aria-label="Example geometry lint report">
+      <div class="bar"><i></i><i></i><i></i><span>mermaidkit-lint · fixtures/</span></div>
+      <div class="body">
+        <div class="cmd">$ <b>swift run mermaidkit-lint fixtures/</b></div>
+        <div><span class="sev-e">error</span>  <span class="rule">edge-through-node</span>   edge <span class="num">#3</span> passes through node <span class="ln">"DiagramScene"</span> (<span class="num">165pt</span> inside)</div>
+        <div><span class="sev-e">error</span>  <span class="rule">label-collision</span>     label <span class="ln">"network-simplex"</span> sliced by edge <span class="num">#7</span> (<span class="num">12pt</span> overlap)</div>
+        <div><span class="sev-e">error</span>  <span class="rule">node-overlap</span>        <span class="ln">"Parse"</span> ∩ <span class="ln">"Layout"</span> frames intersect (<span class="num">18×9pt</span>)</div>
+        <div><span class="sev-e">error</span>  <span class="rule">off-canvas</span>          node <span class="ln">"Cache"</span> outside drawing (<span class="num">x = -14pt</span>)</div>
+        <div><span class="sev-w">warn</span>   <span class="rule">series-escape</span>       series <span class="ln">"cold render"</span> leaves plot (<span class="num">y=262 &gt; 250</span>)</div>
+        <div><span class="sev-w">warn</span>   <span class="rule">t-junction</span>          junction at (<span class="num">410,208</span>) counted as a crossing</div>
+        <div><span class="sev-o">ok</span>     <span class="pass">✓ 30/30 fixtures lint clean · draw-vs-scene conformance 100%</span></div>
+      </div>
+    </div>
+    <div>
+      <ul class="lintwhat">
+        <li><b>edge-through-node</b> — a connector routed straight through the interior of a box instead of around it.</li>
+        <li><b>label-collision</b> — a line crossing over label text, slicing the words so they can't be read.</li>
+        <li><b>node-overlap</b> — two node frames occupying the same space, one drawn on top of the other.</li>
+        <li><b>off-canvas</b> — any node, edge, or label drawn outside the diagram's own bounds.</li>
+        <li><b>series-escape</b> — a chart series (line, bar, point) leaving the plot area it should stay within.</li>
+        <li><b>t-junction</b> — a T-shaped meeting of edges miscounted as a genuine crossing.</li>
+      </ul>
+      <div class="lintwhy">
+        <h3>Why this is a big deal</h3>
+        <div class="whycards">
+          <div class="why"><span class="t">A named fact, not a blob.</span><p>A regression fails CI as <b>"edge #3 is 165pt inside node DiagramScene"</b> — a coordinate you can act on, not a pixel-diff image or a human squinting at a screenshot.</p></div>
+          <div class="why"><span class="t">The pictures are the tests.</span><p>The same 30 fixtures are the gallery, the lint corpus, <em>and</em> the benchmark suite. The examples on this page <b>cannot drift</b> from what the engine actually does.</p></div>
+          <div class="why"><span class="t">It runs on every build.</span><p>Geometry invariants run in CI, so a layout regression <b>can't merge</b>. Most tools rely on eyeballing or pixel snapshots that flake across fonts and OSes — checking geometry is stable, precise, and catches the real defect.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="lead" style="margin-top:24px">Layout is engineered underneath: network-simplex layer assignment (the strategy Graphviz <code>dot</code> defaults to), label-space reservation during layout, chain straightening after coordinate assignment, and edit-stability proven by scene-diff tests — rename a label to same-width text and <em>nothing else moves</em>.</p>
 </div></section>
 
-<section id="api"><div class="wrap">
+<section id="api"><div class="wrap glass">
   <div class="kicker">One call, one image — or pure geometry</div>
   <h2>An API that meets you where you are.</h2>
   <div class="feats" style="margin-top:20px">
@@ -351,7 +466,7 @@ flowchart TD
   </div>
 </div></section>
 
-<section id="numbers"><div class="wrap">
+<section id="numbers"><div class="wrap glass">
   <div class="kicker">Numbers over adjectives</div>
   <h2>What it costs, plainly.</h2>
   <div class="stats" style="margin-top:20px">
@@ -365,7 +480,7 @@ flowchart TD
   <p class="lead" style="margin-top:22px">Repeat renders hit an in-memory cache keyed by (source, theme, spacing). Input caps mirror mermaid.js — 50,000-character sources, 500 flowchart edges; oversized input returns nil fast. Requires Swift 6.2 / Xcode 26. Platforms: macOS 14+, iOS 17+, visionOS 1+, and Linux (via the <code>LinuxRaster</code> package trait).</p>
 </div></section>
 
-<section id="adapt"><div class="wrap">
+<section id="adapt"><div class="wrap glass">
   <div class="kicker">Built to adapt</div>
   <h2>It behaves well when the input doesn't.</h2>
   <div class="feats" style="margin-top:20px">
@@ -376,13 +491,53 @@ flowchart TD
   </div>
 </div></section>
 
-<footer><div class="wrap">
+<footer><div class="wrap glass">
   <span>MermaidKit — MIT licensed</span>
   <a href="https://github.com/2389-research/MermaidKit">GitHub</a>
   <a href="https://github.com/2389-research/MermaidKit/releases/latest">Latest release</a>
   <a href="https://mermaid.js.org">Mermaid syntax</a>
   <span class="sp">No analytics. No trackers. No network.</span>
 </div></footer>
+
+<div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Diagram viewer — click image to toggle full resolution, Escape to close" aria-hidden="true">
+  <img id="lightbox-img" alt="">
+</div>
+<script>
+(function(){
+  var lb=document.getElementById('lightbox');
+  var im=document.getElementById('lightbox-img');
+  function open(src,alt){
+    im.src=src; im.alt=alt||'';
+    im.classList.remove('actual'); lb.classList.remove('panning');
+    lb.classList.add('open'); lb.setAttribute('aria-hidden','false');
+    document.body.style.overflow='hidden';
+  }
+  function close(){
+    lb.classList.remove('open','panning'); lb.setAttribute('aria-hidden','true');
+    document.body.style.overflow=''; im.removeAttribute('src');
+  }
+  // Event-delegated: clicking any gallery or hero image opens the lightbox.
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(t.tagName==='IMG' && t.closest('.grid, .heroimg')){
+      open(t.currentSrc||t.src, t.alt); // currentSrc = the theme variant actually shown
+    }
+  });
+  // Clicking the image toggles fit-to-screen <-> natural resolution (pan by scrolling).
+  im.addEventListener('click',function(e){
+    e.stopPropagation();
+    var actual=im.classList.toggle('actual');
+    lb.classList.toggle('panning',actual);
+    if(actual) lb.scrollTo(0,0);
+  });
+  // Click backdrop to close.
+  lb.addEventListener('click',function(e){ if(e.target===lb) close(); });
+  // Esc to close.
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape' && lb.classList.contains('open')) close();
+  });
+})();
+</script>
 
 </body>
 </html>
