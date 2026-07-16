@@ -27,8 +27,11 @@ extension DiagramLayoutEngine {
     static let flowchartMinJog: CGFloat = 8
     /// Minimum visible connector stub on each side of an edge label: a labeled
     /// edge reserves `labelExtent + 2*stub` along its straight run so the line
-    /// always reads on both sides of the caption.
-    static let flowchartLabelStub: CGFloat = 14
+    /// always reads on both sides of the caption. Shared by BOTH routers — the
+    /// flowchart placer here AND the layered self-loop sizing in `DiagramLayout`
+    /// — so a single source of truth keeps the two connector reservations in
+    /// step (hence the family-neutral name, not `flowchart…`).
+    static let edgeLabelStub: CGFloat = 14
     /// Length the drawn arrowhead consumes at an edge's head end, back from the
     /// route's last point. Matches `DiagramRenderer.drawArrowhead` (an 8.5pt
     /// filled head) plus the 3pt gap the flowchart renderer insets the tip from
@@ -152,7 +155,7 @@ extension DiagramLayoutEngine {
             let headEat = edge.hasArrow ? flowchartArrowheadLen : 0
             let tailEat = edge.backArrow ? flowchartArrowheadLen : 0
             layerGaps[boundary] = max(
-                layerGaps[boundary], headEat + tailEat + along + 2 * flowchartLabelStub)
+                layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub)
         }
         let placement = placeFlowchartFrames(
             layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal,
@@ -192,7 +195,7 @@ extension DiagramLayoutEngine {
     /// Places each edge label centered on the LONGEST straight (axis-aligned)
     /// run of its route — never on a vertex/bend — then collision-avoids: a
     /// candidate that overlaps a node frame, another label, an edge bend, or an
-    /// edge crossing, or that leaves less than `flowchartLabelStub` of visible
+    /// edge crossing, or that leaves less than `edgeLabelStub` of visible
     /// connector on either side of the caption, is penalized so the label
     /// slides along the run, nudges perpendicular, or falls back to the next
     /// longest run until it sits on a clean, uncluttered stretch. Deterministic:
@@ -242,7 +245,7 @@ extension DiagramLayoutEngine {
     /// just the shaft), node boxes, other captions, and the interior bends /
     /// crossings of any route. When the midpoint is clear the label stays put;
     /// when it is not, the label first slides ALONG the run (staying as close to
-    /// the midpoint as it can while keeping `flowchartLabelStub` of connector on
+    /// the midpoint as it can while keeping `edgeLabelStub` of connector on
     /// each side), then nudges PERPENDICULAR, and only as a last resort falls
     /// back to the next-longest run. `labelSizes[i]` is the measured caption of
     /// route i (nil = unlabeled → no anchor). Deterministic: runs rank by length
@@ -291,7 +294,6 @@ extension DiagramLayoutEngine {
             guard let sz = labelSizes[i], routes[i].count >= 2 else { continue }
             let pts = routes[i]
             let w = sz.width + 6, h = sz.height + 2
-            let ownTips = [pts.first!, pts.last!]
             let hIn = i < headInsets.count ? headInsets[i] : 0
             let tIn = i < tailInsets.count ? tailInsets[i] : 0
 
@@ -344,7 +346,7 @@ extension DiagramLayoutEngine {
                 // instead of jumping to the far end. da = 0 is always the
                 // midpoint (the default), and the |da| penalty keeps it there
                 // unless a clearance forces a move.
-                let slack = max(0, (run.hi - run.lo) / 2 - along / 2 - flowchartLabelStub)
+                let slack = max(0, (run.hi - run.lo) / 2 - along / 2 - edgeLabelStub)
                 var alongShifts: [CGFloat] = [0]
                 if slack > 1 {
                     let steps = 12
@@ -402,14 +404,19 @@ extension DiagramLayoutEngine {
                         for x in crossings where probe.contains(x) { score += 120 }
                         // Arrowhead clearance: a foreign arrowhead tip within the
                         // comfortable gap of the caption frame is an obstacle.
+                        // Every foreign tip counts (only this route's own head is
+                        // exempt, via `tip.route != i`). A foreign arrowhead that
+                        // happens to coincide with this route's own endpoint used
+                        // to be skipped, but the linter's `label-on-fixture` rule
+                        // does NOT exempt it — so skipping it here let the placer
+                        // pick an anchor that then failed lint. Score all of them.
                         for tip in arrowTips where tip.route != i {
-                            if ownTips.contains(where: { hypot($0.x - tip.p.x, $0.y - tip.p.y) < 0.5 }) { continue }
                             let d = pointRectDistance(tip.p, rect)
                             if d < gap { score += (gap - d) * 6 }
                         }
                         // Stub on each side of the caption on this run.
                         let stub = min((cAlong - along / 2) - run.lo, run.hi - (cAlong + along / 2))
-                        if stub < flowchartLabelStub { score += (flowchartLabelStub - stub) * 6 }
+                        if stub < edgeLabelStub { score += (edgeLabelStub - stub) * 6 }
                         score += abs(da) * 1.4           // stay at the MIDPOINT
                         score += abs(dp) * 1.5           // prefer sitting ON the line
                         score += CGFloat(rank) * 2       // prefer the longer run
@@ -982,16 +989,23 @@ extension DiagramLayoutEngine {
         guard let gutterEast = realFrames.map(crossHi).max().map({ $0 + flowchartPortSep }),
               let gutterWest = realFrames.map(crossLo).min().map({ $0 - flowchartPortSep }) else { return }
 
-        // Straight segment (a,b) travels >6pt inside rect r's interior?
+        // Straight (orthogonal) segment (a,b) travels >6pt inside rect r's
+        // interior? On the axis the segment TRAVELS along, the clipped overlap
+        // is the distance it runs inside the box; on the PERPENDICULAR axis the
+        // segment collapses to a single fixed coordinate, so its clipped overlap
+        // is exactly 0 whenever that coordinate sits within the interior. The old
+        // test required BOTH overlaps to exceed 6pt — unsatisfiable for an
+        // axis-aligned segment (one axis is always 0) — so `nodeClear` silently
+        // accepted gutter routes that pierced sibling nodes. Correct rule: the
+        // wire penetrates when it touches the interior on both axes (perpendicular
+        // overlap ≥ 0: the fixed coord is inside) AND travels more than 6pt
+        // through it (the travel-axis overlap).
         func passesThrough(_ a: CGPoint, _ b: CGPoint, _ r: CGRect) -> Bool {
             let inner = r.insetBy(dx: 2, dy: 2)
             guard inner.width > 0, inner.height > 0 else { return false }
-            // Orthogonal segments only here: clip the 1-D overlap on each axis.
-            let loX = min(a.x, b.x), hiX = max(a.x, b.x)
-            let loY = min(a.y, b.y), hiY = max(a.y, b.y)
-            let ox = max(0, min(hiX, inner.maxX) - max(loX, inner.minX))
-            let oy = max(0, min(hiY, inner.maxY) - max(loY, inner.minY))
-            return ox > 6 && oy > 6
+            let ox = min(max(a.x, b.x), inner.maxX) - max(min(a.x, b.x), inner.minX)
+            let oy = min(max(a.y, b.y), inner.maxY) - max(min(a.y, b.y), inner.minY)
+            return ox >= 0 && oy >= 0 && max(ox, oy) > 6
         }
         func nodeClear(_ route: [CGPoint], skip: Set<String>) -> Bool {
             for (id, f) in frames where realIDs.contains(id) && !skip.contains(id) {
@@ -1012,6 +1026,33 @@ extension DiagramLayoutEngine {
                 }
             }
             return n
+        }
+        // Two DIFFERENT back edges can pick the same gutter channel, whose middle
+        // runs are then collinear and overlap — they draw as one doubled
+        // connector. `segmentCrossPoint` returns nil for collinear pairs (they
+        // don't "cross"), and `separateRuns` ran before this pass, so neither the
+        // crossing count nor the port separation catches it. Detect positive-
+        // length collinear overlap of two orthogonal segments directly.
+        func collinearOverlap(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) -> Bool {
+            if abs(a.y - b.y) < 0.5, abs(c.y - d.y) < 0.5, abs(a.y - c.y) < 0.5 {   // both horizontal, same y
+                let lo = max(min(a.x, b.x), min(c.x, d.x)), hi = min(max(a.x, b.x), max(c.x, d.x))
+                return hi - lo > 1
+            }
+            if abs(a.x - b.x) < 0.5, abs(c.x - d.x) < 0.5, abs(a.x - c.x) < 0.5 {   // both vertical, same x
+                let lo = max(min(a.y, b.y), min(c.y, d.y)), hi = min(max(a.y, b.y), max(c.y, d.y))
+                return hi - lo > 1
+            }
+            return false
+        }
+        func doublesAnotherRoute(_ route: [CGPoint], against ignore: Int) -> Bool {
+            for (j, other) in routes.enumerated() where j != ignore && other.count >= 2 {
+                for a in 0..<(route.count - 1) {
+                    for b in 0..<(other.count - 1) where collinearOverlap(route[a], route[a + 1], other[b], other[b + 1]) {
+                        return true
+                    }
+                }
+            }
+            return false
         }
 
         for index in backEdges.sorted() where index < chart.edges.count {
@@ -1046,6 +1087,9 @@ extension DiagramLayoutEngine {
                 ])
                 guard nodeClear(cand, skip: skip) else { continue }
                 guard bendCount(cand) < curBends else { continue }
+                // Reject a gutter that would double an already-placed route
+                // (including an earlier back edge rerouted into the same channel).
+                guard !doublesAnotherRoute(cand, against: index) else { continue }
                 let candCross = crossings(cand, against: index)
                 guard candCross <= curCross else { continue }
                 let gutterDist = abs(channel - (east ? crossHi(fs) : crossLo(fs)))

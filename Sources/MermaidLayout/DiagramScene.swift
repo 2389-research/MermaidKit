@@ -154,6 +154,9 @@ public enum DiagramLayoutLinter {
     ///   edge's start or end floats off every node border, or the polyline
     ///   collapsed to a degenerate zero-length stub. Scoped by scene name —
     ///   other families' edges attach to lifelines/spines/plot geometry.
+    /// - `edges-doubled` (flowchart/state): two distinct edges share a collinear
+    ///   orthogonal run overlapping by more than a stub, so they draw as one
+    ///   doubled connector (e.g. two back edges adopting the same gutter).
     /// - `nodes-overlap`: two non-container boxes intersect by more than 2pt
     ///   in both axes; full containment is excluded.
     /// - `off-canvas`: a node or label extends outside the canvas (±1pt).
@@ -164,13 +167,13 @@ public enum DiagramLayoutLinter {
     ///   their route by design). `backed` labels downgrade to the
     ///   `edge-under-label` WARNING instead — the chip keeps text readable,
     ///   but a line vanishing under a chip is still placement worth fixing.
-    /// - `label-on-fixture` (node-graph families): an edge-label frame lands ON
+    /// - `label-on-fixture` (flowchart/state only): an edge-label frame lands ON
     ///   a fixture — an interior bend of any edge, a crossing/junction of two
     ///   edges, another edge-label frame, a node box, or within the clearance of
     ///   a foreign edge's arrowhead tip. A caption belongs on a clean straight
     ///   stretch with room around it, not a corner, an intersection, or crammed
     ///   against an arrowhead.
-    /// - `label-crowds-edge` (node-graph families): the straight run an edge
+    /// - `label-crowds-edge` (flowchart/state only): the straight run an edge
     ///   label sits on is barely longer than the text, leaving under `minStub`
     ///   (10pt) of visible connector on a side — the line all but vanishes.
     ///
@@ -253,6 +256,44 @@ public enum DiagramLayoutLinter {
             }
         }
 
+        // 1c. Doubled connectors (flowchart/state only). Two DISTINCT edges
+        //     whose orthogonal segments are collinear (same fixed coordinate)
+        //     and overlap along that line by more than a stub render as a single
+        //     doubled wire — the reader can't tell two edges apart. This is the
+        //     degenerate geometry the back-edge gutter reroute must never emit
+        //     (two back edges adopting the same gutter channel); the router
+        //     rejects it, and this rule is the ratchet that fails the build if a
+        //     future change lets one slip through. Scoped to flowchart/state, the
+        //     only families with orthogonal routed connectors.
+        if scene.name == "flowchart" || scene.name == "state" {
+            let doubleTol: CGFloat = 8      // overlap beyond this reads as doubled
+            func overlapRun(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) -> CGFloat {
+                if abs(a.y - b.y) < 0.5, abs(c.y - d.y) < 0.5, abs(a.y - c.y) < 1 {   // horizontal, same y
+                    return min(max(a.x, b.x), max(c.x, d.x)) - max(min(a.x, b.x), min(c.x, d.x))
+                }
+                if abs(a.x - b.x) < 0.5, abs(c.x - d.x) < 0.5, abs(a.x - c.x) < 1 {   // vertical, same x
+                    return min(max(a.y, b.y), max(c.y, d.y)) - max(min(a.y, b.y), min(c.y, d.y))
+                }
+                return 0
+            }
+            for i in scene.edges.indices where scene.edges[i].polyline.count >= 2 {
+                for j in scene.edges.indices where j > i && scene.edges[j].polyline.count >= 2 {
+                    let pi = scene.edges[i].polyline, pj = scene.edges[j].polyline
+                    var doubled = false
+                    for a in 0..<(pi.count - 1) where !doubled {
+                        for b in 0..<(pj.count - 1)
+                        where overlapRun(pi[a], pi[a + 1], pj[b], pj[b + 1]) > doubleTol {
+                            doubled = true; break
+                        }
+                    }
+                    if doubled {
+                        out.append(.init(.error, "edges-doubled",
+                            "edges #\(i) and #\(j) run doubled on a shared line (overlapping connectors)"))
+                    }
+                }
+            }
+        }
+
         // 2. Node–node overlap (excluding intentional containment).
         let boxes = scene.nodes.filter { !$0.isContainer }
         for i in boxes.indices {
@@ -324,8 +365,9 @@ public enum DiagramLayoutLinter {
             }
         }
 
-        // 4c/4d. Edge-label placement quality (node-graph families only, where
-        //     every edge label annotates a routed connector between two boxes).
+        // 4c/4d. Edge-label placement quality (flowchart/state only — the gate
+        //     below — where every edge label annotates a routed connector between
+        //     two boxes; other node-graph families like class/ER don't emit these).
         //     A caption must sit centered on a clean, straight stretch of its
         //     route with a visible connector stub on each side. Two defects,
         //     each an unambiguous geometric fact:
