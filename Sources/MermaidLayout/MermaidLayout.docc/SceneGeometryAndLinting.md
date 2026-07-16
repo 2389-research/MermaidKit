@@ -42,6 +42,9 @@ geometry tests.
 | `nodes-overlap` | error | Two non-container boxes intersect |
 | `off-canvas` | error | A node or label extends outside the canvas |
 | `mark-escapes-plot` | error | A data series leaves its plot container |
+| `edge-cuts-label` | error | A foreign edge slices through a bare label |
+| `label-on-fixture` | error | An edge label sits on a bend, a crossing, another label, or a box (flowchart/state) |
+| `label-crowds-edge` | error | An edge label's run leaves under 10pt of connector on a side (flowchart/state) |
 | `labels-overlap` / `label-over-node` | warning | Colliding text |
 | `edge-crossings` | warning | Crossing count beyond a budget |
 

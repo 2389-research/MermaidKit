@@ -849,7 +849,6 @@ public enum DiagramLayoutEngine {
         var chains: [[String]] = []
         var segmentEdges: [(String, String)] = []
         var dummies: Set<String> = []
-        var labelDummyOfEdge: [Int: String] = [:]
         // Labeled edges between ADJACENT layers carry their text in the
         // inter-layer gap; grow each gap to fit the tallest such label so the
         // chip never crowds the boxes above or below it.
@@ -875,8 +874,8 @@ public enum DiagramLayoutEngine {
             // ELK-style label reservation: the MEDIAN dummy of a labeled edge
             // is widened to the label's size, so ordering and Brandes-Köpf
             // reserve real horizontal space for the text instead of the label
-            // being squeezed in afterwards. That dummy's centre becomes the
-            // edge's label anchor.
+            // being squeezed in afterwards. `placeRunLabels` (below) then anchors
+            // the caption on the resulting straight channel.
             let labelSize = edgeLabelSizes?[index] ?? nil
             let medianLayer = (lo + 1 + hi - 1) / 2
             for layer in (lo + 1)...(hi - 1) {
@@ -884,7 +883,6 @@ public enum DiagramLayoutEngine {
                 layers[layer].append(dummy)
                 if let labelSize, layer == medianLayer {
                     allSizes[dummy] = CGSize(width: max(16, labelSize.width + 8), height: 1)
-                    labelDummyOfEdge[index] = dummy
                 } else {
                     allSizes[dummy] = CGSize(width: 16, height: 1)
                 }
@@ -1068,15 +1066,17 @@ public enum DiagramLayoutEngine {
         var routeMaxX = crossExtent + margin
         for pts in routes { for p in pts { routeMaxX = max(routeMaxX, p.x) } }
         let size = CGSize(width: max(crossExtent, routeMaxX - margin) + margin * 2, height: y - layerGap + margin)
-        // Label anchors ONLY where space was genuinely reserved — the widened
-        // median dummy of a multi-layer edge. Adjacent-layer edges get no
-        // anchor: several of them can share one inter-layer gap, and the
-        // renderer's sliding scorer separates their labels better than a
-        // fixed midpoint would (the grown gap gives it vertical room).
-        var labelAnchors = [CGPoint?](repeating: nil, count: routingEdges.count)
-        for (index, dummy) in labelDummyOfEdge {
-            if let f = frames[dummy] { labelAnchors[index] = CGPoint(x: f.midX, y: f.midY) }
-        }
+        // Place every caption on the longest clean straight run of its final
+        // route, collision-avoiding node boxes, other captions, bends, and
+        // crossings — the same run-based placement the flowchart pipeline uses,
+        // so a state/class/ER label never lands on a corner or a junction, and
+        // sibling adjacent-layer labels that share an inter-layer gap slide
+        // apart instead of stacking on one midpoint. (The reserved median-dummy
+        // channel and the grown gap give this pass the room it needs.)
+        let realFrameList = ids.compactMap { dummies.contains($0) ? nil : frames[$0] }
+        let labelSizes: [CGSize?] = routingEdges.indices.map { edgeLabelSizes?[$0] ?? nil }
+        let labelAnchors = placeRunLabels(routes: routes, labelSizes: labelSizes,
+                                          nodeFrames: realFrameList)
         // Dummy frames are internal scaffolding — don't leak them.
         for dummy in dummies { frames[dummy] = nil }
         return (frames, size, routes, labelAnchors)
