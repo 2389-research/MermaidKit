@@ -174,9 +174,9 @@ final class DippinParserTests: XCTestCase {
 
     func testWhenConditionBecomesEdgeLabel() {
         let chart = parse(rich)
-        XCTAssertEqual(edge(chart, "Severe", "ReviewFan")?.label, "ctx.severity == high")
-        XCTAssertEqual(edge(chart, "Severe", "Remediate")?.label, "ctx.severity == low")
-        XCTAssertEqual(edge(chart, "Remediate", "Postmortem")?.label, "ctx.outcome == success")
+        XCTAssertEqual(edge(chart, "Severe", "ReviewFan")?.label, "high")
+        XCTAssertEqual(edge(chart, "Severe", "Remediate")?.label, "low")
+        XCTAssertEqual(edge(chart, "Remediate", "Postmortem")?.label, "success")
         // A plain edge has no label.
         XCTAssertNil(edge(chart, "Intake", "Classify")?.label)
     }
@@ -199,7 +199,7 @@ final class DippinParserTests: XCTestCase {
         // forming the loop; its `when` condition still labels it.
         let back = edge(chart, "Remediate", "Classify")
         XCTAssertNotNil(back)
-        XCTAssertEqual(back?.label, "ctx.outcome == fail")
+        XCTAssertEqual(back?.label, "fail")
     }
 
     func testBareRestartIsLabelledRestart() {
