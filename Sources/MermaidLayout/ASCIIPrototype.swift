@@ -247,6 +247,15 @@ public enum ASCIIRenderer {
                                             background: TerminalBackground = .dark) -> String? {
         guard let diagram = MermaidParser.parse(source) else { return nil }
         guard case .flowchart(let chart) = diagram else { return nil }
+        return asciiRenderFlowchart(chart, color: color, background: background)
+    }
+
+    /// Render an already-parsed `Flowchart` (e.g. from `DOTParser`) through the
+    /// same lower → quantize → draw path as the source-string entry.
+    public static func asciiRenderFlowchart(_ chart: Flowchart,
+                                            color: ASCIIColorMode = .plain,
+                                            background: TerminalBackground = .dark) -> String? {
+        let diagram = MermaidDiagram.flowchart(chart)
         let scene = DiagramScene.lower(diagram, measure: ASCIIMetrics.measurer)
         // The scene keeps each node's *identifier* (A, B) as its id, having
         // dropped the display label AND shape during lowering. Recover both from

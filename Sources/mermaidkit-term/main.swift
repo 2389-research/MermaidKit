@@ -22,6 +22,7 @@ import MermaidRender
 
 struct Options {
     var mode: String = "auto"          // kitty | halfblock | box | plain | auto
+    var format: String = "auto"        // mermaid | dot | auto
     var color: ColorPreference = .auto // auto | always | never
     var theme: ThemePreference = .auto // auto | dark | light
     var width: Int?                    // halfblock target columns (nil → detect)
@@ -46,6 +47,10 @@ func parseArgs(_ argv: [String]) -> Options? {
         case a == "--mode" || a.hasPrefix("--mode="):
             guard let v = value(after: "--mode") else { return nil }
             o.mode = v
+        case a == "--format" || a.hasPrefix("--format="):
+            guard let v = value(after: "--format"),
+                  ["mermaid", "dot", "auto"].contains(v) else { return nil }
+            o.format = v
         case a == "--color" || a.hasPrefix("--color="):
             guard let v = value(after: "--color"), let c = ColorPreference(rawValue: v) else { return nil }
             o.color = c
@@ -71,8 +76,14 @@ mermaidkit-term — render a Mermaid flowchart to the terminal
 
 USAGE:
   mermaidkit-term [FILE] [--mode kitty|halfblock|box|plain|auto] [--width COLS]
+                  [--format mermaid|dot|auto]
                   [--color auto|always|never] [--theme auto|dark|light]
   cat diagram.mmd | mermaidkit-term --mode halfblock --width 100
+  cat pipeline.dot | mermaidkit-term --format dot --mode plain
+
+FORMAT (--format): auto detects Graphviz DOT by a .dot/.gv file extension or a
+  leading strict/graph/digraph … { content sniff, else parses Mermaid. DOT is
+  parsed to the same Flowchart IR, so every mode renders it.
 
 MODES (capability ladder):
   auto      detect: kitty-graphics if Kitty/Ghostty, else half-block if truecolor, else plain
@@ -129,6 +140,23 @@ func run() -> Int32 {
         return 1
     }
 
+    // Resolve the input format. DOT is parsed up-front to the shared Flowchart
+    // IR so every render mode below drives the same pipeline as Mermaid.
+    let isDOT: Bool
+    switch opts.format {
+    case "dot":     isDOT = true
+    case "mermaid": isDOT = false
+    default:        isDOT = looksLikeDOT(source, path: opts.path)  // auto
+    }
+    var dotDiagram: MermaidDiagram?
+    if isDOT {
+        guard let chart = DOTParser.parse(source) else {
+            FileHandle.standardError.write(Data("could not parse DOT source\n".utf8))
+            return 1
+        }
+        dotDiagram = .flowchart(chart)
+    }
+
     let env = TerminalEnvironment.current()
     let background = TerminalCapabilities.detectBackground(theme: opts.theme, env: env)
 
@@ -147,28 +175,74 @@ func run() -> Int32 {
 
     switch mode {
     case .kitty:
-        return renderKitty(source, background: background)
+        return renderKitty(source, diagram: dotDiagram, background: background)
     case .halfBlock:
-        return renderHalfBlock(source, background: background, requestedWidth: opts.width)
+        return renderHalfBlock(source, diagram: dotDiagram, background: background,
+                               requestedWidth: opts.width)
     case .coloredBox, .plainBox:
         let colorOn = (mode == .coloredBox)
-        guard let out = ASCIIRenderer.asciiRenderFlowchart(
-            source, color: colorOn ? .truecolor : .plain, background: background) else {
+        let color: ASCIIColorMode = colorOn ? .truecolor : .plain
+        let out: String?
+        if case .flowchart(let chart)? = dotDiagram {
+            out = ASCIIRenderer.asciiRenderFlowchart(chart, color: color, background: background)
+        } else {
+            out = ASCIIRenderer.asciiRenderFlowchart(source, color: color, background: background)
+        }
+        guard let rendered = out else {
             FileHandle.standardError.write(Data("not a flowchart (this demo is flowchart-scoped)\n".utf8))
             return 1
         }
-        print(out)
+        print(rendered)
         return 0
     }
+}
+
+/// Sniffs whether a source is Graphviz DOT: a `.dot`/`.gv` extension, or a
+/// leading (`strict`) `graph`/`digraph` … `{` once comments/whitespace are
+/// skipped. Mermaid's own `graph`/`flowchart` headers are NOT followed by `{`,
+/// so they never trip this.
+func looksLikeDOT(_ source: String, path: String?) -> Bool {
+    if let path = path {
+        let lower = path.lowercased()
+        if lower.hasSuffix(".dot") || lower.hasSuffix(".gv") { return true }
+        if lower.hasSuffix(".mmd") || lower.hasSuffix(".mermaid") { return false }
+    }
+    // Content sniff. Drop block comments, then read the first meaningful line's
+    // leading keyword. `digraph` is DOT-exclusive. For `graph` (which Mermaid
+    // also uses) a Mermaid direction token settles it; otherwise a `{` on the
+    // header line marks DOT. This avoids reading a fused Mermaid node label like
+    // `A{decision}` (which sits on a body line) as a DOT brace.
+    var s = source
+    while let open = s.range(of: "/*"), let close = s.range(of: "*/", range: open.upperBound..<s.endIndex) {
+        s.replaceSubrange(open.lowerBound..<close.upperBound, with: " ")
+    }
+    let lines = s.split(separator: "\n").map { line -> String in
+        if let c = line.range(of: "//") { return String(line[line.startIndex..<c.lowerBound]) }
+        return String(line)
+    }
+    guard let firstLine = lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+    else { return false }
+    let lower = firstLine.trimmingCharacters(in: .whitespaces).lowercased()
+    var words = lower.split(whereSeparator: { " \t;,".contains($0) }).map(String.init)
+    if words.first == "strict" { words.removeFirst() }
+    guard let first = words.first else { return false }
+    if first == "digraph" { return true }           // DOT-only keyword
+    guard first == "graph" else { return false }     // else Mermaid (flowchart, …)
+    let directions: Set<String> = ["td", "tb", "lr", "rl", "bt"]
+    if let second = words.dropFirst().first, directions.contains(second) { return false }
+    return firstLine.contains("{")                   // `graph { … }` header → DOT
 }
 
 /// Tier 1: rasterize the diagram to PNG and stream it via the Kitty graphics
 /// protocol. Falls back to a colored box render if the rasterizer is
 /// unavailable or the source doesn't render.
-func renderKitty(_ source: String, background: TerminalBackground) -> Int32 {
+func renderKitty(_ source: String, diagram: MermaidDiagram?,
+                 background: TerminalBackground) -> Int32 {
     #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
-    if let png = MermaidRenderer.pngData(source: source,
-                                         theme: DiagramTheme(prefersDark: background == .dark)) {
+    let theme = DiagramTheme(prefersDark: background == .dark)
+    let png = diagram.flatMap { MermaidRenderer.pngData(diagram: $0, theme: theme) }
+        ?? MermaidRenderer.pngData(source: source, theme: theme)
+    if let png {
         FileHandle.standardOutput.write(Data(KittyGraphics.encode(pngData: png).utf8))
         FileHandle.standardOutput.write(Data("\n".utf8))
         return 0
@@ -177,10 +251,20 @@ func renderKitty(_ source: String, background: TerminalBackground) -> Int32 {
     #else
     FileHandle.standardError.write(Data("kitty mode needs the raster backend; falling back to box render\n".utf8))
     #endif
-    if let out = ASCIIRenderer.asciiRenderFlowchart(source, color: .truecolor, background: background) {
-        print(out)
-        return 0
+    return fallbackBox(source, diagram: diagram, background: background)
+}
+
+/// Shared box-render fallback for the raster tiers, honoring a pre-parsed DOT
+/// diagram when present.
+func fallbackBox(_ source: String, diagram: MermaidDiagram?,
+                 background: TerminalBackground) -> Int32 {
+    let out: String?
+    if case .flowchart(let chart)? = diagram {
+        out = ASCIIRenderer.asciiRenderFlowchart(chart, color: .truecolor, background: background)
+    } else {
+        out = ASCIIRenderer.asciiRenderFlowchart(source, color: .truecolor, background: background)
     }
+    if let out { print(out); return 0 }
     return 1
 }
 
@@ -201,8 +285,8 @@ func terminalColumns() -> Int? {
 /// resolved grid size is reported on stderr (so stdout stays a clean ANSI
 /// stream that can be redirected to a file). Falls back to the colored box
 /// render when the raster backend is unavailable or the source doesn't render.
-func renderHalfBlock(_ source: String, background: TerminalBackground,
-                     requestedWidth: Int?) -> Int32 {
+func renderHalfBlock(_ source: String, diagram: MermaidDiagram?,
+                     background: TerminalBackground, requestedWidth: Int?) -> Int32 {
     let cols = max(10, min(requestedWidth ?? terminalColumns() ?? 100, 400))
     let prefersDark = (background == .dark)
     // The theme canvas colors from DiagramTheme(prefersDark:) — margins blend.
@@ -210,9 +294,11 @@ func renderHalfBlock(_ source: String, background: TerminalBackground,
         prefersDark ? (0x1B, 0x1B, 0x1D) : (0xFF, 0xFF, 0xFF)
 
     #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
-    if let raster = MermaidRenderer.rgbaRaster(
-        source: source, theme: DiagramTheme(prefersDark: prefersDark),
-        targetWidth: cols, background: bg) {
+    let theme = DiagramTheme(prefersDark: prefersDark)
+    let maybeRaster = diagram.flatMap {
+        MermaidRenderer.rgbaRaster(diagram: $0, theme: theme, targetWidth: cols, background: bg)
+    } ?? MermaidRenderer.rgbaRaster(source: source, theme: theme, targetWidth: cols, background: bg)
+    if let raster = maybeRaster {
         var pixels = [RGBA]()
         pixels.reserveCapacity(raster.width * raster.height)
         let b = raster.pixels
@@ -234,11 +320,7 @@ func renderHalfBlock(_ source: String, background: TerminalBackground,
     #else
     FileHandle.standardError.write(Data("halfblock mode needs the raster backend; falling back to box render\n".utf8))
     #endif
-    if let out = ASCIIRenderer.asciiRenderFlowchart(source, color: .truecolor, background: background) {
-        print(out)
-        return 0
-    }
-    return 1
+    return fallbackBox(source, diagram: diagram, background: background)
 }
 
 exit(run())

@@ -88,6 +88,32 @@ public enum MermaidRenderer {
     public static func pngData(source: String, theme: DiagramTheme,
                                spacing: DiagramSpacing = .regular) -> Data? {
         guard let img = image(source: source, theme: theme, spacing: spacing) else { return nil }
+        return encodePNG(img)
+    }
+
+    /// Renders an already-parsed diagram (e.g. from ``DOTParser``) to a native
+    /// image, bypassing the Mermaid parser so a non-Mermaid front-end reuses the
+    /// exact same layout/draw pipeline. Uncached (no source string to key on).
+    public static func image(diagram: MermaidDiagram, theme: DiagramTheme,
+                             spacing: DiagramSpacing = .regular) -> PlatformImage? {
+        #if canImport(AppKit) || canImport(UIKit)
+        return DiagramRenderer.image(for: diagram, title: nil, theme: theme, spacing: spacing)
+        #elseif canImport(SilicaCairo)
+        return DiagramRenderer.renderImage(diagram: diagram, title: nil, theme: theme, spacing: spacing)
+        #else
+        return nil
+        #endif
+    }
+
+    /// PNG bytes for an already-parsed diagram — the Kitty-graphics transport
+    /// for a DOT source.
+    public static func pngData(diagram: MermaidDiagram, theme: DiagramTheme,
+                               spacing: DiagramSpacing = .regular) -> Data? {
+        guard let img = image(diagram: diagram, theme: theme, spacing: spacing) else { return nil }
+        return encodePNG(img)
+    }
+
+    private static func encodePNG(_ img: PlatformImage) -> Data? {
         #if canImport(AppKit)
         var rect = CGRect(origin: .zero, size: img.size)
         guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
@@ -121,8 +147,33 @@ public enum MermaidRenderer {
                                   background: (r: UInt8, g: UInt8, b: UInt8))
         -> (pixels: [UInt8], width: Int, height: Int)? {
         #if canImport(AppKit) || canImport(UIKit)
-        guard let img = image(source: source, theme: theme, spacing: spacing),
-              targetWidth > 0 else { return nil }
+        guard let img = image(source: source, theme: theme, spacing: spacing) else { return nil }
+        return raster(from: img, targetWidth: targetWidth, background: background)
+        #else
+        return nil
+        #endif
+    }
+
+    /// Half-block RGBA raster for an already-parsed diagram — the Tier-3
+    /// terminal path for a DOT source.
+    public static func rgbaRaster(diagram: MermaidDiagram, theme: DiagramTheme,
+                                  spacing: DiagramSpacing = .regular,
+                                  targetWidth: Int,
+                                  background: (r: UInt8, g: UInt8, b: UInt8))
+        -> (pixels: [UInt8], width: Int, height: Int)? {
+        #if canImport(AppKit) || canImport(UIKit)
+        guard let img = image(diagram: diagram, theme: theme, spacing: spacing) else { return nil }
+        return raster(from: img, targetWidth: targetWidth, background: background)
+        #else
+        return nil
+        #endif
+    }
+
+    #if canImport(AppKit) || canImport(UIKit)
+    private static func raster(from img: PlatformImage, targetWidth: Int,
+                               background: (r: UInt8, g: UInt8, b: UInt8))
+        -> (pixels: [UInt8], width: Int, height: Int)? {
+        guard targetWidth > 0 else { return nil }
         #if canImport(AppKit)
         var rect = CGRect(origin: .zero, size: img.size)
         guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
@@ -161,10 +212,8 @@ public enum MermaidRenderer {
         }
         guard ok else { return nil }
         return (buffer, w, h)
-        #else
-        return nil
-        #endif
     }
+    #endif
 
     /// The diagram as single-page vector PDF data — same layout and drawing
     /// as ``image(source:theme:spacing:)``, but resolution-independent: the
