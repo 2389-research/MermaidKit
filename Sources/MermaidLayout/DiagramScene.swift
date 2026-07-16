@@ -407,7 +407,7 @@ public enum DiagramLayoutLinter {
             // Crowding: measure the stub left on each side of the caption on the
             // straight run it sits on (the nearest segment of its own route).
             for (_, label) in edgeLabels {
-                guard let ae = label.anchorEdge, ae < scene.edges.count else { continue }
+                guard let ae = label.anchorEdge, scene.edges.indices.contains(ae) else { continue }
                 let poly = scene.edges[ae].polyline
                 guard poly.count >= 2 else { continue }
                 let c = CGPoint(x: label.frame.midX, y: label.frame.midY)

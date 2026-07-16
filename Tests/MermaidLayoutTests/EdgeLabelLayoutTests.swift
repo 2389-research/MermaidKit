@@ -59,7 +59,8 @@ final class EdgeLabelLayoutTests: XCTestCase {
             guard case .flowchart(let chart) = MermaidParser.parse(src) else { return XCTFail("parse") }
             let layout = DiagramLayoutEngine.layout(chart, measure: measure)
             for edge in layout.edges {
-                guard let label = edge.label, !label.isEmpty, let lp = edge.labelPoint else { continue }
+                guard let label = edge.label, !label.isEmpty else { continue }
+                let lp = try XCTUnwrap(edge.labelPoint, "\(label): missing label anchor")
                 let sz = measure(label, DiagramLayoutEngine.labelFontSize)
                 // Nearest segment (the run the caption sits on).
                 var run: (a: CGPoint, b: CGPoint, d: CGFloat)?
@@ -79,9 +80,30 @@ final class EdgeLabelLayoutTests: XCTestCase {
                 let along = horiz ? sz.width + 6 : sz.height + 2
                 let c = horiz ? lp.x : lp.y
                 let stub = min((c - along / 2) - lo, hi - (c + along / 2))
-                XCTAssertGreaterThanOrEqual(stub, 10,
+                XCTAssertGreaterThanOrEqual(stub, DiagramLayoutEngine.flowchartLabelStub,
                     "label \"\(label)\" leaves only \(Int(stub))pt of connector")
             }
+        }
+    }
+
+    /// A labeled self-loop in the layered (state/class/ER) router must host its
+    /// caption without clipping or crowding: the loop is widened to the label
+    /// plus a stub on each side, and the canvas grows for the label frame. Before
+    /// the fix, `A --> A: retry` placed the word beside a fixed 24pt loop — off
+    /// the canvas (no size growth) and then crammed onto too short a run.
+    func testLayeredSelfLoopLabelsAreClean() {
+        let sources = [
+            "stateDiagram-v2\n    A --> A: retry",
+            "classDiagram\n    A --> A : self",
+            "stateDiagram-v2\n    [*] --> A\n    A --> A: retry\n    A --> B: go",
+            "erDiagram\n    CUSTOMER ||--o{ CUSTOMER : refers",
+        ]
+        for src in sources {
+            guard let diagram = MermaidParser.parse(src) else { return XCTFail("parse: \(src)") }
+            let scene = DiagramScene.lower(diagram, measure: measure)
+            let errors = DiagramLayoutLinter.lint(scene).filter { $0.severity == .error }
+            XCTAssertTrue(errors.isEmpty,
+                "self-loop \"\(src)\" not clean:\n" + errors.map { "  \($0.kind): \($0.detail)" }.joined(separator: "\n"))
         }
     }
 
