@@ -138,7 +138,13 @@ of 3, on an Apple-silicon Mac
 (the dense per-type fixtures in this repo — real-world diagrams are usually
 smaller). Samples are round-robin across types (sequential per-type sampling
 biased late types with accumulated heat — a measured 2x swing), best of
-three rounds. `RenderBenchmarks` fails CI if any type exceeds 250 ms:
+three rounds. `RenderBenchmarks` is a *correctness* smoke — every fixture must
+parse, render, and rasterize — with **no wall-clock assertion** (timing gates
+flake under CI load, so performance never gates a merge). The table below is
+opt-in: `BENCH_TABLE=1 swift test --filter RenderBenchmarks` measures and
+prints it. These numbers are machine-specific, not a CI threshold. For where
+the time actually goes and whether any of it is worth optimizing, see
+[`docs/notes/performance.md`](docs/notes/performance.md).
 
 | Diagram | Cold render | Diagram | Cold render |
 |---|---:|---|---:|
