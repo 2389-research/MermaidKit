@@ -10,14 +10,29 @@
 <meta property="og:image" content="images/hero-light.png">
 <style>
   :root{
-    --accent:#2f6df6; --accent-soft:#2f6df61a;
+    /* Mermaid palette */
+    --mermaid-deep:#123c4a;  /* deep ocean teal    */
+    --mermaid-aqua:#39d6c5;  /* iridescent seafoam */
+    --mermaid-shell:#ff8fa3; /* warm coral pink    */
+    --mermaid-pearl:#c9b6ff; /* pearlescent lavender */
+    /* Accent system (light) — deep teal for readable text, aqua for UI/borders */
+    --accent:#0a6f68; --accent-ui:var(--mermaid-aqua); --accent-soft:#39d6c522;
+    --btn-bg:var(--mermaid-deep); --btn-fg:#ffffff;
+    --pill-teal-fg:#0a6f68;  --pill-teal-bg:#39d6c520;  --pill-teal-bd:#39d6c57a;
+    --pill-coral-fg:#b8324e; --pill-coral-bg:#ff8fa322; --pill-coral-bd:#ff8fa385;
+    --pill-lav-fg:#6a4fc0;   --pill-lav-bg:#c9b6ff2e;   --pill-lav-bd:#c9b6ffa6;
     --bg:#ffffff; --fg:#16181d; --muted:#5b6270; --line:#e6e8ec;
     --card:#fbfcfe; --code-bg:#f4f6fa; --code-fg:#1b1f27;
     --radius:14px; --maxw:1080px;
   }
   @media (prefers-color-scheme:dark){
     :root{
-      --accent:#6ea1ff; --accent-soft:#6ea1ff1f;
+      /* Accent system (dark) — aqua reads bright on the near-black bg */
+      --accent:var(--mermaid-aqua); --accent-ui:var(--mermaid-aqua); --accent-soft:#39d6c526;
+      --btn-bg:#17566a; --btn-fg:#eafbf8;
+      --pill-teal-fg:#7ef0e2;  --pill-teal-bg:#39d6c520;  --pill-teal-bd:#39d6c561;
+      --pill-coral-fg:#ffb3c1; --pill-coral-bg:#ff8fa31f; --pill-coral-bd:#ff8fa361;
+      --pill-lav-fg:#d8caff;   --pill-lav-bg:#c9b6ff1c;   --pill-lav-bd:#c9b6ff61;
       --bg:#0e1014; --fg:#e8eaef; --muted:#9aa2b1; --line:#242833;
       --card:#161922; --code-bg:#12151c; --code-fg:#dfe3ea;
     }
@@ -57,12 +72,15 @@
   .hero h1{font-size:clamp(2.2rem,6vw,3.4rem); margin:0 0 .35em}
   .tag{color:var(--muted); font-size:clamp(1.05rem,2.4vw,1.3rem); max-width:640px; margin:0 auto 1.4em}
   .hook{display:inline-flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:1.6em}
-  .hook span{font-size:.82rem; font-weight:560; color:var(--accent); background:var(--accent-soft); padding:5px 12px; border-radius:999px}
+  .hook span{font-size:.82rem; font-weight:560; padding:5px 12px; border-radius:999px; border:1px solid transparent}
+  .hook span:nth-child(1){color:var(--pill-teal-fg); background:var(--pill-teal-bg); border-color:var(--pill-teal-bd)}
+  .hook span:nth-child(2){color:var(--pill-coral-fg); background:var(--pill-coral-bg); border-color:var(--pill-coral-bd)}
+  .hook span:nth-child(3){color:var(--pill-lav-fg); background:var(--pill-lav-bg); border-color:var(--pill-lav-bd)}
   .cta{display:inline-flex; gap:12px; flex-wrap:wrap; justify-content:center}
   .btn{padding:11px 20px; border-radius:10px; font-weight:560; font-size:.95rem; border:1px solid var(--line)}
-  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
-  .btn.primary:hover{text-decoration:none; filter:brightness(1.06)}
-  .btn.ghost:hover{text-decoration:none; border-color:var(--accent); color:var(--accent)}
+  .btn.primary{background:var(--btn-bg); color:var(--btn-fg); border-color:var(--btn-bg)}
+  .btn.primary:hover{text-decoration:none; filter:brightness(1.1)}
+  .btn.ghost:hover{text-decoration:none; border-color:var(--accent-ui); color:var(--accent)}
 
   .heroimg{margin:44px auto 0; max-width:var(--maxw)}
   .heroimg img{width:100%; height:auto; border-radius:var(--radius); border:1px solid var(--line)}
