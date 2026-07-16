@@ -1,0 +1,26 @@
+gitGraph
+    commit id: "engine extracted"
+    commit id: "theme seam" tag: "v0.1.0"
+    branch audit-round-one
+    commit id: "adversarial suite"
+    commit id: "NaN crash fixes"
+    commit id: "input caps"
+    checkout main
+    merge audit-round-one
+    branch ios-support
+    commit id: "trait pinning"
+    commit id: "iOS CI compile"
+    checkout main
+    merge ios-support tag: "v0.1.1"
+    branch elk-layout
+    commit id: "network simplex"
+    commit id: "label reservation"
+    branch spacing-api
+    commit id: "DiagramSpacing"
+    checkout elk-layout
+    merge spacing-api
+    commit id: "fixed-side ports"
+    commit id: "stability tests"
+    checkout main
+    merge elk-layout tag: "v0.2.0"
+    commit id: "self-hosted fixtures"

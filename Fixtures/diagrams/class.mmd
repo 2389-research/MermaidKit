@@ -1,0 +1,74 @@
+classDiagram
+    class MermaidParser {
+        +maxTextSize int
+        +maxEdges int
+        +parse(String) MermaidDiagram
+        +diagnose(String) [ParseDiagnostic]
+    }
+    class MermaidDiagram {
+        +typeName String
+    }
+    class DiagramLayoutEngine {
+        +nodeFontSize Double
+        +labelFontSize Double
+        +layout(diagram, measure, spacing) Layout
+    }
+    class DiagramScene {
+        +size CGSize
+        +nodes [Node]
+        +edges [Edge]
+        +labels [Label]
+        +lower(diagram, measure) DiagramScene
+        +delta(to other) SceneDelta
+    }
+    class Node {
+        +id String
+        +frame CGRect
+        +isContainer Bool
+    }
+    class Edge {
+        +polyline [CGPoint]
+        +label String
+    }
+    class DiagramLayoutLinter {
+        +lint(scene) [LayoutViolation]
+        +report(scene) String
+    }
+    class LayoutViolation {
+        +severity Severity
+        +kind String
+        +detail String
+    }
+    class DiagramTheme {
+        +ink Color
+        +canvas Color
+        +palette [Color]
+        +fingerprint String
+        +categoricalColor(index) Color
+    }
+    class DiagramSpacing {
+        +scale CGFloat
+        +compact DiagramSpacing
+        +comfortable DiagramSpacing
+    }
+    class MermaidRenderer {
+        +image(source, theme, spacing) Image
+        +renderImage(source, theme) Image
+        +attachmentString(source, theme) NSAttributedString
+    }
+    class MermaidView {
+        +body some View
+    }
+    MermaidParser --> MermaidDiagram : produces
+    DiagramLayoutEngine ..> MermaidDiagram : consumes
+    DiagramScene *-- Node : composes
+    DiagramScene *-- Edge : composes
+    DiagramScene ..> DiagramLayoutEngine : lowers from
+    DiagramLayoutLinter --> DiagramScene : checks
+    DiagramLayoutLinter --> LayoutViolation : emits
+    MermaidRenderer ..> MermaidParser : parses via
+    MermaidRenderer --> DiagramTheme : styled by
+    MermaidRenderer --> DiagramSpacing : spaced by
+    MermaidRenderer o-- DiagramScene : draws
+    MermaidView --|> MermaidRenderer : renders through
+    MermaidView --> DiagramTheme : follows appearance

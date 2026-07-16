@@ -1,0 +1,8 @@
+venn-beta
+    set corpus ["Lint corpus"] : 3
+    set gallery ["Gallery images"] : 3
+    set bench ["Benchmark suite"] : 3
+    union corpus, gallery ["rendered + linted"]
+    union corpus, bench ["timed + linted"]
+    union gallery, bench ["seen = measured"]
+    union corpus, gallery, bench ["the 30 fixtures"]

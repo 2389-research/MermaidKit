@@ -1,0 +1,27 @@
+wardley-beta
+    title MermaidKit component landscape
+    anchor Host app user [0.97, 0.62]
+    component MermaidView [0.85, 0.55]
+    component Attachment strings [0.80, 0.42]
+    component Render cache [0.66, 0.60]
+    component CoreGraphics draw [0.55, 0.72]
+    component Layout engines [0.44, 0.38] (build)
+    component Scene IR + linter [0.32, 0.24] (build)
+    component SVG backend [0.38, 0.12] (build)
+    component Text measurement [0.50, 0.84]
+    component Parsers [0.56, 0.33]
+    component CoreText [0.35, 0.92]
+    component Swift Package Manager [0.15, 0.88]
+    note "verified by geometry, not pixels" [0.20, 0.05]
+    Host app user -> MermaidView
+    MermaidView -> Render cache
+    Attachment strings -> Render cache
+    Render cache -> CoreGraphics draw
+    CoreGraphics draw -> Layout engines
+    Layout engines -> Parsers
+    Layout engines -> Text measurement
+    Layout engines +> Scene IR + linter
+    Text measurement -> CoreText
+    Scene IR + linter -> SVG backend
+    evolve Scene IR + linter 0.55
+    evolve SVG backend 0.4

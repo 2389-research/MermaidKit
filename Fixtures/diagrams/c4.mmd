@@ -1,0 +1,32 @@
+C4Container
+    title Container diagram — a host app embedding MermaidKit
+
+    Person(author, "Document Author", "Writes markdown with fenced mermaid blocks")
+    Person_Ext(reader, "Reader", "Views rendered documents on any device")
+
+    System_Boundary(host, "Host App") {
+        Container(editor, "Editor UI", "SwiftUI + TextKit", "Documents with live inline previews")
+        Container(mview, "MermaidView", "SwiftUI", "Drop-in diagram view following the color scheme")
+        Container(attach, "Attachment pipeline", "NSAttributedString", "Inline diagrams inside rich text")
+    }
+
+    System_Boundary(kit, "MermaidKit") {
+        Container(mrender, "MermaidRender", "Swift + CoreGraphics", "Draws 23 diagram types natively")
+        Container(mlayout, "MermaidLayout", "Swift, platform-free", "Parse, layout, scene IR, linter")
+        ContainerDb(rcache, "Render cache", "NSCache, 64 MB", "Images keyed by source, theme, spacing")
+    }
+
+    System_Ext(spm, "Swift Package Manager", "Resolves the package from GitHub")
+    System_Ext(ci, "GitHub Actions", "macOS tests plus iOS compile checks")
+
+    Rel(author, editor, "Writes diagrams in", "markdown")
+    Rel(reader, editor, "Reads documents in")
+    Rel(editor, mview, "Embeds")
+    Rel(editor, attach, "Renders blocks through")
+    Rel(mview, mrender, "image(source, theme, spacing)", "Swift API")
+    Rel(attach, mrender, "attachmentString(...)", "Swift API")
+    Rel(mrender, mlayout, "Lays out via", "DiagramTextMeasurer")
+    Rel(mrender, rcache, "Reads and writes", "fingerprint keys")
+    Rel(editor, spm, "Depends on MermaidKit through", "SPM/HTTPS")
+    Rel(ci, mlayout, "Lints every fixture in", "swift test")
+    Rel(ci, mrender, "Benchmarks rasterized renders of", "swift test")

@@ -1,0 +1,23 @@
+swimlane-beta LR
+    subgraph host[Host app]
+        A[Fenced block] --> B{Known dialect?}
+        H[Styled source]
+        V[Rendered view]
+    end
+    subgraph layout[MermaidLayout]
+        C[Parse to model]
+        D[Solve layout]
+        L{Lint clean?}
+    end
+    subgraph render[MermaidRender]
+        E[Draw with theme]
+        F[(Render cache)]
+    end
+    B -->|yes| C
+    B -.->|no| H
+    C --> D
+    D --> L
+    L -->|clean| E
+    L -.->|violations| D
+    E --> F
+    F --> V

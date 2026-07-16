@@ -1,0 +1,26 @@
+flowchart TD
+    SRC[Fenced mermaid block] --> CAPS{Within input caps?}
+    CAPS -->|over maxTextSize| FALL[Styled source fallback]
+    CAPS -->|ok| HDR{Header recognized?}
+    HDR -->|no| DIAG[[diagnose: did you mean...]]
+    DIAG --> FALL
+    HDR -->|yes| PARSE(Per-type parser)
+    PARSE --> MODEL[(Typed model)]
+    subgraph LAYOUT [Layout pipeline]
+        LAYER[Network-simplex layering] --> ORDER[Barycenter ordering]
+        ORDER --> PLACE[Brandes-Koepf placement]
+        PLACE --> ROUTE[Orthogonal routing]
+        ROUTE --> RESERVE[Label space reservation]
+    end
+    MODEL --> LAYER
+    RESERVE --> SCENE[/Scene IR/]
+    SCENE --> LINT{Linter clean?}
+    LINT -->|violations in CI| LAYER
+    LINT -->|clean| DRAW(CoreGraphics draw)
+    subgraph RENDER [Render layer]
+        DRAW --> THEME[Apply DiagramTheme]
+        THEME --> RASTER[Rasterize per appearance]
+        RASTER --> CACHE[(Render cache)]
+    end
+    CACHE --> VIEW[MermaidView] & ATTACH[NSAttributedString attachment] & IMG([UIImage / NSImage])
+    VIEW & ATTACH & IMG --> HOST[Host app]

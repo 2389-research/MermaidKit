@@ -1,0 +1,28 @@
+zenuml
+    title Diagnose & Fallback Flow
+    @Actor Author
+    @Boundary EditorView
+    @Control MermaidRenderer
+    @Control MermaidParser
+    @Control Diagnostics
+    @Entity SceneIR
+    @Database RenderCache
+    Author->EditorView: paste "flowchar TD ..."
+    EditorView->MermaidRenderer: attachmentString(source, theme)
+    MermaidRenderer->RenderCache: lookup(fingerprint key)
+    RenderCache->MermaidRenderer: miss
+    MermaidRenderer->MermaidParser: parse(source)
+    MermaidParser->MermaidRenderer: nil (unknown dialect)
+    MermaidRenderer->EditorView: nil attachment
+    EditorView->Diagnostics: diagnose(source)
+    Diagnostics->Diagnostics: editDistance over knownHeaders
+    Diagnostics->EditorView: line 1: did you mean flowchart?
+    EditorView->Author: styled source + hint
+    Author->EditorView: fix header typo
+    EditorView->MermaidRenderer: attachmentString(source, theme)
+    MermaidRenderer->MermaidParser: parse(source)
+    MermaidParser->SceneIR: lower for lint parity
+    SceneIR->MermaidRenderer: clean scene
+    MermaidRenderer->RenderCache: store(image, cost)
+    MermaidRenderer->EditorView: attachment
+    EditorView->Author: rendered diagram

@@ -1,0 +1,39 @@
+sequenceDiagram
+    actor Host as Host App
+    participant View as MermaidView
+    box MermaidKit
+        participant Rend as MermaidRenderer
+        participant Cache@{ "type": "database" }
+        participant Parse as MermaidParser
+        participant Lay as DiagramLayoutEngine
+        participant Scene as DiagramScene
+    end
+    participant CG as CoreGraphics
+    Host->>View: body evaluation
+    View->>View: resolve theme from colorScheme
+    View->>+Rend: image(source, theme, spacing)
+    Rend->>Rend: fingerprint + cache key
+    Rend->>Cache: object(forKey:)
+    Cache-->>Rend: miss
+    Note over Cache,Parse: keys include source, theme, and spacing
+    Rend->>Parse: parse(source)
+    Parse-->>Rend: .flowchart(model)
+    Rend->>Lay: layout(model, measure, spacing)
+    Lay->>Lay: simplex, ordering, placement
+    Lay-->>Rend: FlowchartLayout
+    Rend->>Scene: lower(diagram, measure)
+    Scene-->>Rend: scene for lint parity
+    Rend->>CG: draw(layout, theme)
+    CG-->>Rend: rasterized image
+    Rend->>Cache: setObject(cost: bytes)
+    Rend-->>-View: PlatformImage
+    View-->>Host: fitted Image view
+    Host->>View: same source again
+    View->>Rend: image(source, theme, spacing)
+    Rend->>Cache: object(forKey:)
+    alt cache hit
+        Cache-->>Rend: copied image
+    else miss
+        Rend->>Parse: parse(source)
+    end
+    Rend-->>View: PlatformImage

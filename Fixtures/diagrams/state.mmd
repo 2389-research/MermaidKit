@@ -1,0 +1,35 @@
+stateDiagram-v2
+    [*] --> SourceEdited
+    SourceEdited --> Parsing : fenced block changed
+    state Parsing {
+        [*] --> HeaderCheck
+        HeaderCheck --> BodyParse : dialect known
+        HeaderCheck --> Diagnosing : unknown header
+        Diagnosing --> [*] : did-you-mean emitted
+        BodyParse --> [*] : model built
+    }
+    Parsing --> RouteChoice
+    state RouteChoice <<choice>>
+    RouteChoice --> LayoutPipeline : parse ok
+    RouteChoice --> SourceFallback : nil parse
+    state LayoutPipeline {
+        [*] --> Layering
+        Layering --> Ordering : network simplex done
+        Ordering --> Placement : crossings minimized
+        Placement --> Routing : coordinates assigned
+        Routing --> [*] : labels reserved
+    }
+    LayoutPipeline --> AppearanceFork
+    state AppearanceFork <<fork>>
+    AppearanceFork --> LightRaster
+    AppearanceFork --> DarkRaster
+    state RasterJoin <<join>>
+    LightRaster --> RasterJoin
+    DarkRaster --> RasterJoin
+    RasterJoin --> Cached : keyed by fingerprint
+    Cached --> Displayed : cache hit
+    Displayed --> Cached : body re-evaluated
+    Cached --> Invalidated : theme changed
+    Invalidated --> Parsing : re-render
+    SourceFallback --> Displayed : monospaced source
+    Displayed --> [*]

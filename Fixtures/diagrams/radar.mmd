@@ -1,0 +1,12 @@
+radar-beta
+    title Engine Quality by Release
+    axis cov["Type Coverage"], perf["Cold Performance"], rob["Input Robustness"]
+    axis stab["Edit Stability"], theme["Themability"], docs["Documentation"]
+    axis lint["Layout Verification"], api["API Ergonomics"], port["Portability"]
+    curve v010["v0.1.0 (first public)"]{cov: 88, perf: 62, rob: 55, stab: 40, theme: 45, docs: 35, lint: 70, api: 60, port: 30}
+    curve v011["v0.1.1 (hardened)"]{cov: 88, perf: 66, rob: 85, stab: 42, theme: 72, docs: 78, lint: 74, api: 68, port: 34}
+    curve v020["v0.2.0 (ELK-grade layout)"]{cov: 90, perf: 70, rob: 88, stab: 86, theme: 80, docs: 84, lint: 85, api: 78, port: 34}
+    curve v100["v1.0 target"]{cov: 95, perf: 82, rob: 92, stab: 90, theme: 88, docs: 92, lint: 92, api: 90, port: 70}
+    max 100
+    min 0
+    ticks 5

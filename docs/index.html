@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MermaidKit — native Mermaid diagrams in Swift</title>
+<meta name="description" content="MermaidKit renders all 30 Mermaid diagram types natively in Swift — CoreGraphics on Apple, Silica/Cairo on Linux. No JavaScript, no WebView, zero dependencies.">
+<meta property="og:title" content="MermaidKit">
+<meta property="og:description" content="All 30 Mermaid diagram types, rendered natively in Swift. No JavaScript. No WebView. No dependencies.">
+<meta property="og:image" content="images/hero-light.png">
+<style>
+  :root{
+    --accent:#2f6df6; --accent-soft:#2f6df61a;
+    --bg:#ffffff; --fg:#16181d; --muted:#5b6270; --line:#e6e8ec;
+    --card:#fbfcfe; --code-bg:#f4f6fa; --code-fg:#1b1f27;
+    --radius:14px; --maxw:1080px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --accent:#6ea1ff; --accent-soft:#6ea1ff1f;
+      --bg:#0e1014; --fg:#e8eaef; --muted:#9aa2b1; --line:#242833;
+      --card:#161922; --code-bg:#12151c; --code-fg:#dfe3ea;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 20px}
+  h1,h2,h3{line-height:1.2; letter-spacing:-0.02em; font-weight:640}
+  h2{font-size:1.6rem; margin:0 0 .3em}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre{
+    background:var(--code-bg); color:var(--code-fg);
+    padding:16px 18px; border-radius:12px; overflow-x:auto;
+    font-size:13.5px; line-height:1.55; border:1px solid var(--line); margin:0;
+  }
+  p code{background:var(--code-bg); padding:.12em .38em; border-radius:5px; font-size:.88em}
+
+  /* Header */
+  header.top{border-bottom:1px solid var(--line); position:sticky; top:0; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(8px); z-index:5}
+  header.top .wrap{display:flex; align-items:center; gap:14px; height:56px}
+  .brand{font-weight:680; letter-spacing:-0.02em}
+  .brand b{color:var(--accent)}
+  header.top nav{margin-left:auto; display:flex; gap:20px; font-size:.92rem}
+  header.top nav a{color:var(--muted)}
+  header.top nav a:hover{color:var(--fg); text-decoration:none}
+  @media (max-width:640px){header.top nav a.hide-sm{display:none}}
+
+  /* Hero */
+  .hero{padding:64px 0 40px; text-align:center}
+  .hero h1{font-size:clamp(2.2rem,6vw,3.4rem); margin:0 0 .35em}
+  .tag{color:var(--muted); font-size:clamp(1.05rem,2.4vw,1.3rem); max-width:640px; margin:0 auto 1.4em}
+  .hook{display:inline-flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:1.6em}
+  .hook span{font-size:.82rem; font-weight:560; color:var(--accent); background:var(--accent-soft); padding:5px 12px; border-radius:999px}
+  .cta{display:inline-flex; gap:12px; flex-wrap:wrap; justify-content:center}
+  .btn{padding:11px 20px; border-radius:10px; font-weight:560; font-size:.95rem; border:1px solid var(--line)}
+  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .btn.primary:hover{text-decoration:none; filter:brightness(1.06)}
+  .btn.ghost:hover{text-decoration:none; border-color:var(--accent); color:var(--accent)}
+
+  .heroimg{margin:44px auto 0; max-width:var(--maxw)}
+  .heroimg img{width:100%; height:auto; border-radius:var(--radius); border:1px solid var(--line)}
+  figure{margin:0}
+
+  section{padding:52px 0; border-top:1px solid var(--line)}
+  section .lead{color:var(--muted); max-width:680px; margin:.2em 0 1.6em}
+
+  /* Install + snippet split */
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start}
+  @media (max-width:760px){.split{grid-template-columns:1fr}}
+  .kicker{font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); font-weight:640; margin-bottom:10px}
+
+  /* Gallery */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px}
+  .grid figure{background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column}
+  .grid figure.feature{grid-column:span 2}
+  @media (max-width:620px){.grid figure.feature{grid-column:span 1}}
+  .grid img{width:100%; height:auto; display:block; background:var(--bg)}
+  .grid figcaption{padding:11px 14px; font-size:.83rem; color:var(--muted); border-top:1px solid var(--line)}
+  .grid figcaption b{color:var(--fg); font-weight:600}
+
+  /* Numbers */
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px}
+  .stat{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px}
+  .stat .n{font-size:1.9rem; font-weight:680; letter-spacing:-0.03em}
+  .stat .l{color:var(--muted); font-size:.86rem; margin-top:3px}
+
+  /* Feature list */
+  .feats{display:grid; grid-template-columns:1fr 1fr; gap:20px 34px}
+  @media (max-width:700px){.feats{grid-template-columns:1fr}}
+  .feats h3{font-size:1.02rem; margin:0 0 .25em}
+  .feats p{margin:0; color:var(--muted); font-size:.94rem}
+
+  footer{border-top:1px solid var(--line); padding:34px 0 60px; color:var(--muted); font-size:.9rem}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:8px 22px; align-items:center}
+  footer a{color:var(--muted)} footer a:hover{color:var(--fg)}
+  footer .sp{margin-left:auto}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <span class="brand"><b>Mermaid</b>Kit</span>
+  <nav>
+    <a href="#gallery">Gallery</a>
+    <a href="#lint" class="hide-sm">Self-checking</a>
+    <a href="#api" class="hide-sm">API</a>
+    <a href="https://github.com/2389-research/MermaidKit">GitHub</a>
+  </nav>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <h1>Native Mermaid diagrams in Swift.</h1>
+  <p class="tag">All 30 Mermaid diagram types, parsed, laid out, and rendered in pure Swift — CoreGraphics on Apple, Silica/Cairo on Linux.</p>
+  <div class="hook"><span>No JavaScript</span><span>No WebView</span><span>Zero dependencies</span></div>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/2389-research/MermaidKit">View on GitHub</a>
+    <a class="btn ghost" href="#install">Install</a>
+  </div>
+  <figure class="heroimg">
+    <picture>
+      <source media="(prefers-color-scheme:dark)" srcset="images/hero-dark.png">
+      <img src="images/hero-light.png" alt="MermaidKit's own render pipeline drawn as a sankey diagram, rendered by MermaidKit">
+    </picture>
+  </figure>
+</div></div>
+
+<section id="install"><div class="wrap">
+  <div class="split">
+    <div>
+      <div class="kicker">One line to a diagram</div>
+      <h2>Drop it into SwiftUI.</h2>
+      <p class="lead">A `MermaidView` follows light/dark automatically, sizes to the diagram, caches renders, and describes itself to VoiceOver. That's the whole integration.</p>
+      <div class="kicker" style="margin-top:22px">Install</div>
+<pre>.package(
+  url: "https://github.com/2389-research/MermaidKit.git",
+  from: "1.0.0"
+)</pre>
+    </div>
+    <div>
+<pre>import MermaidRender
+
+MermaidView("""
+flowchart TD
+    A[Start] --&gt; B{Choice}
+    B --&gt;|yes| C[Do it]
+    B --&gt;|no| D[Skip]
+""")</pre>
+    </div>
+  </div>
+</div></section>
+
+<section id="gallery"><div class="wrap">
+  <div class="kicker">The examples are the project documenting itself</div>
+  <h2>Thirty types. Every one a self-portrait.</h2>
+  <p class="lead">The class diagram is the real public API. The sankey hero is the render pipeline. The gitgraph is the actual release history. The same 30 files are the gallery, the lint corpus, and the benchmark suite at once — so the examples can't drift from what the engine does. Follows your system theme.</p>
+  <div class="grid">
+    <figure class="feature"><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/class-dark.png"><img loading="lazy" src="images/types/class.png" alt="Class diagram of MermaidKit's public API"></picture><figcaption><b>class</b> — the real public API, drawn by the library</figcaption></figure>
+    <figure class="feature"><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/sequence-dark.png"><img loading="lazy" src="images/types/sequence.png" alt="Sequence diagram exercising the full feature set"></picture><figcaption><b>sequence</b> — actor figure, typed database head, activation bar, alt/else — the whole feature set in one</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/flowchart-dark.png"><img loading="lazy" src="images/types/flowchart.png" alt="Flowchart"></picture><figcaption><b>flowchart</b> — the render decision flow, fallbacks included</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/sankey-dark.png"><img loading="lazy" src="images/types/sankey.png" alt="Sankey diagram"></picture><figcaption><b>sankey</b> — sources flowing through the pipeline</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/state-dark.png"><img loading="lazy" src="images/types/state.png" alt="State diagram"></picture><figcaption><b>state</b> — a source's lifecycle with the light/dark raster fork</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/er-dark.png"><img loading="lazy" src="images/types/er.png" alt="Entity-relationship diagram"></picture><figcaption><b>er</b> — the scene IR's data model</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/gantt-dark.png"><img loading="lazy" src="images/types/gantt.png" alt="Gantt chart"></picture><figcaption><b>gantt</b> — the 1.0 release program</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/gitgraph-dark.png"><img loading="lazy" src="images/types/gitgraph.png" alt="Git graph"></picture><figcaption><b>gitgraph</b> — the real branch/tag release history</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/architecture-dark.png"><img loading="lazy" src="images/types/architecture.png" alt="Architecture diagram"></picture><figcaption><b>architecture</b> — the module map, author-declared edge sides</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/c4-dark.png"><img loading="lazy" src="images/types/c4.png" alt="C4 context diagram"></picture><figcaption><b>c4</b> — a host app embedding MermaidKit</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/mindmap-dark.png"><img loading="lazy" src="images/types/mindmap.png" alt="Mindmap"></picture><figcaption><b>mindmap</b> — the feature map</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/requirement-dark.png"><img loading="lazy" src="images/types/requirement.png" alt="Requirement diagram"></picture><figcaption><b>requirement</b> — quality requirements traced to their tests</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/journey-dark.png"><img loading="lazy" src="images/types/journey.png" alt="User journey"></picture><figcaption><b>journey</b> — a developer's first week</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/kanban-dark.png"><img loading="lazy" src="images/types/kanban.png" alt="Kanban board"></picture><figcaption><b>kanban</b> — the roadmap board</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/timeline-dark.png"><img loading="lazy" src="images/types/timeline.png" alt="Timeline"></picture><figcaption><b>timeline</b> — project history</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/quadrant-dark.png"><img loading="lazy" src="images/types/quadrant.png" alt="Quadrant chart"></picture><figcaption><b>quadrant</b> — roadmap candidates, effort vs impact</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/xychart-dark.png"><img loading="lazy" src="images/types/xychart.png" alt="XY chart"></picture><figcaption><b>xychart</b> — benchmark numbers with the budget line</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/radar-dark.png"><img loading="lazy" src="images/types/radar.png" alt="Radar chart"></picture><figcaption><b>radar</b> — quality dimensions by release</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/pie-dark.png"><img loading="lazy" src="images/types/pie.png" alt="Pie chart"></picture><figcaption><b>pie</b> — source lines by component</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/packet-dark.png"><img loading="lazy" src="images/types/packet.png" alt="Packet diagram"></picture><figcaption><b>packet</b> — a TCP header</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/treemap-dark.png"><img loading="lazy" src="images/types/treemap.png" alt="Treemap"></picture><figcaption><b>treemap</b> — the source tree by lines</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/treeview-dark.png"><img loading="lazy" src="images/types/treeview.png" alt="Tree view"></picture><figcaption><b>treeview</b> — the source tree with inline notes</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/block-dark.png"><img loading="lazy" src="images/types/block.png" alt="Block diagram"></picture><figcaption><b>block</b> — the render pipeline as blocks</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/swimlane-dark.png"><img loading="lazy" src="images/types/swimlane.png" alt="Swimlane diagram"></picture><figcaption><b>swimlane</b> — parse-to-display across module lanes</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/eventmodeling-dark.png"><img loading="lazy" src="images/types/eventmodeling.png" alt="Event modeling diagram"></picture><figcaption><b>eventmodeling</b> — the render pipeline as an event model</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/ishikawa-dark.png"><img loading="lazy" src="images/types/ishikawa.png" alt="Ishikawa fishbone diagram"></picture><figcaption><b>ishikawa</b> — a "renders wrong" root-cause fishbone</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/wardley-dark.png"><img loading="lazy" src="images/types/wardley.png" alt="Wardley map"></picture><figcaption><b>wardley</b> — the component landscape, evolve arrows toward SVG</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/cynefin-dark.png"><img loading="lazy" src="images/types/cynefin.png" alt="Cynefin diagram"></picture><figcaption><b>cynefin</b> — layout strategies by problem class</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/venn-dark.png"><img loading="lazy" src="images/types/venn.png" alt="Venn diagram"></picture><figcaption><b>venn</b> — gallery = lint corpus = benchmarks</figcaption></figure>
+    <figure><picture><source media="(prefers-color-scheme:dark)" srcset="images/types/zenuml-dark.png"><img loading="lazy" src="images/types/zenuml.png" alt="ZenUML diagram"></picture><figcaption><b>zenuml</b> — the diagnose-and-fix flow</figcaption></figure>
+  </div>
+</div></section>
+
+<section id="lint"><div class="wrap">
+  <div class="kicker">It checks its own work</div>
+  <h2>Layout quality is machine-checked, not eyeballed.</h2>
+  <p class="lead">Every diagram lowers to a machine-readable geometry scene — boxes, edge routes, label frames. A geometry linter checks the invariants of good layout on every CI run: no edge through a box, no line slicing label text, no overlapping nodes, nothing off-canvas, no chart series escaping its plot. Regressions fail CI as named geometric facts, not pixel diffs.</p>
+<pre>edge #3 passes through node "DiagramScene" (165pt inside)</pre>
+  <p class="lead" style="margin-top:22px">Layout is engineered underneath: network-simplex layer assignment (the strategy Graphviz <code>dot</code> defaults to), label-space reservation during layout, chain straightening after coordinate assignment, and edit-stability proven by scene-diff tests — rename a label to same-width text and <em>nothing else moves</em>.</p>
+</div></section>
+
+<section id="api"><div class="wrap">
+  <div class="kicker">One call, one image — or pure geometry</div>
+  <h2>An API that meets you where you are.</h2>
+  <div class="feats" style="margin-top:20px">
+    <div><h3>SwiftUI drop-in</h3><p><code>MermaidView(source, theme:spacing:)</code> — light/dark aware, self-sizing, cached, VoiceOver-described.</p></div>
+    <div><h3>Image, PDF, attributed string</h3><p><code>MermaidRenderer.image / pdfData / attachmentString</code> — same layout and draw code; vector PDF for crisp export and print.</p></div>
+    <div><h3>Accessibility from day one</h3><p><code>altText(source:)</code> generates a deterministic content description for every one of the 30 types.</p></div>
+    <div><h3>Themed with a single value</h3><p><code>DiagramTheme</code> — six colors plus a categorical palette re-skin all 30 types at once; <code>DiagramSpacing</code> sets density.</p></div>
+    <div><h3>Diagnose parse failures</h3><p><code>MermaidParser.diagnose(_:)</code> explains failures with line numbers and did-you-mean suggestions for typo'd headers.</p></div>
+    <div><h3>Headless geometry</h3><p>The parse → layout → scene pipeline is platform-free — no AppKit/UIKit. Tools get frames, polylines, and label boxes without rendering a pixel.</p></div>
+  </div>
+</div></section>
+
+<section id="numbers"><div class="wrap">
+  <div class="kicker">Numbers over adjectives</div>
+  <h2>What it costs, plainly.</h2>
+  <div class="stats" style="margin-top:20px">
+    <div class="stat"><div class="n">30</div><div class="l">diagram types, natively</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">dependencies, JS, or WebView</div></div>
+    <div class="stat"><div class="n">~25 ms</div><div class="l">worst cold render incl. rasterization (sankey); most types 2–12 ms</div></div>
+    <div class="stat"><div class="n">188</div><div class="l">tests in CI, macOS + Linux</div></div>
+    <div class="stat"><div class="n">2</div><div class="l">render backends: CoreGraphics + Silica/Cairo</div></div>
+    <div class="stat"><div class="n">MIT</div><div class="l">license</div></div>
+  </div>
+  <p class="lead" style="margin-top:22px">Repeat renders hit an in-memory cache keyed by (source, theme, spacing). Input caps mirror mermaid.js — 50,000-character sources, 500 flowchart edges; oversized input returns nil fast. Requires Swift 6.2 / Xcode 26. Platforms: macOS 14+, iOS 17+, visionOS 1+, and Linux (via the <code>LinuxRaster</code> package trait).</p>
+</div></section>
+
+<section id="adapt"><div class="wrap">
+  <div class="kicker">Built to adapt</div>
+  <h2>It behaves well when the input doesn't.</h2>
+  <div class="feats" style="margin-top:20px">
+    <div><h3>Nothing breaks the host app</h3><p>Unknown dialects degrade to readable monospaced source. Styling directives are ignored, not fatal. Garbage, 100k-character labels, and NaN/Infinity are contained by an adversarial test suite with numeric sanitation at the parser boundary.</p></div>
+    <div><h3>What you wrote is what parses</h3><p>A dedicated "parser honesty" effort eliminated silent content loss and phantom content across the parsers — each fix pinned by a regression test using the exact previously-broken syntax.</p></div>
+    <div><h3>Apple and Linux, one code path</h3><p>The same layout and per-type draw code renders through a single <code>CGContext</code> seam: CoreGraphics/CoreText on Apple, Silica/Cairo/FontConfig on Linux.</p></div>
+    <div><h3>Honest support matrix</h3><p>The README states plainly what parses, what's ignored, and what's a known gap worth filing. An SVG backend and lower OS floors sit at the top of the roadmap.</p></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>MermaidKit — MIT licensed</span>
+  <a href="https://github.com/2389-research/MermaidKit">GitHub</a>
+  <a href="https://github.com/2389-research/MermaidKit/releases/latest">Latest release</a>
+  <a href="https://mermaid.js.org">Mermaid syntax</a>
+  <span class="sp">No analytics. No trackers. No network.</span>
+</div></footer>
+
+</body>
+</html>

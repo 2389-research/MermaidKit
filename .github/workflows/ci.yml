@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: swift test (macOS)
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # The package manifest is swift-tools-version 6.2 and uses package traits
+      # (SwiftPM 6.1+) to gate the Linux Silica backend, so the toolchain floor
+      # is Swift 6.2 / Xcode 26 on every platform.
+      - name: Select newest Xcode 26
+        run: sudo xcode-select -s "$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' -print | sort -V | tail -n 1)"
+      - name: Swift version
+        run: swift --version
+      - name: Build (strict concurrency is the default in Swift 6 mode)
+        run: swift build
+      - name: Test
+        run: swift test
+
+      # The UIKit render branch has no test host, but it must always COMPILE —
+      # v0.1.0 shipped an iOS-only build break precisely because nothing
+      # exercised this branch.
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          # Log to a file so compile DIAGNOSTICS survive failure — a bare
+          # `tail -30` once ate the error text and left only the list of
+          # failed compile commands.
+          if ! xcodebuild -scheme MermaidRender \
+            -destination 'generic/platform=iOS Simulator' build > ios-build.log 2>&1; then
+            grep -E "error:" ios-build.log | sort -u | head -40
+            tail -20 ios-build.log
+            exit 1
+          fi
+          tail -5 ios-build.log
+
+  linux:
+    name: swift test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+      # MermaidRender's Linux backend draws with Silica (Cairo/FontConfig), so
+      # the container needs the graphics + font system libraries and a font.
+      # (Off-Apple, MermaidLayout must build on swift-corelibs-foundation where
+      # CoreGraphics is absent — this Linux job is what caught the CGVector
+      # break, issue #2 — and MermaidRender now also builds + renders here.)
+      - name: Install Cairo/FontConfig
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libcairo2-dev libfontconfig1-dev pkg-config fonts-dejavu-core fontconfig
+          fc-cache -f
+      - name: Swift version
+        run: swift --version
+      # The Silica raster backend is behind the `LinuxRaster` trait (default
+      # OFF, so Apple consumers stay Silica-free — see Package.swift). The Linux
+      # job is the one place that opts in, so it both exercises the backend AND
+      # proves the trait actually pulls Silica into the graph.
+      - name: Build (whole package, incl. the Silica render backend)
+        run: swift build --traits LinuxRaster
+      # Runs MermaidLayoutTests (159) plus LinuxRenderTests (the Silica render
+      # smoke tests); the Apple-only render tests compile away here.
+      - name: Test
+        run: swift test --traits LinuxRaster
+      # The platform-free core must ALSO build with the default (Silica-free)
+      # graph on Linux — that is exactly the configuration a headless
+      # `from:`-pinned consumer gets, and it must never regress.
+      - name: Build MermaidLayout with default traits (Silica-free graph)
+        run: swift build --target MermaidLayout

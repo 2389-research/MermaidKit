@@ -1,0 +1,26 @@
+treeView-beta
+    MermaidKit/
+        Package.swift ## one manifest, zero dependencies
+        Sources/
+            MermaidLayout/
+                MermaidParser.swift ## 30 dialect headers
+                DiagramLayoutLayering.swift ## network simplex
+                DiagramScene.swift ## the geometry linter
+                DiagramSceneDiff.swift ## SceneDelta stability diffs
+                MermaidAltText.swift ## VoiceOver descriptions
+            MermaidRender/
+                DiagramRenderer.swift ## one render plan, every format
+                DiagramRenderer+PDF.swift ## vector export
+                DiagramTheme.swift ## six colors + palette
+                MermaidView.swift ## the SwiftUI drop-in
+        Fixtures/
+            diagrams/ ## gallery = lint corpus = benchmarks
+        Tests/
+            MermaidLayoutTests/
+                LayoutLintTests.swift ## every fixture, every invariant
+                StabilityTests.swift ## edits must not teleport
+            MermaidRenderTests/
+                RenderBenchmarks.swift ## rasterized, honest numbers
+        docs/
+            GALLERY.md
+            images/ ## 60 self-portraits

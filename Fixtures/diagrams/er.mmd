@@ -1,0 +1,62 @@
+erDiagram
+    DIAGRAM {
+        string typeName
+        string source
+        int nodeCount
+    }
+    SCENE {
+        uuid id
+        cgsize canvas
+        string fingerprint
+    }
+    NODE {
+        string id
+        cgrect frame
+        bool isContainer
+    }
+    EDGE {
+        uuid id
+        string label
+        int pointCount
+    }
+    LABEL {
+        string text
+        cgrect frame
+    }
+    VIOLATION {
+        string kind
+        string severity
+        string detail
+    }
+    THEME {
+        string fingerprint
+        int paletteCount
+        bool prefersDark
+    }
+    SPACING {
+        cgfloat scale
+        cgfloat nodeGap
+        cgfloat layerGap
+    }
+    FIXTURE {
+        string name
+        string dialect
+        int lineCount
+    }
+    BENCHMARK {
+        string diagram
+        cgfloat coldMillis
+        date measuredAt
+    }
+    DIAGRAM ||--|| SCENE : "lowers to"
+    SCENE ||--o{ NODE : places
+    SCENE ||--o{ EDGE : routes
+    SCENE ||--o{ LABEL : anchors
+    NODE ||--o{ NODE : contains
+    EDGE }o..o{ LABEL : "reserves space for"
+    SCENE ||--o{ VIOLATION : "linted into"
+    THEME ||--o{ SCENE : skins
+    SPACING ||--o{ SCENE : densifies
+    FIXTURE ||--|| DIAGRAM : "parses into"
+    FIXTURE ||--o{ BENCHMARK : "measured by"
+    VIOLATION }o..|| FIXTURE : "regressions blame"

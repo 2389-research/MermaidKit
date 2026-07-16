@@ -1,0 +1,26 @@
+gantt
+    title MermaidKit 1.0 Release Program
+    dateFormat YYYY-MM-DD
+    section Foundation
+    Extract engine into package      :done, ext, 2026-06-20, 6d
+    Theme seam + public API          :done, api, after ext, 4d
+    v0.1.0 tag & CI                  :milestone, m1, after api, 0d
+    section Hardening
+    Adversarial input suite          :done, adv, after m1, 3d
+    Crash & hang fixes               :done, crash, after adv, 2d
+    Benchmarks with rasterization    :done, bench, after crash, 2d
+    Swift 6 language mode            :done, s6, after bench, 1d
+    v0.1.1 iOS fix                   :milestone, m2, after s6, 0d
+    section Layout Engine
+    Network-simplex layering         :done, simplex, after m2, 3d
+    Label space reservation          :done, labels, after simplex, 3d
+    Fixed-side ports                 :done, ports, after labels, 2d
+    DiagramSpacing presets           :done, spacing, after ports, 2d
+    Edit stability + SceneDelta      :done, stable, after spacing, 2d
+    v0.2.0 release                   :milestone, m3, after stable, 0d
+    section Toward 1.0
+    SVG backend over scene IR        :active, svg, after m3, 14d
+    Lower OS floors with CI proof    :floors, after m3, 10d
+    Fuzz corpus growth               :fuzz, after svg, 7d
+    API stability review             :apirev, after floors, 5d
+    v1.0 release                     :milestone, m4, after apirev, 0d

@@ -1,0 +1,75 @@
+requirementDiagram
+    requirement engine_quality {
+        id: SYS-1
+        text: The engine shall lay out every supported dialect without geometric defects
+        risk: high
+        verifymethod: analysis
+    }
+    functionalRequirement graceful_degradation {
+        id: FUN-1.1
+        text: Unparseable sources shall degrade to visible fallbacks never blanks
+        risk: medium
+        verifymethod: test
+    }
+    functionalRequirement explainable_failure {
+        id: FUN-1.2
+        text: Parse failures shall be explainable with line numbers and suggestions
+        risk: low
+        verifymethod: demonstration
+    }
+    performanceRequirement cold_render_budget {
+        id: PRF-2.1
+        text: Every dense fixture shall render cold in under two hundred fifty milliseconds
+        risk: high
+        verifymethod: test
+    }
+    performanceRequirement edit_stability {
+        id: PRF-2.2
+        text: A same-width label rename shall move zero nodes and reroute zero edges
+        risk: medium
+        verifymethod: test
+    }
+    interfaceRequirement theme_seam {
+        id: IFC-3.1
+        text: All styling shall flow through one theme value with a stable fingerprint
+        risk: low
+        verifymethod: inspection
+    }
+    designConstraint zero_dependencies {
+        id: CON-5.1
+        text: The package shall depend on no code outside the Apple SDKs
+        risk: medium
+        verifymethod: inspection
+    }
+    element layout_linter {
+        type: module
+        docref: SceneGeometryAndLinting
+    }
+    element adversarial_suite {
+        type: test
+        docref: AdversarialInputTests
+    }
+    element render_benchmarks {
+        type: test
+        docref: RenderBenchmarks
+    }
+    element stability_tests {
+        type: test
+        docref: StabilityTests
+    }
+    element package_manifest {
+        type: manifest
+        docref: Package.swift
+    }
+    graceful_degradation - deriveReqt -> engine_quality
+    explainable_failure - deriveReqt -> engine_quality
+    cold_render_budget - refines -> engine_quality
+    edit_stability - refines -> engine_quality
+    theme_seam - traces -> engine_quality
+    layout_linter - satisfies -> engine_quality
+    adversarial_suite - verifies -> graceful_degradation
+    render_benchmarks - verifies -> cold_render_budget
+    stability_tests - verifies -> edit_stability
+    package_manifest - satisfies -> zero_dependencies
+    zero_dependencies - copies -> theme_seam
+    layout_linter - contains -> stability_tests

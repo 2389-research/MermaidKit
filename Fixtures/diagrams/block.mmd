@@ -1,0 +1,20 @@
+block-beta
+    columns 5
+    src["Fenced source"] parse["MermaidParser"] model[("Typed model")] engine["Layout engine"] sceneIR[("Scene IR")]
+    caps["Input caps"] diag["diagnose()"] space:1 spacing["DiagramSpacing"] linter{{"Layout linter"}}
+    space:5
+    theme["DiagramTheme"] renderer["CoreGraphics renderer"] cache[("Render cache")] view["MermaidView"] host["Host app"]
+
+    src --> parse
+    caps --> parse
+    parse --> model
+    parse --> diag
+    model --> engine
+    spacing --> engine
+    engine --> sceneIR
+    sceneIR --> linter
+    sceneIR --> renderer
+    theme --> renderer
+    renderer --> cache
+    cache --> view
+    view --> host

@@ -1,0 +1,39 @@
+architecture-beta
+    group parsing(server)[Parsing]
+    group layout(server)[Layout Engine]
+    group render(cloud)[Render Layer]
+    group quality(logging)[Quality Gates]
+
+    service parser(server)[Per-type parsers] in parsing
+    service diagnostics(server)[diagnose] in parsing
+    service models(database)[Typed models] in parsing
+    service layering(server)[Network simplex] in layout
+    service ordering(server)[Barycenter order] in layout
+    service placement(server)[Brandes-Koepf] in layout
+    service routing(server)[Edge routing] in layout
+    service scene(database)[Scene IR] in layout
+    service theme(disk)[DiagramTheme] in render
+    service renderer(server)[CoreGraphics draw] in render
+    service cache(database)[Render cache] in render
+    service view(server)[MermaidView] in render
+    service linter(logging)[Layout linter] in quality
+    service budgets(logging)[Metric budgets] in quality
+    service fuzz(logging)[Adversarial suite] in quality
+    junction gatecheck
+
+    parser:B --> T:models
+    parser:R --> L:diagnostics
+    models:R --> L:layering
+    layering:B --> T:ordering
+    ordering:B --> T:placement
+    placement:R --> L:routing
+    routing:B --> T:scene
+    scene:R --> L:renderer
+    theme:B --> T:renderer
+    renderer:B --> T:cache
+    cache:R --> L:view
+    scene:B --> T:gatecheck
+    gatecheck:B --> T:linter
+    linter:R --> L:budgets
+    fuzz:T --> B:parser
+    budgets:T <-- R:renderer
