@@ -164,6 +164,15 @@ public enum DiagramLayoutLinter {
     ///   their route by design). `backed` labels downgrade to the
     ///   `edge-under-label` WARNING instead — the chip keeps text readable,
     ///   but a line vanishing under a chip is still placement worth fixing.
+    /// - `label-on-fixture` (node-graph families): an edge-label frame lands ON
+    ///   a fixture — an interior bend of any edge, a crossing/junction of two
+    ///   edges, another edge-label frame, a node box, or within the clearance of
+    ///   a foreign edge's arrowhead tip. A caption belongs on a clean straight
+    ///   stretch with room around it, not a corner, an intersection, or crammed
+    ///   against an arrowhead.
+    /// - `label-crowds-edge` (node-graph families): the straight run an edge
+    ///   label sits on is barely longer than the text, leaving under `minStub`
+    ///   (10pt) of visible connector on a side — the line all but vanishes.
     ///
     /// Warnings:
     /// - `labels-overlap`: two labels share more than 4pt² of area.
@@ -315,6 +324,128 @@ public enum DiagramLayoutLinter {
             }
         }
 
+        // 4c/4d. Edge-label placement quality (node-graph families only, where
+        //     every edge label annotates a routed connector between two boxes).
+        //     A caption must sit centered on a clean, straight stretch of its
+        //     route with a visible connector stub on each side. Two defects,
+        //     each an unambiguous geometric fact:
+        //
+        //     - `label-on-fixture`: the caption frame lands ON a fixture — an
+        //       interior bend (a corner) of any edge, a crossing/junction of two
+        //       edges, another edge-label frame, or a node box. A label on a
+        //       turn or an intersection reads as noise, not a caption.
+        //     - `label-crowds-edge`: the straight run the caption sits on is
+        //       barely longer than the text, leaving under `minStub` of visible
+        //       connector on a side — the line all but vanishes behind the word.
+        if scene.name == "flowchart" || scene.name == "state" {
+            let minStub: CGFloat = 10
+            // A caption must also breathe around an ARROWHEAD — a foreign edge's
+            // head end (its last polyline point). A label crammed against an
+            // arrowhead reads as noise even when it clears the shaft, so the same
+            // comfortable clearance the placer keeps is a hard rule here.
+            let arrowClearance: CGFloat = 10
+            let edgeLabels = scene.labels.enumerated().filter { $0.element.anchorEdge != nil }
+
+            // Interior bends of every edge (endpoints are node anchors, not
+            // fixtures), and the crossing points of every pair of edges.
+            var bends: [(edge: Int, p: CGPoint)] = []
+            for (ei, edge) in scene.edges.enumerated() where edge.polyline.count > 2 {
+                for p in edge.polyline[1..<(edge.polyline.count - 1)] { bends.append((ei, p)) }
+            }
+            var crossings: [CGPoint] = []
+            for i in scene.edges.indices where scene.edges[i].polyline.count >= 2 {
+                for j in scene.edges.indices where j > i && scene.edges[j].polyline.count >= 2 {
+                    let pi = scene.edges[i].polyline, pj = scene.edges[j].polyline
+                    for a in 0..<(pi.count - 1) {
+                        for b in 0..<(pj.count - 1) {
+                            if let p = segmentCrossPoint(pi[a], pi[a + 1], pj[b], pj[b + 1]) {
+                                crossings.append(p)
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (li, label) in edgeLabels {
+                let probe = label.frame.insetBy(dx: -1, dy: -1)
+                // On a bend of any edge (a corner).
+                for bend in bends where probe.contains(bend.p) {
+                    out.append(.init(.error, "label-on-fixture",
+                        "label \"\(label.text)\" sits on a bend of edge #\(bend.edge) at (\(Int(bend.p.x)),\(Int(bend.p.y)))"))
+                }
+                // On a crossing/junction of two edges.
+                for x in crossings where probe.contains(x) {
+                    out.append(.init(.error, "label-on-fixture",
+                        "label \"\(label.text)\" sits on an edge crossing at (\(Int(x.x)),\(Int(x.y)))"))
+                }
+                // On another edge-label frame.
+                for (lj, other) in edgeLabels
+                where lj > li && overlapArea(label.frame, other.frame) > 8 {
+                    out.append(.init(.error, "label-on-fixture",
+                        "labels \"\(label.text)\" and \"\(other.text)\" overlap on their routes"))
+                }
+                // On a node box (covering a third of the caption or more).
+                for node in boxes where overlapArea(label.frame, node.frame.insetBy(dx: 2, dy: 2))
+                    > 0.34 * label.frame.width * label.frame.height {
+                    out.append(.init(.error, "label-on-fixture",
+                        "label \"\(label.text)\" sits on node \"\(node.id)\""))
+                }
+                // Within the clearance of a FOREIGN arrowhead tip. The label's
+                // own route's head is exempt — its stub already reserves the run
+                // end — so only other edges' heads count.
+                for (ei, edge) in scene.edges.enumerated() where ei != label.anchorEdge {
+                    guard let tip = edge.polyline.last else { continue }
+                    let dx = max(label.frame.minX - tip.x, 0, tip.x - label.frame.maxX)
+                    let dy = max(label.frame.minY - tip.y, 0, tip.y - label.frame.maxY)
+                    if hypot(dx, dy) < arrowClearance {
+                        out.append(.init(.error, "label-on-fixture",
+                            "label \"\(label.text)\" crowds the arrowhead of edge #\(ei) at (\(Int(tip.x)),\(Int(tip.y)))"))
+                    }
+                }
+            }
+
+            // Crowding: measure the stub left on each side of the caption on the
+            // ARROW-FREE run it sits on (the nearest segment of its own route,
+            // minus the arrowhead the head end eats). Measuring against the full
+            // segment let a caption sit `minStub` clear of the segment end yet
+            // still hug the arrowhead; excluding the arrowhead length first
+            // catches exactly that. Scoped to the flowchart placer, which
+            // centers on the arrow-free run (`placeRunLabels` head inset); the
+            // state placer still uses the full run, so its measure matches.
+            let headEat: CGFloat = scene.name == "flowchart"
+                ? DiagramLayoutEngine.flowchartArrowheadLen : 0
+            for (_, label) in edgeLabels {
+                guard let ae = label.anchorEdge, scene.edges.indices.contains(ae) else { continue }
+                let poly = scene.edges[ae].polyline
+                guard poly.count >= 2 else { continue }
+                let c = CGPoint(x: label.frame.midX, y: label.frame.midY)
+                var nearest: (a: CGPoint, b: CGPoint, d: CGFloat)?
+                for (a, b) in zip(poly, poly.dropFirst()) {
+                    let d = pointSegmentDistance(c, a, b)
+                    if nearest == nil || d < nearest!.d { nearest = (a, b, d) }
+                }
+                guard let seg = nearest else { continue }
+                let horiz = abs(seg.a.x - seg.b.x) >= abs(seg.a.y - seg.b.y)
+                var lo = horiz ? min(seg.a.x, seg.b.x) : min(seg.a.y, seg.b.y)
+                var hi = horiz ? max(seg.a.x, seg.b.x) : max(seg.a.y, seg.b.y)
+                // When this is the head segment (ends at the arrowhead tip),
+                // shrink that side so the stub is measured against the visible,
+                // arrow-free connector.
+                if headEat > 0, let head = poly.last,
+                   hypot(seg.b.x - head.x, seg.b.y - head.y) < 0.5 {
+                    let bAlong = horiz ? seg.b.x : seg.b.y
+                    if abs(bAlong - hi) < 0.5 { hi -= headEat } else { lo += headEat }
+                }
+                let along = horiz ? label.frame.width : label.frame.height
+                let cc = horiz ? c.x : c.y
+                let stub = min((cc - along / 2) - lo, hi - (cc + along / 2))
+                if stub < minStub {
+                    out.append(.init(.error, "label-crowds-edge",
+                        "label \"\(label.text)\" leaves a \(Int(max(stub, 0)))pt stub (min \(Int(minStub))) on edge #\(ae)"))
+                }
+            }
+        }
+
         // 5. Marks escaping the plot: when a sole DOMINANT container bounds
         //    the data region (a chart plot covering most of the canvas), no
         //    edge may leave it — catches a line/series running off the chart.
@@ -422,6 +553,31 @@ public enum DiagramLayoutLinter {
         let bl = CGPoint(x: r.minX, y: r.maxY), br = CGPoint(x: r.maxX, y: r.maxY)
         return segmentsCross(a, b, tl, tr) || segmentsCross(a, b, tr, br)
             || segmentsCross(a, b, br, bl) || segmentsCross(a, b, bl, tl)
+    }
+
+    /// The intersection point of segments a–b and c–d when they properly cross
+    /// (strictly interior to both); nil for parallel, collinear, or endpoint
+    /// touches (a T-junction is a join, not a crossing).
+    static func segmentCrossPoint(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) -> CGPoint? {
+        let r = CGPoint(x: b.x - a.x, y: b.y - a.y)
+        let s = CGPoint(x: d.x - c.x, y: d.y - c.y)
+        let denom = r.x * s.y - r.y * s.x
+        guard abs(denom) > 1e-9 else { return nil }
+        let qp = CGPoint(x: c.x - a.x, y: c.y - a.y)
+        let t = (qp.x * s.y - qp.y * s.x) / denom
+        let u = (qp.x * r.y - qp.y * r.x) / denom
+        guard t > 1e-6, t < 1 - 1e-6, u > 1e-6, u < 1 - 1e-6 else { return nil }
+        return CGPoint(x: a.x + t * r.x, y: a.y + t * r.y)
+    }
+
+    /// Distance from point `p` to segment a→b (0 when p lies on it).
+    static func pointSegmentDistance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let len2 = dx * dx + dy * dy
+        if len2 < 1e-9 { return hypot(p.x - a.x, p.y - a.y) }
+        var t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2
+        t = min(max(t, 0), 1)
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
     }
 
     /// Intersection area of two rects; 0 when disjoint.
