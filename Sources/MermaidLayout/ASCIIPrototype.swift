@@ -42,12 +42,51 @@ extension ASCIIMetrics {
     }
 }
 
+// MARK: - Truecolor (Tier 4 palette)
+
+/// A 24-bit sRGB color emitted as an ANSI `SGR 38;2;r;g;b` foreground sequence.
+public struct ANSIColor: Equatable, Sendable {
+    public let r: UInt8, g: UInt8, b: UInt8
+    public init(_ r: UInt8, _ g: UInt8, _ b: UInt8) { self.r = r; self.g = g; self.b = b }
+    /// From a `0xRRGGBB` literal.
+    public init(hex: UInt32) {
+        self.init(UInt8((hex >> 16) & 0xFF), UInt8((hex >> 8) & 0xFF), UInt8(hex & 0xFF))
+    }
+    var setForeground: String { "\u{1B}[38;2;\(r);\(g);\(b)m" }
+    static let reset = "\u{1B}[0m"
+}
+
+/// The mermaid palette, and how each diagram element maps onto it. The user
+/// runs the colored output (this process can't see it), so the mapping is
+/// documented here and mirrored in the demo CLI's `--help`.
+public enum MermaidPalette {
+    public static let deepTeal = ANSIColor(hex: 0x123C4A)   // muted structure
+    public static let seafoam  = ANSIColor(hex: 0x39D6C5)   // node borders/labels
+    public static let coral    = ANSIColor(hex: 0xFF8FA3)   // arrowheads/highlights
+    public static let lavender = ANSIColor(hex: 0xC9B6FF)   // decision nodes
+
+    /// Border + label color for a node of the given shape.
+    static func nodeColor(_ shape: Flowchart.NodeShape) -> ANSIColor {
+        shape == .diamond ? lavender : seafoam
+    }
+    static let containerColor = deepTeal   // subgraph boxes recede
+    static let edgeColor = deepTeal        // wires: muted
+    static let arrowColor = coral          // arrowheads: highlight
+    static let labelColor = coral          // edge captions / free labels
+}
+
+/// How the renderer colors its output. `plain` emits no escapes at all.
+public enum ASCIIColorMode: Sendable { case plain, truecolor }
+
 // MARK: - Bit-plane canvas
 
 /// A character grid painted with the bit-mask technique. Edges never place a
 /// glyph directly; they OR direction bits (Up/Down/Left/Right) into cells, and
 /// at finalize each cell's 4-bit mask resolves to the one box-drawing glyph that
 /// has exactly those arms. Crossings and T-junctions then fall out for free.
+///
+/// A parallel per-cell foreground-color plane rides alongside so the same grid
+/// can emit either plain Unicode or Tier-4 truecolor.
 final class Canvas {
     struct Dir {
         static let up: UInt8 = 1
@@ -58,6 +97,7 @@ final class Canvas {
 
     let cols: Int
     let rows: Int
+    let colorMode: ASCIIColorMode
     /// Per-cell direction mask (the bit plane the edges/borders write into).
     private var mask: [UInt8]
     /// Per-cell hard glyph override (labels, arrowheads) — wins over the mask.
@@ -65,14 +105,18 @@ final class Canvas {
     /// Per-cell "occupied by a solid box" plane. Edge bits dropped on reserved
     /// cells, so a wire can never draw through a node interior or border.
     private var reserved: [Bool]
+    /// Per-cell foreground color (truecolor plane). nil = terminal default.
+    private var fg: [ANSIColor?]
 
-    init(cols: Int, rows: Int) {
+    init(cols: Int, rows: Int, colorMode: ASCIIColorMode = .plain) {
         self.cols = max(1, cols)
         self.rows = max(1, rows)
+        self.colorMode = colorMode
         let n = self.cols * self.rows
         mask = Array(repeating: 0, count: n)
         glyph = Array(repeating: nil, count: n)
         reserved = Array(repeating: false, count: n)
+        fg = Array(repeating: nil, count: n)
     }
 
     private func inBounds(_ r: Int, _ c: Int) -> Bool {
@@ -88,18 +132,25 @@ final class Canvas {
         inBounds(r, c) ? reserved[idx(r, c)] : true
     }
 
+    private func paint(_ r: Int, _ c: Int, _ color: ANSIColor?) {
+        guard let color, inBounds(r, c) else { return }
+        fg[idx(r, c)] = color
+    }
+
     /// OR direction bits into a cell's mask (dropped if the cell is reserved,
     /// unless `force` — node borders are drawn with force so the box outline
     /// survives its own reservation).
-    func addBits(_ r: Int, _ c: Int, _ bits: UInt8, force: Bool = false) {
+    func addBits(_ r: Int, _ c: Int, _ bits: UInt8, force: Bool = false, color: ANSIColor? = nil) {
         guard inBounds(r, c) else { return }
         if reserved[idx(r, c)] && !force { return }
         mask[idx(r, c)] |= bits
+        paint(r, c, color)
     }
 
-    func setGlyph(_ r: Int, _ c: Int, _ ch: Character) {
+    func setGlyph(_ r: Int, _ c: Int, _ ch: Character, color: ANSIColor? = nil) {
         guard inBounds(r, c) else { return }
         glyph[idx(r, c)] = ch
+        paint(r, c, color)
     }
 
     /// Map a 4-bit direction mask to its box-drawing glyph.
@@ -124,21 +175,39 @@ final class Canvas {
         }
     }
 
+    /// The resolved glyph at a cell (hard override, else mask glyph, else space).
+    private func resolved(_ r: Int, _ c: Int) -> Character {
+        if let g = glyph[idx(r, c)] { return g }
+        let m = mask[idx(r, c)]
+        return m == 0 ? " " : glyphForMask(m)
+    }
+
     func render() -> String {
         var lines: [String] = []
         lines.reserveCapacity(rows)
         for r in 0..<rows {
+            // Find the last non-blank column so trailing padding (and its color
+            // runs) are dropped without leaving a dangling escape.
+            var lastCol = -1
+            for c in 0..<cols where resolved(r, c) != " " { lastCol = c }
+            guard lastCol >= 0 else { lines.append(""); continue }
+
             var line = ""
-            for c in 0..<cols {
-                if let g = glyph[idx(r, c)] {
-                    line.append(g)
-                } else {
-                    let m = mask[idx(r, c)]
-                    line.append(m == 0 ? " " : glyphForMask(m))
+            var active: ANSIColor? = nil
+            for c in 0...lastCol {
+                let ch = resolved(r, c)
+                if colorMode == .truecolor {
+                    // Spaces carry no color; close any open run over a gap.
+                    let want: ANSIColor? = (ch == " ") ? nil : fg[idx(r, c)]
+                    if want != active {
+                        if want == nil { line += ANSIColor.reset }
+                        else { line += want!.setForeground }
+                        active = want
+                    }
                 }
+                line.append(ch)
             }
-            // Trim trailing spaces.
-            while line.hasSuffix(" ") { line.removeLast() }
+            if colorMode == .truecolor && active != nil { line += ANSIColor.reset }
             lines.append(line)
         }
         // Trim trailing all-blank rows.
@@ -155,33 +224,44 @@ public enum ASCIIRenderer {
     private static func row(_ y: CGFloat) -> Int { Int((y / ASCIIMetrics.ch).rounded()) }
 
     /// Parse → lower with the monospace measurer → quantize → draw. Returns nil
-    /// for non-flowchart sources (POC scope).
-    public static func asciiRenderFlowchart(_ source: String) -> String? {
+    /// for non-flowchart sources (POC scope). `color` selects plain Unicode or
+    /// Tier-4 truecolor.
+    public static func asciiRenderFlowchart(_ source: String,
+                                            color: ASCIIColorMode = .plain) -> String? {
         guard let diagram = MermaidParser.parse(source) else { return nil }
         guard case .flowchart(let chart) = diagram else { return nil }
         let scene = DiagramScene.lower(diagram, measure: ASCIIMetrics.measurer)
         // The scene keeps each node's *identifier* (A, B) as its id, having
-        // dropped the display label during lowering. Recover the id→label map
-        // from the same layout so boxes read "Start", not "A". Geometry still
-        // comes wholly from the scene.
+        // dropped the display label AND shape during lowering. Recover both from
+        // the same layout so boxes read "Start" (not "A") and a decision node
+        // draws as a diamond (not a rectangle). Geometry still comes wholly from
+        // the scene.
         let layout = DiagramLayoutEngine.layout(chart, measure: ASCIIMetrics.measurer)
         var labelForID: [String: String] = [:]
-        for n in layout.nodes where !n.label.isEmpty { labelForID[n.id] = n.label }
-        return draw(scene, labelForID: labelForID)
+        var shapeForID: [String: Flowchart.NodeShape] = [:]
+        for n in layout.nodes {
+            if !n.label.isEmpty { labelForID[n.id] = n.label }
+            shapeForID[n.id] = n.shape
+        }
+        return draw(scene, labelForID: labelForID, shapeForID: shapeForID, color: color)
     }
 
-    /// Draw an already-lowered flowchart scene. `labelForID` supplies human
-    /// display text for node boxes keyed by the scene node's id (optional).
-    static func draw(_ scene: DiagramScene, labelForID: [String: String] = [:]) -> String {
+    /// Draw an already-lowered flowchart scene. `labelForID`/`shapeForID` supply
+    /// human display text and node outline keyed by the scene node's id.
+    static func draw(_ scene: DiagramScene,
+                     labelForID: [String: String] = [:],
+                     shapeForID: [String: Flowchart.NodeShape] = [:],
+                     color: ASCIIColorMode = .plain) -> String {
         let cols = min(400, col(scene.size.width) + 1)
         let rows = min(400, row(scene.size.height) + 1)
-        let canvas = Canvas(cols: cols, rows: rows)
+        let canvas = Canvas(cols: cols, rows: rows, colorMode: color)
 
         // 1. Reserve + outline solid node boxes first, so edges drawn later are
         //    dropped over box interiors/borders. Containers only get an outline
         //    (their interior legitimately holds child nodes and their wires).
         for node in scene.nodes {
-            drawBox(node, label: labelForID[node.id] ?? node.id,
+            let shape = node.isContainer ? nil : shapeForID[node.id]
+            drawBox(node, label: labelForID[node.id] ?? node.id, shape: shape,
                     on: canvas, reserveInterior: !node.isContainer)
         }
 
@@ -195,7 +275,7 @@ public enum ASCIIRenderer {
         for label in scene.labels {
             place(text: label.text,
                   centerX: label.frame.midX, centerY: label.frame.midY,
-                  on: canvas, reserving: false)
+                  on: canvas, reserving: false, color: MermaidPalette.labelColor)
         }
 
         return canvas.render()
@@ -203,10 +283,20 @@ public enum ASCIIRenderer {
 
     // MARK: box
 
-    private static func drawBox(_ node: DiagramScene.Node, label: String, on canvas: Canvas, reserveInterior: Bool) {
+    /// Draw a node box. `shape == nil` (containers) always draws a plain
+    /// rectangle; otherwise the outline is styled per shape. Approximations are
+    /// deliberate — the goal is that a decision node is unmistakably *not* a
+    /// rectangle in a monospace grid.
+    private static func drawBox(_ node: DiagramScene.Node, label: String,
+                                shape: Flowchart.NodeShape?, on canvas: Canvas,
+                                reserveInterior: Bool) {
         let c0 = col(node.frame.minX), c1 = col(node.frame.maxX)
         let r0 = row(node.frame.minY), r1 = row(node.frame.maxY)
         guard c1 > c0, r1 > r0 else { return }
+
+        let effectiveShape = shape ?? .rectangle
+        let stroke = node.isContainer ? MermaidPalette.containerColor
+                                      : MermaidPalette.nodeColor(effectiveShape)
 
         // Reserve the whole footprint (interior + border) for solid nodes so no
         // wire can cross them.
@@ -214,29 +304,72 @@ public enum ASCIIRenderer {
             for r in r0...r1 { for c in c0...c1 { canvas.reserve(r, c) } }
         }
 
-        // Border via the bit mask so corners/junctions join cleanly. `force`
-        // because the border cells are themselves reserved.
+        // Horizontal + vertical edges via the bit mask so corners/junctions join
+        // cleanly. `force` because the border cells are themselves reserved.
         for c in (c0 + 1)..<c1 {
-            canvas.addBits(r0, c, Canvas.Dir.left | Canvas.Dir.right, force: true)
-            canvas.addBits(r1, c, Canvas.Dir.left | Canvas.Dir.right, force: true)
+            canvas.addBits(r0, c, Canvas.Dir.left | Canvas.Dir.right, force: true, color: stroke)
+            canvas.addBits(r1, c, Canvas.Dir.left | Canvas.Dir.right, force: true, color: stroke)
         }
         for r in (r0 + 1)..<r1 {
-            canvas.addBits(r, c0, Canvas.Dir.up | Canvas.Dir.down, force: true)
-            canvas.addBits(r, c1, Canvas.Dir.up | Canvas.Dir.down, force: true)
+            canvas.addBits(r, c0, Canvas.Dir.up | Canvas.Dir.down, force: true, color: stroke)
+            canvas.addBits(r, c1, Canvas.Dir.up | Canvas.Dir.down, force: true, color: stroke)
         }
-        canvas.addBits(r0, c0, Canvas.Dir.down | Canvas.Dir.right, force: true)
-        canvas.addBits(r0, c1, Canvas.Dir.down | Canvas.Dir.left, force: true)
-        canvas.addBits(r1, c0, Canvas.Dir.up | Canvas.Dir.right, force: true)
-        canvas.addBits(r1, c1, Canvas.Dir.up | Canvas.Dir.left, force: true)
+        canvas.addBits(r0, c0, Canvas.Dir.down | Canvas.Dir.right, force: true, color: stroke)
+        canvas.addBits(r0, c1, Canvas.Dir.down | Canvas.Dir.left, force: true, color: stroke)
+        canvas.addBits(r1, c0, Canvas.Dir.up | Canvas.Dir.right, force: true, color: stroke)
+        canvas.addBits(r1, c1, Canvas.Dir.up | Canvas.Dir.left, force: true, color: stroke)
 
-        // Interior label. For a solid node the id IS its centred label; for a
-        // container it's the subgraph header (lowered separately as a Label too,
-        // but drawing it here anchors it inside the box). Skip empty/synthetic.
+        // Shape-specific glyph overrides on corners and side caps.
+        styleOutline(effectiveShape, c0: c0, c1: c1, r0: r0, r1: r1, on: canvas, color: stroke)
+
+        // Interior label, centered. For a solid node the id (or recovered label)
+        // is its centred text; for a container it's the subgraph header (also
+        // lowered as a Label). Skip empty/synthetic.
         let interiorCols = c1 - c0 - 1
         if reserveInterior, interiorCols > 0 {
             let midR = (r0 + r1) / 2
             place(text: label, centerCol: (c0 + c1) / 2, centerRow: midR,
-                  maxCols: interiorCols, on: canvas, reserving: false, force: true)
+                  maxCols: interiorCols, on: canvas, reserving: false, force: true, color: stroke)
+        }
+    }
+
+    /// Overlay shape-distinguishing glyphs on an already-outlined box.
+    private static func styleOutline(_ shape: Flowchart.NodeShape,
+                                     c0: Int, c1: Int, r0: Int, r1: Int,
+                                     on canvas: Canvas, color: ANSIColor?) {
+        let midR = (r0 + r1) / 2
+        func corners(_ tl: Character, _ tr: Character, _ bl: Character, _ br: Character) {
+            canvas.setGlyph(r0, c0, tl, color: color)
+            canvas.setGlyph(r0, c1, tr, color: color)
+            canvas.setGlyph(r1, c0, bl, color: color)
+            canvas.setGlyph(r1, c1, br, color: color)
+        }
+        // Replace the vertical border run on each side with an end-cap glyph.
+        func sideCaps(_ left: Character, _ right: Character) {
+            for r in (r0 + 1)..<r1 {
+                canvas.setGlyph(r, c0, left, color: color)
+                canvas.setGlyph(r, c1, right, color: color)
+            }
+            _ = midR
+        }
+        switch shape {
+        case .rectangle, .cylinder, .stateStart, .stateEnd:
+            break // sharp ┌┐└┘ from the mask is correct
+        case .rounded:
+            corners("╭", "╮", "╰", "╯")
+        case .stadium:
+            // Pill: rounded corners + parenthesis end-caps.
+            corners("╭", "╮", "╰", "╯")
+            sideCaps("(", ")")
+        case .circle:
+            // Rounder: quarter-arc corners + parenthesis sides.
+            corners("◜", "◝", "◟", "◞")
+            sideCaps("(", ")")
+        case .diamond:
+            // Decision: angular. Sloped corners + chevron sides read as a
+            // hexagon/diamond silhouette, unmistakably not a rectangle.
+            corners("╱", "╲", "╲", "╱")
+            sideCaps("<", ">")
         }
     }
 
@@ -270,12 +403,13 @@ public enum ASCIIRenderer {
 
         // OR reciprocal direction bits for each adjacent pair (dropped on
         // reserved cells, so the run stops at a box border).
+        let edgeColor = MermaidPalette.edgeColor
         for i in 0..<(dedup.count - 1) {
             let a = dedup[i], b = dedup[i + 1]
-            if b.c > a.c { canvas.addBits(a.r, a.c, Canvas.Dir.right); canvas.addBits(b.r, b.c, Canvas.Dir.left) }
-            else if b.c < a.c { canvas.addBits(a.r, a.c, Canvas.Dir.left); canvas.addBits(b.r, b.c, Canvas.Dir.right) }
-            else if b.r > a.r { canvas.addBits(a.r, a.c, Canvas.Dir.down); canvas.addBits(b.r, b.c, Canvas.Dir.up) }
-            else if b.r < a.r { canvas.addBits(a.r, a.c, Canvas.Dir.up); canvas.addBits(b.r, b.c, Canvas.Dir.down) }
+            if b.c > a.c { canvas.addBits(a.r, a.c, Canvas.Dir.right, color: edgeColor); canvas.addBits(b.r, b.c, Canvas.Dir.left, color: edgeColor) }
+            else if b.c < a.c { canvas.addBits(a.r, a.c, Canvas.Dir.left, color: edgeColor); canvas.addBits(b.r, b.c, Canvas.Dir.right, color: edgeColor) }
+            else if b.r > a.r { canvas.addBits(a.r, a.c, Canvas.Dir.down, color: edgeColor); canvas.addBits(b.r, b.c, Canvas.Dir.up, color: edgeColor) }
+            else if b.r < a.r { canvas.addBits(a.r, a.c, Canvas.Dir.up, color: edgeColor); canvas.addBits(b.r, b.c, Canvas.Dir.down, color: edgeColor) }
         }
 
         // Arrowhead at the target end: the last non-reserved cell, pointing in
@@ -291,19 +425,21 @@ public enum ASCIIRenderer {
         else if head.c < prev.c { arrow = "◀" }
         else if head.r > prev.r { arrow = "▼" }
         else { arrow = "▲" }
-        canvas.setGlyph(head.r, head.c, arrow)
+        canvas.setGlyph(head.r, head.c, arrow, color: MermaidPalette.arrowColor)
     }
 
     // MARK: text placement
 
     private static func place(text: String, centerX: CGFloat, centerY: CGFloat,
-                              on canvas: Canvas, reserving: Bool) {
+                              on canvas: Canvas, reserving: Bool, color: ANSIColor? = nil) {
         place(text: text, centerCol: col(centerX), centerRow: row(centerY),
-              maxCols: displayColumns(text), on: canvas, reserving: reserving, force: false)
+              maxCols: displayColumns(text), on: canvas, reserving: reserving,
+              force: false, color: color)
     }
 
     private static func place(text: String, centerCol: Int, centerRow: Int,
-                              maxCols: Int, on canvas: Canvas, reserving: Bool, force: Bool) {
+                              maxCols: Int, on canvas: Canvas, reserving: Bool,
+                              force: Bool, color: ANSIColor? = nil) {
         let firstLine = text.components(separatedBy: "\n").first ?? text
         guard !firstLine.isEmpty, maxCols > 0 else { return }
         var chars = Array(firstLine)
@@ -315,7 +451,7 @@ public enum ASCIIRenderer {
         let startCol = centerCol - chars.count / 2
         for (i, ch) in chars.enumerated() {
             let c = startCol + i
-            canvas.setGlyph(centerRow, c, ch)
+            canvas.setGlyph(centerRow, c, ch, color: color)
             if reserving { canvas.reserve(centerRow, c) }
             _ = force
         }

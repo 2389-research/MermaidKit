@@ -4,6 +4,8 @@ import Foundation
 import CoreGraphics
 import CoreText
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 #elseif canImport(UIKit)
 import CoreGraphics
 import CoreText
@@ -75,6 +77,31 @@ public enum MermaidRenderer {
     /// Nil when the source doesn't parse.
     public static func altText(source: String) -> String? {
         MermaidAltText.describe(source: source)
+    }
+
+    /// The diagram as PNG-encoded bytes, or nil when the source doesn't parse
+    /// or encoding fails. Reuses the full rasterizer (``image``), so this is the
+    /// exact desktop render — the transport for the terminal Kitty-graphics path.
+    /// UIKit vends `UIImage.pngData()` and Linux `PlatformImage.pngData()`
+    /// directly; AppKit's `NSImage` has none, so the CGImage is encoded through
+    /// `CGImageDestination`.
+    public static func pngData(source: String, theme: DiagramTheme,
+                               spacing: DiagramSpacing = .regular) -> Data? {
+        guard let img = image(source: source, theme: theme, spacing: spacing) else { return nil }
+        #if canImport(AppKit)
+        var rect = CGRect(origin: .zero, size: img.size)
+        guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(
+            data, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, cg, nil)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return data as Data
+        #elseif canImport(UIKit)
+        return img.pngData()
+        #else
+        return img.pngData()
+        #endif
     }
 
     /// The diagram as single-page vector PDF data — same layout and drawing

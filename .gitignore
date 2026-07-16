@@ -4,3 +4,4 @@ DerivedData/
 *.xcodeproj
 .DS_Store
 Package.resolved
+scratchpad/
