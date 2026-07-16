@@ -796,7 +796,29 @@ extension DiagramLayoutEngine {
             }
             let n = ordered.count
             for (rank, idx) in ordered.enumerated() {
-                jogBias[idx] = (CGFloat(rank) - CGFloat(n - 1) / 2) * flowchartJogTrack
+                jogBias[idx] += (CGFloat(rank) - CGFloat(n - 1) / 2) * flowchartJogTrack
+            }
+        }
+
+        // Symmetric fan-OUT separation: edges LEAVING the same source spread
+        // their jog corners over distinct tracks the same way fan-IN edges do.
+        // Without this, two edges from one node to different next-layer targets
+        // put their cross-axis connector on the SAME midpoint channel, so the
+        // two runs overlap and render as a single doubled wire (`edges-doubled`).
+        // Ordered by the direction each edge heads (its `firstNext` cross), so
+        // the corners stack in approach order rather than nesting.
+        var sourceGroups: [String: [Int]] = [:]
+        for index in chart.edges.indices where geos[index].valid {
+            sourceGroups[geos[index].chain[0], default: []].append(index)
+        }
+        for idxs in sourceGroups.values where idxs.count > 1 {
+            let ordered = idxs.sorted {
+                (horizontal ? geos[$0].firstNext.y : geos[$0].firstNext.x)
+                    < (horizontal ? geos[$1].firstNext.y : geos[$1].firstNext.x)
+            }
+            let n = ordered.count
+            for (rank, idx) in ordered.enumerated() {
+                jogBias[idx] += (CGFloat(rank) - CGFloat(n - 1) / 2) * flowchartJogTrack
             }
         }
 
@@ -825,6 +847,40 @@ extension DiagramLayoutEngine {
             }
 
             routes[index] = routePolyline(head + g.dummyCenters + tail, horizontal: horizontal, jogBias: jogBias[index])
+        }
+
+        // A labeled adjacent-layer edge whose route makes a single jog splits the
+        // grown layer gap into two shorter straight runs at the bend. The caption
+        // rides the longer half, so even though the gap was reserved to host
+        // `arrowheadLen + labelExtent + 2*stub`, HALF of it can leave under the
+        // minimum stub (`label-crowds-edge`). Slide the lone bend toward the
+        // arrowhead end, leaving just the arrowhead's length past it, so the
+        // arrow-FREE half spans the whole reserved run and the caption breathes.
+        // Only unlabeled-neutral shapes with a plain one-corner route qualify;
+        // diamonds (vertex ports) and multi-corner/dummy routes are left alone.
+        for index in chart.edges.indices {
+            let e = chart.edges[index]
+            let g = geos[index]
+            guard g.valid, g.dummyCenters.isEmpty, !g.srcDiamond, !g.dstDiamond,
+                  e.hasArrow, !e.backArrow, !backEdges.contains(index),
+                  let text = e.label, !text.isEmpty else { continue }
+            var pts = routes[index]
+            guard pts.count == 4 else { continue }        // exactly one corner
+            let headEat = flowchartArrowheadLen
+            if horizontal {
+                let x0 = pts[0].x, x3 = pts[3].x
+                guard abs(pts[1].y - pts[2].y) > 0.5,     // it really jogs
+                      abs(x3 - x0) > headEat + 1 else { continue }
+                let jx = x3 > x0 ? x3 - headEat : x3 + headEat
+                pts[1].x = jx; pts[2].x = jx
+            } else {
+                let y0 = pts[0].y, y3 = pts[3].y
+                guard abs(pts[1].x - pts[2].x) > 0.5,
+                      abs(y3 - y0) > headEat + 1 else { continue }
+                let jy = y3 > y0 ? y3 - headEat : y3 + headEat
+                pts[1].y = jy; pts[2].y = jy
+            }
+            routes[index] = pts
         }
 
         // Separate coincident main-axis runs: two different edges whose runs
