@@ -69,6 +69,15 @@ let package = Package(
                          condition: .when(platforms: [.linux], traits: ["LinuxRaster"])),
             ],
             path: "Sources/MermaidRender"),
+        // Demo CLI for the experimental terminal renderer (capability ladder:
+        // kitty-graphics → colored box → plain box). Apple-only in practice — it
+        // depends on MermaidRender for the Tier-1 PNG transport — but the target
+        // builds everywhere; its raster use is `#if`-guarded. It is NOT a package
+        // product, so no `from:`/LinuxRaster consumer ever resolves or builds it.
+        .executableTarget(
+            name: "mermaidkit-term",
+            dependencies: ["MermaidLayout", "MermaidRender"],
+            path: "Sources/mermaidkit-term"),
         .testTarget(name: "MermaidLayoutTests", dependencies: ["MermaidLayout"], path: "Tests/MermaidLayoutTests"),
         .testTarget(name: "MermaidRenderTests", dependencies: ["MermaidRender", "MermaidLayout"], path: "Tests/MermaidRenderTests"),
     ]
