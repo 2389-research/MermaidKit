@@ -34,27 +34,33 @@ Cold parse → layout → render → rasterize, best of 3, M1 Max. "Parse" is th
 `MermaidParser.parse` slice of the same run. These are the dense per-type
 fixtures in this repo; real-world diagrams are usually smaller.
 
+These figures are **rough, machine-specific, ±variance, and not a CI gate** —
+per-type millisecond totals drift run-to-run (measured swings of tens of
+percent), so read them as a shape, not a spec. This one table is the single
+source of truth the README and site quote in noise-robust ranges.
+
 | Diagram | Parse | Total | Diagram | Parse | Total |
 |---|---:|---:|---|---:|---:|
-| architecture | 0.36 | 14.6 | pie | 0.10 | 2.0 |
-| block | 0.25 | 3.4 | quadrant | 0.16 | 4.0 |
-| c4 | 0.29 | 7.4 | radar | 0.24 | 2.8 |
-| class | 0.67 | 12.3 | requirement | 0.49 | 9.5 |
-| cynefin | 0.15 | 2.3 | sankey | 0.17 | 26.5 |
-| er | 0.30 | 8.7 | sequence | 0.43 | 9.6 |
-| eventmodeling | 0.16 | 3.9 | state | 0.30 | 11.8 |
-| flowchart | 2.07 | 13.3 | swimlane | 0.22 | 3.2 |
-| gantt | 0.42 | 3.2 | timeline | 0.19 | 4.5 |
-| gitgraph | 0.23 | 2.8 | treemap | 0.21 | 2.9 |
-| ishikawa | 0.13 | 3.2 | treeview | 0.53 | 3.9 |
-| journey | 0.22 | 4.4 | venn | 0.08 | 1.8 |
-| kanban | 0.33 | 5.4 | wardley | 0.25 | 3.6 |
-| mindmap | 0.32 | 8.5 | xychart | 0.18 | 2.4 |
-| packet | 0.15 | 3.6 | zenuml | 0.26 | 9.3 |
+| architecture | 0.37 | 14.6 | pie | 0.10 | 2.6 |
+| block | 0.25 | 3.2 | quadrant | 0.17 | 3.7 |
+| c4 | 0.28 | 7.1 | radar | 0.25 | 3.0 |
+| class | 0.68 | 9.7 | requirement | 0.52 | 9.3 |
+| cynefin | 0.16 | 2.5 | sankey | 0.18 | 24.8 |
+| er | 0.31 | 7.2 | sequence | 0.43 | 9.2 |
+| eventmodeling | 0.14 | 3.9 | state | 0.30 | 11.4 |
+| flowchart | 1.92 | 12.5 | swimlane | 0.23 | 3.7 |
+| gantt | 0.41 | 3.5 | timeline | 0.20 | 4.5 |
+| gitgraph | 0.22 | 2.4 | treemap | 0.22 | 3.1 |
+| ishikawa | 0.12 | 2.7 | treeview | 0.54 | 4.1 |
+| journey | 0.20 | 4.7 | venn | 0.08 | 1.6 |
+| kanban | 0.32 | 6.0 | wardley | 0.25 | 3.6 |
+| mindmap | 0.32 | 7.2 | xychart | 0.17 | 1.8 |
+| packet | 0.14 | 4.2 | zenuml | 0.26 | 6.6 |
 
-All times in ms. Worst: sankey at ~26 ms. Most types land 2–12 ms, well inside
-one 60 fps frame's worth of headroom for the common case and comfortably
-interactive for the worst.
+All times in ms. Worst: sankey at ~25 ms. Most types land under ~15 ms, well
+inside interactive headroom for the common case and comfortable even for the
+worst. (A prior run had sankey at ~26 ms and a few types a millisecond or two
+higher — that spread is the run-to-run variance, not a regression.)
 
 ## Where the time goes
 
@@ -189,3 +195,153 @@ Rendering stays synchronous by design: at these times a first render in a
 SwiftUI `body` is cheaper than a state round-trip, and every repeat hits the
 cache. `MermaidRenderer.renderImage(...)` exists for hosts that want to batch
 many cold renders off the main thread.
+
+## Shared pipeline / fixed overhead
+
+The tables above are per-type. This section asks a different question: what does
+the *fixed plumbing* cost — the piping every render pays regardless of diagram
+type, before any real drawing happens? The shared path is
+`MermaidRenderer.image` → `DiagramRenderer.attachmentString` → `renderPlan`
+(parse + per-type layout, folded into one call) → `captionedPlan` → `paddedCanvas`
+→ backing-store `NSImage` build → `attributedString(for:)` → forced rasterize.
+A trivial `flowchart TD / A[X]` isolates that floor with essentially nothing to
+draw. (Numbers below: M-series, debug test build — the release test target can't
+link because a `#if DEBUG` capture hook is referenced by another test; the phase
+breakdown above ran the same way, so these are consistent with it. Debug inflates
+absolutes; the *fractions* are what matter.)
+
+### 1. The fixed-overhead floor
+
+Trivial 1-node flowchart, cold (cache busted per iteration), best of 400:
+
+| phase | ms | note |
+|---|---:|---|
+| parse | 0.067 | full `MermaidParser.parse` |
+| plan (layout + closures) | 0.057 | `renderPlan`: real layout engine + closure boxes |
+| paddedCanvas | ~0.000 | value-type bounds union, no heap |
+| build `NSImage` | 0.001 | handler-backed, draw closure is **deferred** |
+| rasterize (the tiny draw) | 0.070 | forcing `cgImage` finally runs the draw closure |
+| cache-key build + hash | 0.003 | trivial source; O(source length) |
+| **end-to-end** (`image` + force raster) | **0.210** | |
+
+The floor is ~**0.2 ms**. Of that, the *actual drawing* (rasterize) is ~0.07 ms
+— **one third**. The other **two thirds** is fixed setup: parse, layout, and the
+attachment/cache/image plumbing (the e2e number is ~0.015 ms above the summed
+phases because the public path also re-scans metadata, inserts into the cache,
+copies the `NSImage`, and builds an `NSTextAttachment` — see §3). In absolute
+terms this floor is negligible; the point is only that for a *trivial* diagram
+the piping dominates the draw, and for any *real* diagram the draw dominates the
+piping (the per-type tables show rasterize is ~75% of a dense render). The plumbing
+does not scale badly — it is a near-constant tax, not a multiplier.
+
+### 2. Allocations per render
+
+No Instruments trace was captured (the release test target won't link); this is
+read from the code. One cold Apple render allocates, in rough order of bytes:
+
+- **The rasterization backing store** — the single largest allocation, and it is
+  `RGBAf16` (8 bytes/px, wide gamut) not 8-bit sRGB (see the Hotspots section).
+  For the trivial floor it's tiny; for a dense diagram it's the dominant buffer.
+- **The parse AST** and **the layout IR** (nodes, edges, point arrays) — both
+  scale with diagram size and are inherent, not churn.
+- A **fixed handful of small heap allocations** every render pays no matter what:
+  the `measure` closure box, the `draw` closure box (captures the layout), the
+  `edgePolylines` array from `.map`, the cache-key `String`/`NSString`, the
+  `metadata(in:)` line-split (§3), the cache `Entry`, the **`NSImage.copy()`** in
+  `attributedString(for:)`, and the `NSTextAttachment` + `NSAttributedString`.
+
+Verdict on churn: the pipeline is **not** allocation-heavy in the plumbing. There
+is no per-primitive temporary-array thrash in the shared path; the arrays that
+exist are proportional to node/edge/label counts, which is unavoidable. The fixed
+small allocations are a short, bounded list.
+
+### 3. Redundant work in the shared path
+
+Three confirmed redundancies, all shared:
+
+1. **Text is typeset two or more times per label.** Layout calls
+   `DiagramRenderer.measure` once per label; at draw time `drawLine` builds its
+   own `CTLine` again for the same string. `measure`
+   (`DiagramRenderer+Primitives.swift:26`) **caches nothing** — every call is a
+   fresh `NSAttributedString` + `CTLineCreateWithAttributedString` +
+   `CTLineGetTypographicBounds`. Measured cost ~**6.3 µs/call** in debug (~2–3 µs
+   release). For a label-dense type (sequence, class, state, requirement) with
+   dozens of labels, the redundant typeset is on the order of 0.1–0.3 ms — small,
+   but it is exactly the CoreText slice the Hotspots section sees paid twice.
+   *(In DEBUG the capture hook adds a third `measure` call per drawn block, but
+   that is test-only and not shipped.)*
+
+2. **The source is scanned for metadata twice.** `MermaidParser.parse` already
+   strips front-matter internally, yet `captionedPlan` calls
+   `MermaidParser.metadata(in:)` again — a full `source.split("\n")` plus a
+   per-line trim/keyword scan (`MermaidParser+Metadata.swift:50`) — on every
+   render, just to recover the `title:`. Cost is O(source length): a rounding
+   error for small sources, a real second full-string pass for a 50 KB source.
+   The parse already had this metadata in hand; threading it through would delete
+   the second scan.
+
+3. **The cache key rebuilds and rehashes the whole source string every call.**
+   The key is `"mermaid|\(theme.fingerprint)|\(spacing.fingerprint)|\(source)"`
+   (`DiagramRenderer.swift:293`). The `theme.fingerprint` is precomputed once at
+   theme init (cheap — not recomputed per render), and `spacing.fingerprint` is a
+   tiny formatted string. But the key **interpolates the full source** and
+   `NSCache` then hashes that whole `NSString` — an O(source length) build + hash
+   paid on **every** call including cache *hits* (each SwiftUI `body` pass). Plus
+   a cache hit also `NSImage.copy()`s the rendered image. For big sources these
+   are the only non-trivial costs on the hot re-render path.
+
+`DiagramScene.lower` is **not** on the render path — `renderPlan` calls
+`DiagramLayoutEngine.layout` directly and draws from the layout; `lower` is the
+IR/linter path (it does rebuild `DiagramScene` structs to append a title label,
+but that copy never runs during a render). And there is **no** double parse or
+double layout on the raster path: parse runs once, layout runs once (deferred
+inside the draw closure), and the draw closure runs once at rasterize. (The
+"build re-parses/re-lays-out" note earlier was a *measurement* artifact of a
+throwaway harness that called `image()` as a separate phase after already doing
+parse+layout — not something a single real render does.)
+
+### 4. ARC / retain-release
+
+No release-build time-profile was captured for the shared path specifically (the
+prior function-level profile sampled the draw-dominated sankey path and did not
+show `swift_retain`/`release` or ObjC bridging as material — the leaves were
+`vImage…ARGB16F` compositing and CoreText). The shared plumbing does cross into
+ObjC (`NSCache`, `NSString`, `NSImage`, `NSAttributedString`) and boxes two
+closures per render, but at a ~0.2 ms floor none of this is a measurable fraction
+of any real render. ARC is not a shared-path bottleneck.
+
+### Verdict: is the shared pipeline as performant as possible?
+
+**Essentially yes — the plumbing is lean, and the only real cost is the
+unavoidable CoreGraphics drawing.** The fixed floor is ~0.2 ms; two-thirds of
+*that* is setup, but 0.2 ms is nothing, and it is a near-constant tax rather than
+something that scales with diagram size. Every non-trivial render is dominated by
+rasterization (~75%), which is genuine drawing work, not piping.
+
+There is a little slack, all small. In priority order (payoff / risk):
+
+1. **Render into an 8-bit sRGB bitmap context instead of the default `RGBAf16`
+   wide-gamut backing.** *Shared* (every render allocates this backing store) and
+   the single biggest lever — the hot compositing leaf is literally f16. Payoff:
+   up to ~2–4× on fill/stroke-bound types (sankey above all), a smaller win
+   everywhere. Risk: it changes the rasterization surface, so visual output must
+   be diffed; diagrams use flat theme tints, so no wide-gamut content is at stake.
+   (This is the raster *surface*, arguably one layer below "piping," but it is
+   shared by every type and is where the bytes and bandwidth go.)
+2. **Memoize text measurement** with a shared `(string, size, weight) → CTLine`
+   (or `→ CGSize`) cache serving both `measure` and `drawLine`. Removes the
+   redundant typeset. Payoff: modest, meaningful for label-dense types (~5–15% of
+   their total). Risk: low, self-contained.
+3. **Thread parsed metadata through instead of re-scanning.** `captionedPlan`'s
+   second `metadata(in:)` full-source pass is deletable by carrying the title the
+   parser already extracted. Payoff: negligible for small sources, O(n) so real
+   for large ones. Risk: low.
+4. **Cheaper cache key / avoid the per-hit copy.** Hash the source once (or key on
+   a digest) and reconsider the `NSImage.copy()` on hit. Payoff: low, only helps
+   very large sources re-rendered every `body` pass. Risk: low but touches
+   correctness-sensitive cache identity — least worth it.
+5. **Allocation reduction** — not worth chasing. The plumbing's fixed allocations
+   are a short bounded list; the rest is proportional to diagram size.
+
+None of these is urgent. At current times nothing here is a perf problem in any
+real use; this section is the receipts for saying so.

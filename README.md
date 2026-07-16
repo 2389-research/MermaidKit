@@ -45,9 +45,9 @@ let image = MermaidRenderer.image(
 Embedding Mermaid today usually means shipping mermaid.js inside a
 `WKWebView`: a JS runtime per diagram, async round-trips, non-native text,
 and a web process in your memory footprint. MermaidKit renders the same
-source natively and synchronously — every diagram type below renders cold in
-**under 25 ms** on Apple silicon, most in **under 12 ms**, and results are
-cached per (source, theme, spacing).
+source natively and synchronously — most diagram types render cold in
+**under ~15 ms** on Apple silicon (worst ~25 ms, a dense sankey; parse
+sub-millisecond), and results are cached per (source, theme, spacing).
 
 |  | MermaidKit | mermaid.js + WKWebView | [BeautifulMermaid](https://github.com/lukilabs/beautiful-mermaid-swift) |
 |---|---|---|---|
@@ -142,27 +142,16 @@ three rounds. `RenderBenchmarks` is a *correctness* smoke — every fixture must
 parse, render, and rasterize — with **no wall-clock assertion** (timing gates
 flake under CI load, so performance never gates a merge). The table below is
 opt-in: `BENCH_TABLE=1 swift test --filter RenderBenchmarks` measures and
-prints it. These numbers are machine-specific, not a CI threshold. For where
-the time actually goes and whether any of it is worth optimizing, see
-[`docs/notes/performance.md`](docs/notes/performance.md).
+prints it. These numbers are machine-specific and drift run-to-run, so this
+README keeps only a range, not a table that can re-drift.
 
-| Diagram | Cold render | Diagram | Cold render |
-|---|---:|---|---:|
-| architecture | 13.8 ms | packet | 3.1 ms |
-| block | 2.9 ms | pie | 1.7 ms |
-| c4 | 5.9 ms | quadrant | 3.1 ms |
-| class | 9.2 ms | radar | 2.6 ms |
-| cynefin | 2.3 ms | requirement | 8.0 ms |
-| er | 6.8 ms | sankey | 25.0 ms |
-| eventmodeling | 3.5 ms | sequence | 7.9 ms |
-| flowchart | 9.8 ms | state | 10.8 ms |
-| gantt | 2.9 ms | swimlane | 3.2 ms |
-| gitgraph | 2.1 ms | timeline | 3.9 ms |
-| ishikawa | 2.0 ms | treemap | 3.0 ms |
-| journey | 3.4 ms | treeview | 3.0 ms |
-| kanban | 4.1 ms | venn | 1.4 ms |
-| mindmap | 7.4 ms | wardley | 2.3 ms |
-| zenuml | 5.1 ms | xychart | 1.6 ms |
+On an Apple-silicon Mac, cold: **parse is sub-millisecond** for every type
+except flowchart (~2 ms); **most types render under ~15 ms** total; the **worst
+is a dense sankey at ~25 ms**, whose translucent flow ribbons dominate. The full
+internally-consistent per-type table — and where the time actually goes, plus
+whether any of it is worth optimizing — lives in
+[`docs/notes/performance.md`](docs/notes/performance.md), the single source of
+truth for these figures.
 
 Rendering is synchronous by design: at these times a first render in a
 SwiftUI `body` is cheaper than a state round-trip, and repeat renders hit the
