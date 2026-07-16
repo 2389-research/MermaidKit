@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0.55" y2="1"><stop offset="0" stop-color="#1A4C5E"></stop><stop offset="1" stop-color="#0D2B36"></stop></linearGradient>
+<linearGradient id="am" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF8FA3"></stop><stop offset="1" stop-color="#39D6C5"></stop></linearGradient>
+<clipPath id="ca"><rect x="0" y="0" width="64" height="40"></rect></clipPath>
+<clipPath id="cb"><rect x="0" y="40" width="64" height="24"></rect></clipPath>
+</defs>
+<rect width="1024" height="1024" rx="160" fill="url(#bg)"></rect>
+<g transform="translate(208 208) scale(9.5)"><path d="M10 46 C 10 26, 15 18, 20 18 C 26 18, 27 30, 32 30 C 37 30, 38 18, 44 18 C 49 18, 54 26, 54 46" fill="none" stroke="url(#am)" stroke-width="6" stroke-linecap="round" clip-path="url(#ca)"></path>
+<path d="M10 46 C 10 26, 15 18, 20 18 C 26 18, 27 30, 32 30 C 37 30, 38 18, 44 18 C 49 18, 54 26, 54 46" fill="none" stroke="#39D6C5" stroke-width="6" stroke-linecap="round" opacity="0.32" clip-path="url(#cb)"></path>
+<path d="M6 40 Q 11 36.5, 16 40 T 26 40 T 36 40 T 46 40 T 56 40" fill="none" stroke="#C9B6FF" stroke-width="2.5" stroke-linecap="round"></path></g></svg>

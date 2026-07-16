@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/logo-256.png" alt="MermaidKit" width="120" height="120">
+</p>
+
 # MermaidKit
 
 Native [Mermaid](https://mermaid.js.org) diagrams in pure Swift — no

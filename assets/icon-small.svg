@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><defs>
+<linearGradient id="sbg" x1="0" y1="0" x2="0.55" y2="1"><stop offset="0" stop-color="#1A4C5E"></stop><stop offset="1" stop-color="#0D2B36"></stop></linearGradient>
+<linearGradient id="sam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF8FA3"></stop><stop offset="1" stop-color="#39D6C5"></stop></linearGradient>
+<clipPath id="sca"><rect x="0" y="0" width="64" height="40"></rect></clipPath>
+<clipPath id="scb"><rect x="0" y="40" width="64" height="24"></rect></clipPath>
+</defs>
+<rect width="256" height="256" rx="52" fill="url(#sbg)"></rect>
+<g transform="translate(38 38) scale(2.8125)"><path d="M10 46 C 10 26, 15 18, 20 18 C 26 18, 27 30, 32 30 C 37 30, 38 18, 44 18 C 49 18, 54 26, 54 46" fill="none" stroke="url(#sam)" stroke-width="8" stroke-linecap="round"></path>
+<path d="M6 52 Q 11 48.5, 16 52 T 26 52 T 36 52 T 46 52 T 56 52" fill="none" stroke="#C9B6FF" stroke-width="4" stroke-linecap="round"></path></g></svg>

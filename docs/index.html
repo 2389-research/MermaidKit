@@ -8,6 +8,9 @@
 <meta property="og:title" content="MermaidKit">
 <meta property="og:description" content="All 30 Mermaid diagram types, rendered natively in Swift. No JavaScript. No WebView. No dependencies.">
 <meta property="og:image" content="images/hero-light.png">
+<link rel="icon" type="image/svg+xml" href="images/logo.svg">
+<link rel="icon" type="image/png" sizes="512x512" href="images/logo-512.png">
+<link rel="apple-touch-icon" href="images/logo-256.png">
 <style>
   :root{
     /* Mermaid palette */
@@ -195,7 +198,9 @@
   /* Header */
   header.top{border-bottom:1px solid var(--line); position:sticky; top:0; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(8px); z-index:5}
   header.top .wrap{display:flex; align-items:center; gap:14px; height:56px}
-  .brand{font-weight:680; letter-spacing:-0.02em}
+  .brand{font-weight:680; letter-spacing:-0.02em; display:inline-flex; align-items:center; gap:9px}
+  .brand .mark{width:26px; height:26px; border-radius:7px; display:block}
+  .herologo{width:84px; height:84px; border-radius:20px; display:block; margin:0 auto 22px; box-shadow:0 16px 38px -16px rgba(18,60,74,.55)}
   .brand b{color:var(--accent)}
   header.top nav{margin-left:auto; display:flex; gap:20px; font-size:.92rem}
   header.top nav a{color:var(--muted)}
@@ -326,7 +331,7 @@
 <body>
 
 <header class="top"><div class="wrap">
-  <span class="brand"><b>Mermaid</b>Kit</span>
+  <span class="brand"><img class="mark" src="images/logo.svg" alt="" width="26" height="26"><b>Mermaid</b>Kit</span>
   <nav>
     <a href="#gallery">Gallery</a>
     <a href="#lint" class="hide-sm">Self-checking</a>
@@ -336,6 +341,7 @@
 </div></header>
 
 <div class="hero"><div class="wrap glass">
+  <img class="herologo" src="images/logo.svg" alt="MermaidKit logo" width="84" height="84">
   <h1>Native Mermaid diagrams in Swift.</h1>
   <p class="tag">All 30 Mermaid diagram types, parsed, laid out, and rendered in pure Swift — CoreGraphics on Apple, Silica/Cairo on Linux.</p>
   <div class="hook"><span>No JavaScript</span><span>No WebView</span><span>Zero dependencies</span></div>
