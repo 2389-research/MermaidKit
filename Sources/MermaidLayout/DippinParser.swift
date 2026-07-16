@@ -507,10 +507,15 @@ private final class DippinParserImpl {
         return t
     }
 
-    /// Tidies a condition for display: strips quotes around string operands so
-    /// `ctx.outcome == "success"` reads `ctx.outcome == success`.
+    /// A concise edge label from a `when` condition. A single equality
+    /// (`ctx.field == "value"`) collapses to just the value — the branch
+    /// outcome, which reads like a decision edge (success / fail / reject) and
+    /// keeps the diagram legible. Anything else (inequality, compound
+    /// `and`/`or`) falls back to the quote-stripped condition.
     private func cleanCondition(_ s: String) -> String {
-        quotedTokens(s).map(dequote).joined(separator: " ")
+        let tokens = quotedTokens(s).map(dequote)
+        if tokens.count == 3, tokens[1] == "==", !tokens[2].isEmpty { return tokens[2] }
+        return tokens.joined(separator: " ")
     }
 
     /// The last path component of a subgraph ref (`a/b/quality_loop.dip` →
