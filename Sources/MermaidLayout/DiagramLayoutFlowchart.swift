@@ -225,6 +225,11 @@ extension DiagramLayoutEngine {
             switch node.shape {
             case .diamond:
                 size = CGSize(width: size.width * 1.3, height: size.height * 1.5)
+            case .hexagon:
+                // Pointed ends eat horizontal room — widen so the label clears.
+                size.width += size.height
+            case .subroutine:
+                size.width += 16   // room for the twin inner rails
             case .circle:
                 let d = max(size.width, size.height)
                 size = CGSize(width: d, height: d)
