@@ -497,6 +497,7 @@ flowchart TD
     <div class="stat"><div class="n">MIT</div><div class="l">license</div></div>
   </div>
   <p class="lead" style="margin-top:22px">Repeat renders hit an in-memory cache keyed by (source, theme, spacing). Input caps mirror mermaid.js — 50,000-character sources, 500 flowchart edges; oversized input returns nil fast. Requires Swift 6.2 / Xcode 26. Platforms: macOS 14+, iOS 17+, visionOS 1+, and Linux (via the <code>LinuxRaster</code> package trait).</p>
+  <p class="lead" style="margin-top:14px"><b>Where the time goes:</b> drawing (rasterization) is ~75% of a cold render; the parse-and-layout plumbing is lean, with a ~0.2 ms fixed floor. It's profiled, not guessed — the one "obvious" win, an 8-bit sRGB backing store, measured ~2× <em>slower</em> on Apple silicon, so it stayed f16. <a href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/performance.md">Full performance analysis →</a></p>
 </div></section>
 
 <section id="adapt"><div class="wrap glass">
@@ -523,6 +524,7 @@ flowchart TD
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidLayout/MermaidLayout.docc/AddingADiagramType.md"><b>Adding a Diagram Type</b><span>The three small pieces — parser, layout, renderer — behind every type.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/linux-rendering-via-silica.md"><b>Linux Rendering via Silica</b><span>How the one CoreGraphics seam maps to Cairo/FontConfig for headless Linux output.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/mermaid-coverage-audit.md"><b>Mermaid Coverage Audit</b><span>What each type parses, what's ignored, and where the known gaps are.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/performance.md"><b>Performance</b><span>Methodology, per-type numbers, where the time goes, and the fixable-vs-irreducible costs.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CONTRIBUTING.md"><b>Contributing</b><span>The lay of the land, the geometry-first review bar, and developing on Linux.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release through 1.0, with the reasoning behind each change.</span></a>
   </div>
