@@ -16,6 +16,9 @@ import Glibc
 public enum TerminalRenderMode: String, Sendable {
     /// Tier 1: a real raster image inline via the Kitty graphics protocol.
     case kitty
+    /// Tier 3: a truecolor half-block raster (`▀` cells, fg = top pixel,
+    /// bg = bottom pixel) — a near-photographic image needing only 24-bit SGR.
+    case halfBlock
     /// Tier 4: structured Unicode box-drawing, colored from the mermaid palette.
     case coloredBox
     /// Tier 4, monochrome: box-drawing with no ANSI color.
@@ -109,11 +112,13 @@ public enum TerminalCapabilities {
         return false
     }
 
-    /// The auto ladder: Kitty graphics if available, else colored box when
-    /// truecolor is present, else plain box.
+    /// The auto ladder: Kitty graphics if available, else the truecolor
+    /// half-block raster when 24-bit color is present, else plain box. (The
+    /// half-block path itself degrades to the colored box when the raster
+    /// backend is unavailable — see the CLI's `renderHalfBlock`.)
     public static func autoMode(_ env: TerminalEnvironment) -> TerminalRenderMode {
         if supportsKittyGraphics(env) { return .kitty }
-        if supportsTruecolor(env) { return .coloredBox }
+        if supportsTruecolor(env) { return .halfBlock }
         return .plainBox
     }
 

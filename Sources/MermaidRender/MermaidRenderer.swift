@@ -104,6 +104,68 @@ public enum MermaidRenderer {
         #endif
     }
 
+    /// The diagram rasterized to a straight-alpha RGBA pixel grid sized for the
+    /// half-block terminal renderer (Tier 3). `targetWidth` is the pixel width
+    /// (= terminal columns); the height is derived to preserve the diagram's
+    /// aspect (each half-cell is roughly square) and rounded up to an even count
+    /// so every cell owns a full top/bottom pixel pair.
+    ///
+    /// The image is composited over `background` (the theme canvas color) so the
+    /// returned pixels are fully opaque — transparent margins take the terminal
+    /// theme's own background and the raster carries no premultiplied surprises.
+    /// Returns the flat RGBA byte buffer plus its dimensions, or nil when the
+    /// source doesn't render or the platform lacks a CGImage path.
+    public static func rgbaRaster(source: String, theme: DiagramTheme,
+                                  spacing: DiagramSpacing = .regular,
+                                  targetWidth: Int,
+                                  background: (r: UInt8, g: UInt8, b: UInt8))
+        -> (pixels: [UInt8], width: Int, height: Int)? {
+        #if canImport(AppKit) || canImport(UIKit)
+        guard let img = image(source: source, theme: theme, spacing: spacing),
+              targetWidth > 0 else { return nil }
+        #if canImport(AppKit)
+        var rect = CGRect(origin: .zero, size: img.size)
+        guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
+        #else
+        guard let cg = img.cgImage else { return nil }
+        #endif
+        let srcW = cg.width, srcH = cg.height
+        guard srcW > 0, srcH > 0 else { return nil }
+
+        let w = targetWidth
+        var h = Int((Double(w) * Double(srcH) / Double(srcW)).rounded())
+        if h < 2 { h = 2 }
+        if h % 2 != 0 { h += 1 }  // even → whole top/bottom cell pairs
+
+        let bytesPerRow = w * 4
+        var buffer = [UInt8](repeating: 0, count: bytesPerRow * h)
+        guard let cs = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let ok: Bool = buffer.withUnsafeMutableBytes { raw -> Bool in
+            guard let ctx = CGContext(
+                data: raw.baseAddress, width: w, height: h,
+                bitsPerComponent: 8, bytesPerRow: bytesPerRow, space: cs,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            // Pre-fill with the theme canvas so anti-aliased/transparent pixels
+            // composite over the right color and come out opaque.
+            ctx.setFillColor(red: CGFloat(background.r) / 255.0,
+                             green: CGFloat(background.g) / 255.0,
+                             blue: CGFloat(background.b) / 255.0, alpha: 1)
+            ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+            // CGContext is bottom-left origin; flip so buffer row 0 is the image
+            // top (the order the half-block renderer walks).
+            ctx.translateBy(x: 0, y: CGFloat(h))
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.interpolationQuality = .high
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard ok else { return nil }
+        return (buffer, w, h)
+        #else
+        return nil
+        #endif
+    }
+
     /// The diagram as single-page vector PDF data — same layout and drawing
     /// as ``image(source:theme:spacing:)``, but resolution-independent: the
     /// export/print path. Nil when the source doesn't parse.

@@ -103,6 +103,63 @@ final class ASCIIPrototypeTests: XCTestCase {
         XCTAssertFalse(try! XCTUnwrap(out).contains("\u{1B}"), "plain mode emits no ANSI escapes")
     }
 
+    // MARK: edge-caption / routing-corner collision (the `no┘` fix)
+
+    /// An edge caption must never sit immediately against a routing corner/line
+    /// glyph — that's the `no┘` collision. The decision diagram's `no` branch
+    /// jogs right to reach its target, which used to drop a `┘` in the cell right
+    /// after the caption. The renderer now punches a one-cell gap on each side of
+    /// every edge caption, so no box-drawing glyph abuts the text.
+    func testEdgeCaptionDoesNotAbutRoutingCorner() {
+        let out = try! XCTUnwrap(ASCIIRenderer.asciiRenderFlowchart("""
+        flowchart TD
+        A[Start] --> B{Is it valid?}
+        B -->|yes| C[Process]
+        B -->|no| D[Reject]
+        """))
+        XCTAssertFalse(out.contains("no┘"), "the specific reported collision must be gone")
+        let boxGlyphs = ["┘", "└", "┐", "┌", "─", "│", "┤", "├", "┼", "┬", "┴"]
+        for caption in ["no", "yes"] {
+            for g in boxGlyphs {
+                XCTAssertFalse(out.contains(caption + g), "caption '\(caption)' abuts '\(g)'")
+                XCTAssertFalse(out.contains(g + caption), "'\(g)' abuts caption '\(caption)'")
+            }
+        }
+    }
+
+    // MARK: half-block truecolor raster (Tier 3)
+
+    /// One cell maps a top/bottom pixel pair to `▀` with fg = top, bg = bottom,
+    /// both as 24-bit SGR on a single escape.
+    func testHalfBlockCellMapsPixelPairToSGR() {
+        let cell = HalfBlockRenderer.cell(top: RGBA(255, 0, 0), bottom: RGBA(0, 0, 255),
+                                          over: RGBA(0, 0, 0))
+        XCTAssertEqual(cell, "\u{1B}[38;2;255;0;0;48;2;0;0;255m▀")
+    }
+
+    /// A 1×2 grid (one column, two rows) renders to a single half-block cell
+    /// followed by a line reset.
+    func testHalfBlockRendersTwoPixelColumn() {
+        let out = HalfBlockRenderer.render(pixels: [RGBA(255, 0, 0), RGBA(0, 0, 255)],
+                                           width: 1, height: 2, background: RGBA(0, 0, 0))
+        XCTAssertEqual(out, "\u{1B}[38;2;255;0;0;48;2;0;0;255m▀\u{1B}[0m")
+    }
+
+    /// Transparency composites over the supplied background; a fully transparent
+    /// pair blends with the terminal (reset + space) instead of painting a box.
+    func testHalfBlockCompositesTransparency() {
+        // Transparent top over white → white fg; opaque bottom passes through.
+        let over = HalfBlockRenderer.cell(top: RGBA(0, 0, 0, 0), bottom: RGBA(10, 20, 30),
+                                          over: RGBA(255, 255, 255))
+        XCTAssertEqual(over, "\u{1B}[38;2;255;255;255;48;2;10;20;30m▀")
+        // Half-alpha black over white → mid grey: 0*.502 + 255*.498 ≈ 127.
+        let half = HalfBlockRenderer.composite(RGBA(0, 0, 0, 128), over: RGBA(255, 255, 255))
+        XCTAssertEqual(half.r, 127)
+        // Fully transparent pair → terminal default.
+        XCTAssertEqual(HalfBlockRenderer.cell(top: RGBA(0, 0, 0, 0), bottom: RGBA(0, 0, 0, 0),
+                                              over: RGBA(1, 2, 3)), "\u{1B}[0m ")
+    }
+
     // MARK: background-adaptive palette
 
     /// Edges (the structure color) brighten on a dark background — the deep teal
@@ -164,8 +221,9 @@ final class ASCIIPrototypeTests: XCTestCase {
         let ghostty = TerminalEnvironment(colorterm: "truecolor", termProgram: "ghostty")
         XCTAssertTrue(TerminalCapabilities.supportsKittyGraphics(ghostty))
 
+        // Truecolor without a graphics protocol → the half-block raster tier.
         let truecolorOnly = TerminalEnvironment(term: "xterm-256color", colorterm: "truecolor")
-        XCTAssertEqual(TerminalCapabilities.autoMode(truecolorOnly), .coloredBox)
+        XCTAssertEqual(TerminalCapabilities.autoMode(truecolorOnly), .halfBlock)
 
         let bare = TerminalEnvironment(term: "xterm-256color", colorterm: nil)
         XCTAssertEqual(TerminalCapabilities.autoMode(bare), .plainBox)

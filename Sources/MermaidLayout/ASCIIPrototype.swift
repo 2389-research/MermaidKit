@@ -160,6 +160,15 @@ final class Canvas {
         paint(r, c, color)
     }
 
+    /// Erase a cell's routing mask + color (only if no hard glyph occupies it),
+    /// so the cell resolves to a blank. Used to punch a clean gap beside an edge
+    /// caption so a corner/line glyph never abuts the text (`no┘` → `no ┘`).
+    func clearMask(_ r: Int, _ c: Int) {
+        guard inBounds(r, c), glyph[idx(r, c)] == nil else { return }
+        mask[idx(r, c)] = 0
+        fg[idx(r, c)] = nil
+    }
+
     /// Map a 4-bit direction mask to its box-drawing glyph.
     private func glyphForMask(_ m: UInt8) -> Character {
         switch m {
@@ -285,9 +294,18 @@ public enum ASCIIRenderer {
         // 3. Free-standing labels (edge captions, subgraph headers). Written as
         //    hard glyphs so they read over any wire that passed under them.
         for label in scene.labels {
-            place(text: label.text,
-                  centerX: label.frame.midX, centerY: label.frame.midY,
-                  on: canvas, reserving: false, color: MermaidPalette.labelColor)
+            let span = place(text: label.text,
+                             centerX: label.frame.midX, centerY: label.frame.midY,
+                             on: canvas, reserving: false, color: MermaidPalette.labelColor)
+            // Edge captions (anchored on their route) often land right next to a
+            // routing corner — `no┘`. Punch a one-cell gap on each side of the
+            // caption so a corner/line glyph never abuts the text. Only for edge
+            // captions: a subgraph header sits ON its container's top border, and
+            // clearing its neighbours would leave a hole in that border run.
+            if label.anchorEdge != nil, let span {
+                canvas.clearMask(span.row, span.startCol - 1)
+                canvas.clearMask(span.row, span.endCol + 1)
+            }
         }
 
         return canvas.render()
@@ -442,18 +460,25 @@ public enum ASCIIRenderer {
 
     // MARK: text placement
 
+    /// The character span a placed label occupies, for callers that need to
+    /// tidy the cells around it (see the edge-caption margin clearing).
+    struct PlacedSpan { let row: Int; let startCol: Int; let endCol: Int }
+
+    @discardableResult
     private static func place(text: String, centerX: CGFloat, centerY: CGFloat,
-                              on canvas: Canvas, reserving: Bool, color: ANSIColor? = nil) {
+                              on canvas: Canvas, reserving: Bool,
+                              color: ANSIColor? = nil) -> PlacedSpan? {
         place(text: text, centerCol: col(centerX), centerRow: row(centerY),
               maxCols: displayColumns(text), on: canvas, reserving: reserving,
               force: false, color: color)
     }
 
+    @discardableResult
     private static func place(text: String, centerCol: Int, centerRow: Int,
                               maxCols: Int, on canvas: Canvas, reserving: Bool,
-                              force: Bool, color: ANSIColor? = nil) {
+                              force: Bool, color: ANSIColor? = nil) -> PlacedSpan? {
         let firstLine = text.components(separatedBy: "\n").first ?? text
-        guard !firstLine.isEmpty, maxCols > 0 else { return }
+        guard !firstLine.isEmpty, maxCols > 0 else { return nil }
         var chars = Array(firstLine)
         if chars.count > maxCols {
             // Truncate with an ellipsis when it doesn't fit.
@@ -467,5 +492,7 @@ public enum ASCIIRenderer {
             if reserving { canvas.reserve(centerRow, c) }
             _ = force
         }
+        return PlacedSpan(row: centerRow, startCol: startCol,
+                          endCol: startCol + chars.count - 1)
     }
 }
