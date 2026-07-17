@@ -10,7 +10,7 @@ extension RenderScene {
     /// (MermaidRender/DiagramRenderer+Class.swift). It emits class boxes with a
     /// name compartment plus attribute and method compartments (separated by
     /// hairlines), relation shafts (dashed for realization/dependency), and the
-    /// kind's end marker — hollow triangle, filled/hollow diamond, or open
+    /// kind's end marker — hollow triangle, filled/hollow diamond, or filled
     /// arrowhead — resolved to concrete geometry. Any change to the drawn class
     /// appearance must land in both.
     public static func from(_ layout: ClassLayout, theme: RenderTheme,

@@ -170,6 +170,16 @@ public struct RenderTheme: Sendable, Hashable {
         self.palette = palette
     }
 
+    /// Phase 0a compatibility overload: keeps the original five-color
+    /// initializer source-compatible for callers that predate `tertiaryText`
+    /// and `palette`. Falls back to `secondaryText` for the tertiary tier and
+    /// an empty palette.
+    public init(ink: DiagramColor, accent: DiagramColor, canvas: DiagramColor,
+                hairline: DiagramColor, secondaryText: DiagramColor) {
+        self.init(ink: ink, accent: accent, canvas: canvas, hairline: hairline,
+                  secondaryText: secondaryText, tertiaryText: secondaryText)
+    }
+
     /// The categorical color for `index`, wrapping the palette — the platform-
     /// free twin of `DiagramTheme.categoricalColor(_:)`. A single accent-tinted
     /// fallback keeps sequence notes/bands drawable when no palette is supplied.
