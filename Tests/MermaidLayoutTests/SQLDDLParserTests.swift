@@ -1,5 +1,9 @@
 import XCTest
+#if canImport(CoreGraphics)
 import CoreGraphics
+#else
+import Foundation
+#endif
 @testable import MermaidLayout
 
 /// The SQL-DDL front-end: `CREATE TABLE …` → `ERDiagram`. Covers column typing,

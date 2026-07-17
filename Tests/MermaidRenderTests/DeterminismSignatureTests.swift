@@ -36,15 +36,17 @@ final class DeterminismSignatureTests: XCTestCase {
         let bg: (r: UInt8, g: UInt8, b: UInt8) = (255, 255, 255)
         var lines: [String] = []
         for f in files {
-            let src = try String(contentsOf: f, encoding: .utf8)
-            guard let diagram = MermaidParser.parse(src) else { continue }
             let name = f.deletingPathExtension().lastPathComponent
-            if let r = MermaidRenderer.rgbaRaster(diagram: diagram, theme: DiagramTheme(prefersDark: false),
-                                                  targetWidth: 500, background: bg) {
-                lines.append("\(name)\t\(r.width)x\(r.height):\(fnv1a(r.pixels))")
-            } else {
-                lines.append("\(name)\tnil")
-            }
+            let src = try String(contentsOf: f, encoding: .utf8)
+            // Fail loudly rather than skip: a fixture that silently fails to
+            // parse or rasterize would drop out of BOTH process dumps, so the
+            // determinism diff would pass vacuously.
+            let diagram = try XCTUnwrap(MermaidParser.parse(src), "\(name): fixture failed to parse")
+            let r = try XCTUnwrap(
+                MermaidRenderer.rgbaRaster(diagram: diagram, theme: DiagramTheme(prefersDark: false),
+                                           targetWidth: 500, background: bg),
+                "\(name): fixture failed to rasterize")
+            lines.append("\(name)\t\(r.width)x\(r.height):\(fnv1a(r.pixels))")
         }
         try (lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
     }
