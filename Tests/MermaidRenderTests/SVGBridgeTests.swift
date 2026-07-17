@@ -16,8 +16,10 @@ final class SVGBridgeTests: XCTestCase {
             theme: theme))
         XCTAssertTrue(svg.hasPrefix("<svg"))
         XCTAssertTrue(svg.contains("</svg>"))
+        #if canImport(Darwin)
         XCTAssertTrue(XMLParser(data: Data(svg.utf8)).parse(),
                       "bridged SVG must be XML-parseable")
+        #endif
         // Node fill uses the theme's resolved accent at 6% — a translucent rgba.
         XCTAssertTrue(svg.contains("rgba("))
     }

@@ -105,9 +105,12 @@ final class RenderSceneTests: XCTestCase {
         let texts = countOccurrences(of: "<text", in: svg)
         XCTAssertEqual(texts, 3) // three node labels, no edge labels here
 
-        // XMLParser accepts the document (root <svg> namespaced).
+        // XMLParser accepts the document (root <svg> namespaced). Apple only —
+        // swift-corelibs-foundation's XMLParser has no accessible initializer.
+        #if canImport(Darwin)
         let parser = XMLParser(data: Data(svg.utf8))
         XCTAssertTrue(parser.parse(), "SVG must be XML-parseable: \(parser.parserError as Any)")
+        #endif
     }
 
     func testSVGEscapesText() throws {
@@ -115,7 +118,9 @@ final class RenderSceneTests: XCTestCase {
         let svg = SVGRenderer.svg(try scene(source))
         XCTAssertTrue(svg.contains("a &amp; b &lt; c &gt; d"))
         XCTAssertFalse(svg.contains("a & b < c > d"))
+        #if canImport(Darwin)
         XCTAssertTrue(XMLParser(data: Data(svg.utf8)).parse())
+        #endif
     }
 
     // MARK: Shape coverage
