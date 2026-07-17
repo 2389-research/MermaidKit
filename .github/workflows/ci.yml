@@ -27,6 +27,13 @@ jobs:
       - name: Test
         run: swift test
 
+      # Cross-process render determinism: renders every fixture in two fresh
+      # processes (two random hash seeds) and diffs — guards against
+      # hashed-collection iteration order leaking into geometry (issue #1),
+      # which the in-process StabilityTests can't see (one fixed seed).
+      - name: Cross-process determinism
+        run: ./scripts/check-determinism.sh
+
       # The UIKit render branch has no test host, but it must always COMPILE —
       # v0.1.0 shipped an iOS-only build break precisely because nothing
       # exercised this branch.
