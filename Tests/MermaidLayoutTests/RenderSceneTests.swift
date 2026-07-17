@@ -630,6 +630,264 @@ final class RenderSceneTests: XCTestCase {
         XCTAssertTrue(svg.contains(">«element»<") || svg.contains("element"), "stereotype should render")
     }
 
+    // MARK: - Phase 0b-3a chart families
+
+    // MARK: Pie
+
+    func testPieSceneAndSVG() throws {
+        let source = """
+        pie title Pets
+            "Dogs" : 40
+            "Cats" : 35
+            "Birds" : 25
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .pie(let pie) = diagram else { return XCTFail("expected a pie diagram") }
+        let layout = DiagramLayoutEngine.layout(pie, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A wedge shape and a legend swatch per slice.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.slices.count * 2)
+        // A legend label per slice (+ optional title).
+        XCTAssertGreaterThanOrEqual(c.texts, layout.slices.count)
+        // A canvas-colored separator polyline per slice.
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.slices.count)
+
+        let svg = assertWellFormedSVG(scene)
+        // Wedges lower to quad-approximated arc paths.
+        XCTAssertTrue(svg.contains("<path"), "pie wedge should render as a path")
+        XCTAssertTrue(svg.contains(" Q "), "wedge rim should use quad-curve verbs")
+        // Legend labels carry a rounded percentage.
+        XCTAssertTrue(svg.contains("%)"), "legend should show a percentage")
+    }
+
+    // MARK: Gantt
+
+    func testGanttSceneAndSVG() throws {
+        let source = """
+        gantt
+            title Plan
+            dateFormat YYYY-MM-DD
+            section A
+            Task one :done, t1, 2026-01-01, 3d
+            Mark :milestone, m1, 2026-01-04, 0d
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .gantt(let gantt) = diagram else { return XCTFail("expected a gantt diagram") }
+        let layout = DiagramLayoutEngine.layout(gantt, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A bar/diamond shape per task (section bands add more).
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.bars.count)
+        XCTAssertGreaterThanOrEqual(c.texts, layout.bars.filter { !$0.label.isEmpty }.count)
+
+        let svg = assertWellFormedSVG(scene)
+        // The milestone lowers to a diamond polygon.
+        XCTAssertTrue(layout.bars.contains { $0.isMilestone }, "fixture should have a milestone")
+        XCTAssertTrue(svg.contains("<polygon"), "milestone should render as a polygon")
+        XCTAssertTrue(svg.contains(">Plan<"), "title should render")
+    }
+
+    // MARK: Timeline
+
+    func testTimelineSceneAndSVG() throws {
+        let source = """
+        timeline
+            title History
+            section One
+                2020 : Alpha : Beta
+                2021 : Gamma
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .timeline(let timeline) = diagram else { return XCTFail("expected a timeline diagram") }
+        let layout = DiagramLayoutEngine.layout(timeline, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        let eventCount = layout.periods.reduce(0) { $0 + $1.events.count }
+        // A dot per period + fill/stroke per event card.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.periods.count + eventCount)
+        // The spine is at least one polyline.
+        XCTAssertGreaterThanOrEqual(c.polylines, 1)
+
+        let svg = assertWellFormedSVG(scene)
+        XCTAssertTrue(svg.contains(">Alpha<"), "an event label should render")
+    }
+
+    // MARK: Journey
+
+    func testJourneySceneAndSVG() throws {
+        let source = """
+        journey
+            title My Day
+            section Work
+              Code : 5: Me
+              Email : 2: Me, Boss
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .journey(let journey) = diagram else { return XCTFail("expected a journey diagram") }
+        let layout = DiagramLayoutEngine.layout(journey, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A score badge ellipse per task.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.tasks.count)
+        // A score digit + label per task.
+        XCTAssertGreaterThanOrEqual(c.texts, layout.tasks.count * 2)
+
+        let svg = assertWellFormedSVG(scene)
+        XCTAssertTrue(svg.contains("<ellipse"), "score badge should render as an ellipse")
+        XCTAssertTrue(svg.contains(">Code<"), "a task label should render")
+    }
+
+    // MARK: Quadrant
+
+    func testQuadrantSceneAndSVG() throws {
+        let source = """
+        quadrantChart
+            title Q
+            x-axis Low --> High
+            y-axis Bad --> Good
+            quadrant-1 Do
+            quadrant-2 Plan
+            Alpha: [0.3, 0.6]
+            Beta: [0.7, 0.8]
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .quadrant(let quadrant) = diagram else { return XCTFail("expected a quadrant diagram") }
+        let layout = DiagramLayoutEngine.layout(quadrant, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // Four tint quarters + a plot border + a dot per point.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.quadrantRects.count + 1 + layout.points.count)
+        // The center cross is two polylines.
+        XCTAssertGreaterThanOrEqual(c.polylines, 2)
+
+        let svg = assertWellFormedSVG(scene)
+        // y-axis labels render rotated.
+        XCTAssertTrue(svg.contains(#"transform="rotate("#), "y-axis label should be rotated")
+        XCTAssertTrue(svg.contains(">Alpha<"), "a point label should render")
+    }
+
+    // MARK: XYChart
+
+    func testXYChartSceneAndSVG() throws {
+        let source = """
+        xychart-beta
+            title Sales
+            x-axis [jan, feb, mar]
+            y-axis "Rev" 0 --> 30
+            bar [10, 20, 30]
+            line [5, 15, 25]
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .xychart(let xychart) = diagram else { return XCTFail("expected an xychart diagram") }
+        let layout = DiagramLayoutEngine.layout(xychart, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A rect per bar + a dot per line vertex.
+        let vertexCount = layout.lines.reduce(0) { $0 + $1.points.count }
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.bars.count + vertexCount)
+        // Gridlines + the axis frame + each line series are polylines.
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.yLabels.count + 1)
+
+        let svg = assertWellFormedSVG(scene)
+        XCTAssertTrue(svg.contains("<polyline"), "line series/gridlines should render as polylines")
+        XCTAssertFalse(layout.bars.isEmpty, "fixture should have a bar series")
+    }
+
+    // MARK: Radar
+
+    func testRadarSceneAndSVG() throws {
+        let source = """
+        radar-beta
+            title Skills
+            axis a["A"], b["B"], c["C"]
+            curve x["X"]{a: 3, b: 4, c: 2}
+            curve y["Y"]{a: 5, b: 1, c: 4}
+            max 5
+            ticks 4
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .radar(let radar) = diagram else { return XCTFail("expected a radar diagram") }
+        let layout = DiagramLayoutEngine.layout(radar, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // Rings + curves lower to polygons; vertex dots + legend swatches add ellipses.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.rings.count + layout.curves.count)
+        // A spoke polyline per axis.
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.spokes.count)
+
+        let svg = assertWellFormedSVG(scene)
+        let polygons = countOccurrences(of: "<polygon", in: svg)
+        XCTAssertGreaterThanOrEqual(polygons, layout.rings.count + layout.curves.count,
+                                    "rings and curves should render as polygons")
+    }
+
+    // MARK: Packet
+
+    func testPacketSceneAndSVG() throws {
+        let source = """
+        packet-beta
+        title Header
+        0-15: "Source"
+        16-31: "Dest"
+        32: "F"
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .packet(let packet) = diagram else { return XCTFail("expected a packet diagram") }
+        let layout = DiagramLayoutEngine.layout(packet, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A fill + a border shape per bit-field segment.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.segments.count * 2)
+        // A start-bit index per segment (plus labels/end indices).
+        XCTAssertGreaterThanOrEqual(c.texts, layout.segments.count)
+
+        let svg = assertWellFormedSVG(scene)
+        XCTAssertTrue(svg.contains(">Source<"), "a field label should render")
+    }
+
+    // MARK: Kanban
+
+    func testKanbanSceneAndSVG() throws {
+        let source = """
+        kanban
+          todo[To Do]
+            c1[Do a thing]@{ ticket: MK-1 }
+          done[Done]
+            c2[Finished]@{ ticket: MK-2 }
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
+        guard case .kanban(let kanban) = diagram else { return XCTFail("expected a kanban diagram") }
+        let layout = DiagramLayoutEngine.layout(kanban, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A header pill per column + a body and rail per card.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.columns.count + layout.cards.count * 2)
+        // A column title per column.
+        XCTAssertGreaterThanOrEqual(c.texts, layout.columns.count)
+
+        let svg = assertWellFormedSVG(scene)
+        XCTAssertTrue(svg.contains(">To Do<"), "a column title should render")
+    }
+
     // MARK: Helpers
 
     private func countOccurrences(of needle: String, in haystack: String) -> Int {

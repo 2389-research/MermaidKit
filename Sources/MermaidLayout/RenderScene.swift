@@ -23,8 +23,10 @@ import CoreGraphics
 ///
 /// Phase 0a lowered the flowchart family; Phase 0b-1 adds state, ER, class, and
 /// sequence; Phase 0b-2 adds c4, architecture, block, swimlane, sankey, and
-/// requirement (one `RenderScene.from(_:theme:measure:)` per family, dispatched
-/// by `RenderScene.from(_ diagram:theme:measure:spacing:)`).
+/// requirement; Phase 0b-3a adds the chart families — pie, gantt, timeline,
+/// journey, quadrant, xychart, radar, packet, and kanban (one
+/// `RenderScene.from(_:theme:measure:)` per family, dispatched by
+/// `RenderScene.from(_ diagram:theme:measure:spacing:)`).
 public struct RenderScene: Sendable, Codable {
 
     /// Relative typographic weight, mapped by each backend to its font system.

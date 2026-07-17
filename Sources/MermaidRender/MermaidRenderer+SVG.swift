@@ -12,8 +12,10 @@ import MermaidLayout
 /// End-to-end SVG / `RenderScene` entry points — the bridge from Mermaid source
 /// to the platform-free scene IR (MermaidLayout/RenderScene) and its SVG
 /// backend. Covers the flowchart family plus the Phase 0b-1 (state, ER, class,
-/// sequence) and 0b-2 (c4, architecture, block, swimlane, sankey, requirement)
-/// families; other diagram types return nil until a later slice lowers them.
+/// sequence), 0b-2 (c4, architecture, block, swimlane, sankey, requirement), and
+/// 0b-3a (pie, gantt, timeline, journey, quadrant, xychart, radar, packet,
+/// kanban) families; other diagram types return nil until a later slice lowers
+/// them.
 extension MermaidRenderer {
 
     /// Lowers Mermaid `source` to a platform-free ``RenderScene``, mapping the
