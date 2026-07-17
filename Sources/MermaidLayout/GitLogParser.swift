@@ -22,16 +22,25 @@ import Foundation
 //     would bury the graph under callouts); each commit is instead identified
 //     by its short hash, which reads like a real git graph.
 //
-// Branch/lane derivation: a commit takes the branch named by its ref
-// decoration; an undecorated commit inherits its first parent's branch
-// (carried forward along the first-parent chain — `--topo-order --reverse`
-// guarantees parents are emitted before children, so the inherited branch is
-// already known). `branches` collects names in first-appearance (lane) order,
-// so the mainline — typically the root's lane — sits first.
+// Topology is resolved in two passes, so the parse never depends on the caller
+// having run `--topo-order --reverse`. The FIRST pass parses every line into a
+// raw record and records its full hash → index; the SECOND pass resolves each
+// record's parent hashes against that complete map and stably topologically
+// orders the records (Kahn's algorithm, lowest ready index first) so every
+// parent precedes its child — the `GitGraph.parents` index invariant. An
+// already-ordered source comes back unchanged; a `git log --graph` paste (which
+// emits children before parents) is reordered rather than silently dropping
+// links; a cyclic/unresolvable topology returns `nil`. A parent hash absent
+// from the paste (truncated history) is dropped defensively, never trapped.
 //
-// Parent hashes resolve to `commits` indices via a hash→index map built as the
-// walk proceeds; a parent hash never seen (which topo+reverse should preclude)
-// is dropped defensively rather than trapped.
+// Branch/lane derivation: a commit takes the branch named by its ref
+// decoration; an undecorated commit inherits its first parent's lane; a root
+// falls back to `main`. Each decorated branch is then propagated BACKWARD along
+// its first-parent ancestry (newest tip first), so a feature branch's interior
+// commits share the tip's lane instead of inheriting the mainline — a shared
+// ancestor is kept by the most-recent (mainline) tip that reaches it.
+// `branches` collects names in first-appearance (lane) order, so the mainline —
+// typically the root's lane — sits first.
 //
 // It also tolerates `git log --graph` output: the leading graph art
 // (`* | / \ _` runs) is stripped from each line, and connector-only lines
@@ -58,64 +67,182 @@ private final class GitLogParserImpl {
 
     private let source: String
 
-    // IR accumulators.
-    private var commits: [GitGraph.Commit] = []
-    private var branches: [String] = []
-    private var indexOfHash: [String: Int] = [:]   // full hash → commits index
-    private var branchOfIndex: [String] = []        // branch name per emitted commit
-
-    /// Running edge count (sum of resolved parent links) for the `maxEdges` cap.
-    private var edgeCount = 0
-
     /// Ultimate fallback lane for an undecorated root commit.
     private let defaultBranch = "main"
 
     init(source: String) { self.source = source }
 
+    /// One parsed source line, before topology is resolved. Parent *hashes* are
+    /// retained verbatim (capped at the first two — the linked parents); they
+    /// become `commits` indices only once every record is known.
+    private struct RawRecord {
+        let hash: String
+        let parentHashes: [String]   // first two parent hashes (the linked ones)
+        let branch: String?          // decorated branch name, else nil
+        let tag: String?
+        var isMerge: Bool { parentHashes.count >= 2 }
+    }
+
     func run() -> GitGraph? {
+        // First pass: parse every line into a raw record and index its hash.
+        // Ordering is NOT assumed — a `git log --graph` paste emits children
+        // before parents, so parents are resolved against the *full* map below.
+        var records: [RawRecord] = []
+        var indexOfHash: [String: Int] = [:]        // full hash → raw record index
         for raw in source.split(separator: "\n", omittingEmptySubsequences: false) {
             var line = raw
             if line.hasSuffix("\r") { line = line.dropLast() }
             let stripped = stripGraphArt(String(line))
             if stripped.isEmpty { continue }        // blank / connector-only line
-            guard let commit = parseCommit(stripped) else { continue }
-            let idx = commits.count
-            commits.append(commit.commit)
-            indexOfHash[commit.hash] = idx
-            branchOfIndex.append(commit.commit.branch)
-            registerBranch(commit.commit.branch)
-            edgeCount += commit.commit.parents.count
-            if edgeCount > MermaidParser.maxEdges { return nil }
+            guard let rec = parseRecord(stripped) else { continue }
+            if indexOfHash[rec.hash] != nil { continue }   // ignore a duplicate hash
+            indexOfHash[rec.hash] = records.count
+            records.append(rec)
         }
-        guard !commits.isEmpty else { return nil }
+        guard !records.isEmpty else { return nil }
+
+        // Resolve each record's parents to *raw* indices (a dangling parent —
+        // truncated history — is dropped defensively, never trapped) and hold
+        // the shared `maxEdges` cap.
+        var linkedParents: [[Int]] = []             // raw parent indices per record
+        linkedParents.reserveCapacity(records.count)
+        var totalEdges = 0
+        for rec in records {
+            let resolved = rec.parentHashes.compactMap { indexOfHash[$0] }
+            totalEdges += resolved.count
+            if totalEdges > MermaidParser.maxEdges { return nil }
+            linkedParents.append(resolved)
+        }
+
+        // Second pass: a stable topological order (parents before children) so
+        // the `parents` index invariant holds even for unordered input; a cycle
+        // yields nil.
+        guard let order = topologicalOrder(linkedParents: linkedParents) else { return nil }
+
+        // Map raw index → final (emission) index, then rebuild parent links.
+        var finalOf = [Int](repeating: 0, count: records.count)
+        for (fi, rawIdx) in order.enumerated() { finalOf[rawIdx] = fi }
+        var parentsOf = [[Int]](repeating: [], count: records.count)   // by final index
+        var firstParentOf = [Int?](repeating: nil, count: records.count)
+        for rawIdx in order {
+            let fi = finalOf[rawIdx]
+            let ps = linkedParents[rawIdx].map { finalOf[$0] }
+            parentsOf[fi] = ps
+            firstParentOf[fi] = ps.first
+        }
+
+        // Branch lanes (decoration → first-parent inheritance → backward
+        // propagation from decorated tips), then emit in final order collecting
+        // lane names in first-appearance order.
+        let branchOf = assignBranches(order: order, records: records,
+                                      firstParentOf: firstParentOf)
+        var commits: [GitGraph.Commit] = []
+        var branches: [String] = []
+        commits.reserveCapacity(records.count)
+        for (fi, rawIdx) in order.enumerated() {
+            let rec = records[rawIdx]
+            let branch = branchOf[fi]
+            if !branches.contains(branch) { branches.append(branch) }
+            commits.append(GitGraph.Commit(
+                id: shortHash(rec.hash), branch: branch, tag: rec.tag,
+                isMerge: rec.isMerge, parents: parentsOf[fi], hasExplicitID: true))
+        }
         return GitGraph(commits: commits, branches: branches)
+    }
+
+    // MARK: topology
+
+    /// A stable topological ordering of the raw records (every parent before its
+    /// child) using the resolved parent links. Kahn's algorithm always emits the
+    /// lowest ready raw index, so a source that is already topologically ordered
+    /// comes back unchanged; a cycle (no valid order) yields `nil`.
+    private func topologicalOrder(linkedParents: [[Int]]) -> [Int]? {
+        let n = linkedParents.count
+        var indegree = [Int](repeating: 0, count: n)
+        var children = [[Int]](repeating: [], count: n)
+        for (child, parents) in linkedParents.enumerated() {
+            for p in parents {
+                children[p].append(child)
+                indegree[child] += 1
+            }
+        }
+        var ready: [Int] = []
+        for i in 0..<n where indegree[i] == 0 { ready.append(i) }   // ascending
+        var order: [Int] = []
+        order.reserveCapacity(n)
+        var head = 0
+        while head < ready.count {
+            let node = ready[head]; head += 1
+            order.append(node)
+            for child in children[node] {
+                indegree[child] -= 1
+                if indegree[child] == 0 {
+                    // Insert keeping `ready[head...]` ascending (lowest emits next).
+                    var lo = head, hi = ready.count
+                    while lo < hi {
+                        let mid = (lo + hi) / 2
+                        if ready[mid] < child { lo = mid + 1 } else { hi = mid }
+                    }
+                    ready.insert(child, at: lo)
+                }
+            }
+        }
+        return order.count == n ? order : nil       // short ⇒ a cycle remains
+    }
+
+    /// Computes each commit's branch lane (indexed by final position). Base
+    /// rule, applied in topological order (a parent is always settled before its
+    /// child): a decorated commit takes its ref's branch; an undecorated commit
+    /// inherits its first parent's lane; a root falls back to the default. Then
+    /// every decorated branch is propagated backward along its first-parent
+    /// ancestry — processed newest-first so a shared ancestor is kept by the
+    /// most-recent (mainline) tip that reaches it, leaving a feature branch's
+    /// interior commits on the tip's lane rather than the mainline.
+    private func assignBranches(order: [Int], records: [RawRecord],
+                                firstParentOf: [Int?]) -> [String] {
+        let n = order.count
+        var branch = [String](repeating: defaultBranch, count: n)
+        var decorated = [Bool](repeating: false, count: n)
+        for (fi, rawIdx) in order.enumerated() {
+            if let b = records[rawIdx].branch {
+                branch[fi] = b
+                decorated[fi] = true
+            } else if let fp = firstParentOf[fi] {
+                branch[fi] = branch[fp]
+            }
+        }
+        var claimed = decorated
+        for fi in stride(from: n - 1, through: 0, by: -1) {
+            guard decorated[fi] else { continue }
+            let b = branch[fi]
+            var cur = firstParentOf[fi]
+            while let p = cur, !claimed[p] {
+                branch[p] = b
+                claimed[p] = true
+                cur = firstParentOf[p]
+            }
+        }
+        return branch
     }
 
     // MARK: line parsing
 
-    private struct ParsedCommit { let hash: String; let commit: GitGraph.Commit }
-
-    /// Parses one already-art-stripped line into a commit, or `nil` when its
+    /// Parses one already-art-stripped line into a raw record, or `nil` when its
     /// leading token isn't a hash (a non-git / prose line).
-    private func parseCommit(_ line: String) -> ParsedCommit? {
+    private func parseRecord(_ line: String) -> RawRecord? {
         var tokens = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
         guard let hash = tokens.first, isHash(hash) else { return nil }
         tokens.removeFirst()
 
-        // Consume leading hash-shaped tokens as parents (stops at the decoration
-        // `(…)` or the subject). `--topo-order --reverse` puts parents ahead of
-        // children, so each is already in `indexOfHash`; an unseen hash is
-        // dropped defensively.
-        var parentIndices: [Int] = []
-        var isMerge = false
-        var parentCount = 0
+        // Leading hash-shaped tokens are parent hashes (they stop at the `(…)`
+        // decoration or the subject). Keep only the first two as links; a 3+-parent
+        // octopus therefore still records two hashes, and `RawRecord.isMerge`
+        // (count ≥ 2) reads true for it just as for an ordinary two-parent merge.
+        var parentHashes: [String] = []
         while let t = tokens.first, isHash(t) {
             tokens.removeFirst()
-            parentCount += 1
-            // A merge is two-or-more parents; we keep only the first two links.
-            if parentCount <= 2, let pIdx = indexOfHash[t] { parentIndices.append(pIdx) }
+            if parentHashes.count < 2 { parentHashes.append(t) }
         }
-        if parentCount >= 2 { isMerge = true }
 
         // Ref decoration: a leading `(…)` group (which may itself span several
         // whitespace tokens, e.g. `(HEAD -> main, origin/main)`).
@@ -137,16 +264,8 @@ private final class GitLogParserImpl {
         }
         // Remaining tokens are the subject — intentionally dropped (no IR field).
 
-        // Branch: decoration wins; else inherit first parent's lane; else the
-        // default mainline for an undecorated root.
-        let branch = decoratedBranch
-            ?? parentIndices.first.map { branchOfIndex[$0] }
-            ?? defaultBranch
-
-        let commit = GitGraph.Commit(
-            id: shortHash(hash), branch: branch, tag: tagName,
-            isMerge: isMerge, parents: parentIndices, hasExplicitID: true)
-        return ParsedCommit(hash: hash, commit: commit)
+        return RawRecord(hash: hash, parentHashes: parentHashes,
+                         branch: decoratedBranch, tag: tagName)
     }
 
     // MARK: decoration
@@ -157,6 +276,9 @@ private final class GitLogParserImpl {
     /// into a preferred local branch name and an optional tag. Preference:
     /// the `HEAD -> …` branch, then a plain local branch, then a remote's
     /// trailing name; `tag: X` yields the tag; bare `HEAD` (detached) is ignored.
+    /// A slash does NOT mark a remote — a local branch like `feature/login` or
+    /// `release/1.2` keeps its full name; only the default `origin/` remote
+    /// prefix is stripped, and solely to form the remote fallback name.
     private func parseDecoration(_ body: String) -> DecodedRefs {
         var headBranch: String?
         var localBranch: String?
@@ -178,20 +300,20 @@ private final class GitLogParserImpl {
                 continue
             }
             if ref == "HEAD" { continue }                       // detached HEAD
-            if let slash = ref.firstIndex(of: "/") {
-                // A remote-tracking (or namespaced) ref like `origin/main`.
-                let name = String(ref[ref.index(after: slash)...])
+            if ref.hasPrefix("origin/") {
+                // A remote-tracking ref like `origin/main`; use only its trailing
+                // name, and only as a fallback. A slash alone does NOT signal a
+                // remote — a local branch such as `feature/login` keeps its full
+                // name (handled by the plain-local case below), so we strip the
+                // prefix solely for the default `origin` remote.
+                let name = String(ref.dropFirst("origin/".count))
                 if !name.isEmpty, name != "HEAD", remoteBranch == nil { remoteBranch = name }
                 continue
             }
-            if localBranch == nil { localBranch = ref }         // plain local branch
+            if localBranch == nil { localBranch = ref }         // plain local branch (slashes kept)
         }
         let branch = headBranch ?? localBranch ?? remoteBranch
         return DecodedRefs(branch: branch, tag: tag)
-    }
-
-    private func registerBranch(_ name: String) {
-        if !branches.contains(name) { branches.append(name) }
     }
 
     // MARK: lexical helpers

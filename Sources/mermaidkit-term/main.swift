@@ -211,6 +211,19 @@ func run() -> Int32 {
         return renderHalfBlock(source, diagram: dotDiagram, background: background,
                                requestedWidth: opts.width)
     case .coloredBox, .plainBox:
+        // The box/plain ladder is flowchart-scoped (ASCIIRenderer draws the
+        // Flowchart IR only). A git-log paste lowers to the GitGraph IR, which
+        // these tiers can't draw — and when `auto` resolves to a box mode this is
+        // reached without the user having asked for it. Degrade with a dedicated
+        // message that points at a raster mode, rather than reparsing the raw git
+        // log as Mermaid and emitting a misleading "not a flowchart" error.
+        if case .gitGraph? = dotDiagram {
+            let msg = "git-log input renders as a gitGraph, which the box/plain "
+                + "modes can't draw (they are flowchart-scoped); rerun with "
+                + "--mode kitty or --mode halfblock\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            return 1
+        }
         let colorOn = (mode == .coloredBox)
         let color: ASCIIColorMode = colorOn ? .truecolor : .plain
         let out: String?

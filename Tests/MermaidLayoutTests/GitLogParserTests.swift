@@ -9,11 +9,13 @@ import Foundation
 /// Exercises the `git log` front-end (`GitLogParser`) against the shared
 /// `GitGraph` IR — the same target the Mermaid-native `gitGraph` parser builds.
 /// It covers the happy paths (linear history; a branch + merge; a `tag:`
-/// decoration; multiple branches and their lane order) and, non-negotiably, that
-/// malformed/hostile input never crashes or hangs (nil is always acceptable): an
-/// empty source, non-git prose, an oversized source, the `maxEdges` cap, pasted
-/// `git log --graph` art, and unicode. A final case runs the full parse →
-/// layout → scene → lint pipeline and asserts it comes back clean.
+/// decoration; slash-containing branch names; multiple branches and their lane
+/// order; unordered/child-before-parent input reordered to a valid topology) and,
+/// non-negotiably, that malformed/hostile input is REJECTED with `nil` (never a
+/// trap or a garbage graph): an empty source, non-git prose, an oversized source,
+/// a cyclic topology, the `maxEdges` cap, pasted `git log --graph` art, and
+/// unicode. A final case runs the full parse → layout → scene → lint pipeline
+/// and asserts it comes back clean.
 final class GitLogParserTests: XCTestCase {
 
     private let measure: DiagramTextMeasurer = { text, size in
@@ -110,6 +112,27 @@ final class GitLogParserTests: XCTestCase {
         XCTAssertNil(g.commits[5].tag)
     }
 
+    // MARK: decoration — slash-containing branch names
+
+    func testSlashContainingLocalBranchPreserved() {
+        // A local branch with slashes (`feature/login`, `release/1.2`) must keep
+        // its full name — truncating at `/` would conflate distinct lanes. Only
+        // a leading `origin/` remote prefix is stripped, and only for the remote
+        // fallback name.
+        let src = """
+        1111111111111111111111111111111111111111  root
+        2222222222222222222222222222222222222222 1111111111111111111111111111111111111111 (HEAD -> feature/login) work
+        3333333333333333333333333333333333333333 1111111111111111111111111111111111111111 (release/1.2) cut
+        4444444444444444444444444444444444444444 1111111111111111111111111111111111111111 (origin/main) mirror
+        """
+        let g = parse(src)
+        XCTAssertEqual(g.commits[1].branch, "feature/login")  // `HEAD -> feature/login`
+        XCTAssertEqual(g.commits[2].branch, "release/1.2")    // plain local, slash kept
+        XCTAssertEqual(g.commits[3].branch, "main")           // `origin/main` → remote fallback `main`
+        XCTAssertTrue(g.branches.contains("feature/login"))
+        XCTAssertTrue(g.branches.contains("release/1.2"))
+    }
+
     // MARK: happy path — multiple branches, lane order
 
     func testMultipleBranchesLaneOrder() {
@@ -190,6 +213,53 @@ final class GitLogParserTests: XCTestCase {
             !c.id.contains("*") && !c.id.contains("|") && !c.id.contains("\\")
         })
         assertTopoValid(g)
+
+        // The `--graph` paste lists children BEFORE parents. The two-pass parse
+        // must reorder into a valid topology and rebuild the real parent links —
+        // not silently drop them (which would leave a link-free graph that still
+        // passes the topology check). Emission order is init → second → feat A →
+        // feat B → main C → merge.
+        XCTAssertEqual(g.commits.map(\.id),
+                       ["8830ab2", "f725795", "29ecf1d", "bcede20", "51d6e7e", "d79597d"])
+        XCTAssertEqual(g.commits.map(\.parents), [[], [0], [1], [2], [1], [4, 3]])
+        XCTAssertTrue(g.commits[5].isMerge)
+        XCTAssertFalse(g.commits.dropLast().contains { $0.isMerge })
+        // Lanes survive the reorder: mainline first, feature second; the merge
+        // lands on main and the feature interior commit shares the feature lane.
+        XCTAssertEqual(g.branches, ["main", "feature"])
+        XCTAssertEqual(g.commits[2].branch, "feature")   // feat A (undecorated interior)
+        XCTAssertEqual(g.commits[3].branch, "feature")   // feat B (feature tip)
+        XCTAssertEqual(g.commits[5].branch, "main")      // merge onto main
+    }
+
+    // MARK: unordered input — child-before-parent linear history
+
+    func testUnorderedInputIsReordered() {
+        // A linear history pasted newest-first (NOT `--reverse`). The two-pass
+        // parse resolves parents against the full hash map and reorders so every
+        // parent precedes its child.
+        let src = """
+        cccccccccccccccccccccccccccccccccccccccc bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb (HEAD -> main) third
+        bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa second
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  first
+        """
+        let g = parse(src)
+        XCTAssertEqual(g.commits.map(\.id), ["aaaaaaa", "bbbbbbb", "ccccccc"])
+        XCTAssertEqual(g.commits.map(\.parents), [[], [0], [1]])
+        XCTAssertEqual(g.branches, ["main"])
+        assertTopoValid(g)
+    }
+
+    // MARK: cyclic input is rejected
+
+    func testCyclicTopologyIsNil() {
+        // Two commits that name each other as parent form a cycle with no valid
+        // topological order → nil (never a trap or an out-of-order graph).
+        let src = """
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb one
+        bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa two
+        """
+        XCTAssertNil(GitLogParser.parse(src))
     }
 
     func testUnicodeSubjectDoesNotBreak() {
@@ -206,19 +276,28 @@ final class GitLogParserTests: XCTestCase {
         assertTopoValid(g)
     }
 
-    func testMalformedNeverTraps() {
-        // A grab bag of hostile lines: none may crash; nil is acceptable.
-        let cases = [
+    func testMalformedIsRejected() {
+        // Hostile lines with no valid leading-hash record must be REJECTED (nil),
+        // not silently turned into an empty/garbage graph — and never trap.
+        let rejected = [
             "(((",
             ")))",
-            "abcdef (unterminated",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa deadbeefdeadbeef more words here",
+            "abcdef (unterminated",                 // 6-char token: not a 7+ hex hash
             "\u{0}\u{1}\u{2}",
-            String(repeating: "* | \\ /\n", count: 200),
+            String(repeating: "* | \\ /\n", count: 200),  // pure graph-art / connectors
         ]
-        for c in cases {
-            _ = GitLogParser.parse(c)   // just must not trap
+        for c in rejected {
+            XCTAssertNil(GitLogParser.parse(c), "expected nil for \(c.debugDescription)")
         }
+
+        // A valid commit whose parent hash is absent from the paste (truncated
+        // history) is NOT malformed: it parses to that single commit with the
+        // dangling parent dropped defensively — no crash, no invented link.
+        let truncated =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa deadbeefdeadbeef more words here"
+        let g = GitLogParser.parse(truncated)
+        XCTAssertEqual(g?.commits.count, 1)
+        XCTAssertEqual(g?.commits.first?.parents, [])
     }
 
     // MARK: full pipeline — parse → layout → scene lints clean
