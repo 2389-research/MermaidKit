@@ -21,8 +21,9 @@ import CoreGraphics
 /// `Codable` so a scene can cross a process boundary (SVG export, a plugin, a
 /// JSON bridge to Kotlin) byte-for-byte.
 ///
-/// This slice lowers the flowchart family (`RenderScene.from(_:theme:measure:)`).
-/// Phase 0b: the other diagram families gain their own `from` lowerings.
+/// Phase 0a lowered the flowchart family; Phase 0b adds state, ER, class, and
+/// sequence (one `RenderScene.from(_:theme:measure:)` per family, dispatched by
+/// `RenderScene.from(_ diagram:theme:measure:spacing:)`).
 public struct RenderScene: Sendable, Codable {
 
     /// Relative typographic weight, mapped by each backend to its font system.
@@ -147,17 +148,44 @@ public struct RenderTheme: Sendable, Hashable {
     public var accent: DiagramColor
     /// The diagram background fill.
     public var canvas: DiagramColor
-    /// Thin rules (reserved for future families; kept for parity with themes).
+    /// Thin rules — sequence box-band borders and fragment-tab fills wear it.
     public var hairline: DiagramColor
     /// De-emphasized text — the color edge labels wear.
     public var secondaryText: DiagramColor
+    /// Most-de-emphasized text — sequence fragment guards and note captions.
+    public var tertiaryText: DiagramColor
+    /// Categorical hues, cycled by index — sequence box bands and note fills
+    /// pick from it (Phase 0b). Empty when a family doesn't need it.
+    public var palette: [DiagramColor]
 
     public init(ink: DiagramColor, accent: DiagramColor, canvas: DiagramColor,
-                hairline: DiagramColor, secondaryText: DiagramColor) {
+                hairline: DiagramColor, secondaryText: DiagramColor,
+                tertiaryText: DiagramColor, palette: [DiagramColor] = []) {
         self.ink = ink
         self.accent = accent
         self.canvas = canvas
         self.hairline = hairline
         self.secondaryText = secondaryText
+        self.tertiaryText = tertiaryText
+        self.palette = palette
+    }
+
+    /// Phase 0a compatibility overload: keeps the original five-color
+    /// initializer source-compatible for callers that predate `tertiaryText`
+    /// and `palette`. Falls back to `secondaryText` for the tertiary tier and
+    /// an empty palette.
+    public init(ink: DiagramColor, accent: DiagramColor, canvas: DiagramColor,
+                hairline: DiagramColor, secondaryText: DiagramColor) {
+        self.init(ink: ink, accent: accent, canvas: canvas, hairline: hairline,
+                  secondaryText: secondaryText, tertiaryText: secondaryText)
+    }
+
+    /// The categorical color for `index`, wrapping the palette — the platform-
+    /// free twin of `DiagramTheme.categoricalColor(_:)`. A single accent-tinted
+    /// fallback keeps sequence notes/bands drawable when no palette is supplied.
+    public func categoricalColor(_ index: Int) -> DiagramColor {
+        let count = palette.count
+        guard count > 0 else { return accent }
+        return palette[((index % count) + count) % count]
     }
 }
