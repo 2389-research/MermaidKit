@@ -22,7 +22,7 @@ Feature groups are labeled **G1–G11** and referenced by shorthand throughout.
 | Rendering | Native geometry pipeline: parse → layout → common scene IR → draw. Both backends share the layout and per-type draw code; only the platform surface (CoreGraphics vs Silica) differs. No web view, no headless browser, no Mermaid.js. |
 | Dependencies | Zero third-party packages on Apple. On Linux the render backend adds Silica (Cairo/FontConfig); `MermaidLayout` depends on nothing. |
 | Coverage | **30 distinct diagram types** (`MermaidDiagram` enum, 30-branch parser dispatch, 30-row README matrix, 30 fixtures). |
-| Verification | 188 package tests on macOS, 0 failures (2 intentionally env-gated skips). On Linux, 172 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` suite plus Silica render smoke tests (all 30 fixtures render). |
+| Verification | 311 package tests on macOS, 0 failures (2 intentionally env-gated skips). On Linux, 282 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` suite plus Silica render smoke tests (all 30 fixtures render). |
 | Origin | Built so that a diagram's source of truth stays the Mermaid text — parsed, laid out, and drawn natively in a Swift app — with layout judged by machine-checkable geometry rather than pixels, and with no runtime dependency on a JavaScript engine or web view. Consumed by the Quoin markdown editor as a first-party engine. |
 
 ---
@@ -162,8 +162,8 @@ Named properties with dedicated tests, run on every CI build.
 
 | Feature | Specific |
 | :--- | :--- |
-| Test suite | 188 package tests, 0 failures (2 intentionally env-gated skips: doc-image generation and single-type lint). 169 layout tests, 19 render tests. |
-| Cross-platform | 172 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` suite plus the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
+| Test suite | 311 package tests, 0 failures (2 intentionally env-gated skips: doc-image generation and single-type lint). 288 layout tests, 23 render tests. |
+| Cross-platform | 282 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` suite plus the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
 | Dependency policy | The Silica/Cairo Linux render backend is behind the `LinuxRaster` package trait (default OFF). A `from:`-pinned consumer resolves a Silica-free graph on every platform — no unstable branch dependency, no Cairo/PureSwift stack fetched on Apple. Linux users opt in with `traits: ["LinuxRaster"]`. |
 | CI | `test` (macOS): `swift build` + `swift test` on Xcode 26, plus a compile-only iOS-Simulator guard (a UIKit branch with no test host that must always compile). `linux`: installs Cairo/FontConfig, then `swift build --traits LinuxRaster` + `swift test --traits LinuxRaster`, and a `swift build --target MermaidLayout` proving the default Silica-free graph builds. |
 | Parser honesty | `ParserHonestyTests` (41 tests) pins that syntax once silently dropped or mangled now parses faithfully; `AdversarialInputTests` (11) that hostile input never crashes. |

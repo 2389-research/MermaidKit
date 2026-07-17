@@ -1,6 +1,9 @@
 # Render performance: where the milliseconds go
 
-Perf memo, last revised 2026-07-15. Machine: **Apple M1 Max**, macOS 26.5.
+Perf memo, last revised 2026-07-16. Machine: **Apple M1 Max**, macOS 26.5.
+Re-verified on the same M1 Max after the v1.2 edge-label / back-edge layout
+overhaul: the numbers below still hold — worst is sankey ~23–25 ms, most types
+under ~15 ms, and rasterization still dominates.
 Every number here is machine-specific and best-of-N cold — it is **not** a CI
 threshold. MermaidKit's test suite asserts correctness only; timing gates flake
 under CI load, so nothing here gates a merge. Numbers over adjectives: this memo
