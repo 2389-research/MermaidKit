@@ -378,7 +378,7 @@
       <div class="kicker" style="margin-top:22px">Install</div>
 <pre>.<span class="tt">package</span>(
   <span class="ta">url:</span> <span class="ts">"https://github.com/2389-research/MermaidKit.git"</span>,
-  <span class="ta">from:</span> <span class="ts">"1.0.0"</span>
+  <span class="ta">from:</span> <span class="ts">"1.3.0"</span>
 )</pre>
     </div>
     <div>
@@ -478,10 +478,12 @@ flowchart TD
   <div class="feats" style="margin-top:20px">
     <div><h3>SwiftUI drop-in</h3><p><code>MermaidView(source, theme:spacing:)</code> — light/dark aware, self-sizing, cached, VoiceOver-described.</p></div>
     <div><h3>Image, PDF, attributed string</h3><p><code>MermaidRenderer.image / pdfData / attachmentString</code> — same layout and draw code; vector PDF for crisp export and print.</p></div>
-    <div><h3>Accessibility from day one</h3><p><code>altText(source:)</code> generates a deterministic content description for every one of the 30 types.</p></div>
+    <div><h3>Accessibility from day one</h3><p><code>altText(source:)</code> generates a deterministic content description for every one of the 30 types; <code>MermaidAltText.narrate(_:)</code> adds a step-by-step walkthrough — decisions, states, ER cardinalities, sequence messages.</p></div>
     <div><h3>Themed with a single value</h3><p><code>DiagramTheme</code> — six colors plus a categorical palette re-skin all 30 types at once; <code>DiagramSpacing</code> sets density.</p></div>
     <div><h3>Diagnose parse failures</h3><p><code>MermaidParser.diagnose(_:)</code> explains failures with line numbers and did-you-mean suggestions for typo'd headers.</p></div>
     <div><h3>Headless geometry</h3><p>The parse → layout → scene pipeline is platform-free — no AppKit/UIKit. Tools get frames, polylines, and label boxes without rendering a pixel.</p></div>
+    <div><h3>More than Mermaid in</h3><p><code>DOTParser</code>, <code>DippinParser</code>, and <code>SQLDDLParser</code> parse Graphviz DOT, Dippin, and SQL <code>CREATE TABLE</code> into the same engine; <code>DOTExporter</code> emits DOT back — a Mermaid ⇄ DOT converter. SQL DDL renders as an ER diagram with PK/FK/UK badges.</p></div>
+    <div><h3>Renders in the terminal</h3><p>The <code>mermaidkit-term</code> CLI draws any Mermaid/DOT/Dippin source in the terminal — Kitty graphics, half-block truecolor, colored box-drawing, or plain ASCII. Platform-free; runs headless on Linux/CI.</p></div>
   </div>
 </div></section>
 
@@ -490,9 +492,10 @@ flowchart TD
   <h2>What it costs, plainly.</h2>
   <div class="stats" style="margin-top:20px">
     <div class="stat"><div class="n">30</div><div class="l">diagram types, natively</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">input front-ends: Mermaid, DOT, Dippin, SQL DDL</div></div>
     <div class="stat"><div class="n">0</div><div class="l">dependencies, JS, or WebView</div></div>
     <div class="stat"><div class="n">~25 ms</div><div class="l">worst cold render incl. rasterization (sankey); most types under ~15 ms</div></div>
-    <div class="stat"><div class="n">188</div><div class="l">tests in CI, macOS + Linux</div></div>
+    <div class="stat"><div class="n">311</div><div class="l">tests in CI on macOS (282 on Linux)</div></div>
     <div class="stat"><div class="n">2</div><div class="l">render backends: CoreGraphics + Silica/Cairo</div></div>
     <div class="stat"><div class="n">MIT</div><div class="l">license</div></div>
   </div>
@@ -526,7 +529,7 @@ flowchart TD
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/mermaid-coverage-audit.md"><b>Mermaid Coverage Audit</b><span>What each type parses, what's ignored, and where the known gaps are.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/performance.md"><b>Performance</b><span>Methodology, per-type numbers, where the time goes, and the fixable-vs-irreducible costs.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CONTRIBUTING.md"><b>Contributing</b><span>The lay of the land, the geometry-first review bar, and developing on Linux.</span></a>
-    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release through 1.0, with the reasoning behind each change.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release through 1.3 — DOT and SQL front-ends, terminal rendering, narration — with the reasoning behind each change.</span></a>
   </div>
 </div></section>
 

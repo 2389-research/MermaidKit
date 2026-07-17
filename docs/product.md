@@ -5,7 +5,7 @@ documentation). It records what MermaidKit is and what it does, with claims
 backed by tests, docs, or CI-generated images. It deliberately contains no
 taglines and makes no visual or format decisions for those surfaces.
 
-Feature groups are labeled **G1–G9** and referenced by shorthand throughout.
+Feature groups are labeled **G1–G11** and referenced by shorthand throughout.
 
 ---
 
@@ -15,14 +15,14 @@ Feature groups are labeled **G1–G9** and referenced by shorthand throughout.
 | :--- | :--- |
 | Name | MermaidKit |
 | Definition | A native Swift library that parses, lays out, and renders [Mermaid](https://mermaid.js.org) diagrams. The diagram source is the input; the library produces typed models, pure geometry (a scene IR), and drawn images and PDF — on Apple platforms via CoreGraphics/CoreText, on Linux via Silica (Cairo/FontConfig). No JavaScript, no WebView, no Mermaid.js. |
-| Status | **1.0** — stable public API (the entry points are frozen; model/layout field changes are now semver-major). Latest tag `v1.0.0`. Rendering ships on Apple platforms and on Linux (behind the `LinuxRaster` package trait, so no-trait consumers keep a Silica-free graph); `MermaidLayout` is platform-free. |
+| Status | **1.3** — stable public API (the 1.0 entry points are frozen; model/layout field changes are semver-major). Latest tag `v1.3.0`. Since 1.0, all additive: alternate front-ends (Graphviz DOT, Dippin, SQL DDL) and DOT export (**G10**), a terminal renderer (**G11**), diagram narration (**G6**), and two new flowchart node shapes (**G2**). Rendering ships on Apple platforms and on Linux (behind the `LinuxRaster` package trait, so no-trait consumers keep a Silica-free graph); `MermaidLayout` is platform-free. |
 | Repository | github.com/2389-research/MermaidKit |
 | Platforms | Rendering: macOS 14+, iOS 17+, visionOS 1+ (CoreGraphics/CoreText); Linux (Silica/Cairo). Geometry (`MermaidLayout`): platform-free — builds and tests on any swift-corelibs-foundation target. |
 | Language / runtime | Swift 6 (`swift-tools-version: 6.2`, strict concurrency; the Silica backend's transitive graph sets a Swift 6.2 / Xcode 26 floor). Drawing via CoreGraphics/CoreText on Apple, Silica/Cairo on Linux. Zero JavaScript at runtime; local-only. |
 | Rendering | Native geometry pipeline: parse → layout → common scene IR → draw. Both backends share the layout and per-type draw code; only the platform surface (CoreGraphics vs Silica) differs. No web view, no headless browser, no Mermaid.js. |
 | Dependencies | Zero third-party packages on Apple. On Linux the render backend adds Silica (Cairo/FontConfig); `MermaidLayout` depends on nothing. |
 | Coverage | **30 distinct diagram types** (`MermaidDiagram` enum, 30-branch parser dispatch, 30-row README matrix, 30 fixtures). |
-| Verification | 188 package tests on macOS, 0 failures (2 intentionally env-gated skips). On Linux, 172 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` suite plus Silica render smoke tests (all 30 fixtures render). |
+| Verification | 311 package tests on macOS, 0 failures (2 intentionally env-gated skips). On Linux, 282 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` suite plus Silica render smoke tests (all 30 fixtures render). |
 | Origin | Built so that a diagram's source of truth stays the Mermaid text — parsed, laid out, and drawn natively in a Swift app — with layout judged by machine-checkable geometry rather than pixels, and with no runtime dependency on a JavaScript engine or web view. Consumed by the Quoin markdown editor as a first-party engine. |
 
 ---
@@ -70,7 +70,7 @@ literally diagrams the pipeline.
 | Layer assignment | **Network simplex** (Gansner et al. — minimum total edge length), the ELK Layered / Graphviz-dot default, with longest-path as both the initial feasible seed and the fallback at the iteration cap (`DiagramLayoutLayering.swift`). |
 | Cycle / back-edges | Back-edges are detected and stripped before layering (which requires an acyclic graph), then routed on the opposite side; long edges (forward or back) get dummy-node chains so they route between nodes, not through them. Regression-pinned by `BackEdgeReproTests`. |
 | Subgraph clusters | Recursive: each subgraph's interior is laid out as its own flowchart, wrapped in box chrome, with inner `direction` honored and LCA-based edge re-parenting; an edge may name a subgraph id and attach to the group border (no phantom node). |
-| Node shapes | 6 — rectangle `[ ]`, rounded `( )`, stadium `([ ])`, diamond `{ }`, circle `(( ))`, cylinder `[( )]`. |
+| Node shapes | 8 — rectangle `[ ]`, rounded `( )`, stadium `([ ])`, diamond `{ }`, circle `(( ))`, cylinder `[( )]`, hexagon `{{ }}`, subroutine `[[ ]]`. |
 | Directions | TD / LR / BT / RL. |
 | Edge model | optional `\|label\|`, dashed (`-.->`), arrow/no-arrow (`---`), bidirectional (`<-->`); `--o`/`--x` heads and edge IDs parse without minting phantom nodes. |
 | Determinism | Model-order tie-breaks throughout, so the same source yields byte-identical geometry across runs (`StabilityTests`). |
@@ -129,6 +129,7 @@ render path. `MermaidAltText`; `AltTextTests`, `DiagramMetadataTests`.
 | Feature | Specific |
 | :--- | :--- |
 | Alt text | `MermaidAltText.describe(_:)` produces one deterministic sentence per type from the models (not geometry): leads with the type, states honest counts, then names leading content (long lists truncate to 6 + "and N more"). All 30 types handled. |
+| Narration | `MermaidAltText.narrate(_:)` gives a step-by-step *walkthrough* (a richer companion to `describe`'s one-liner): it follows a flowchart's edges through its decisions, reads a state machine from its initial state, spells out an ER schema's cardinalities, and replays a sequence message by message; every other type falls back to `describe`. Deterministic and length-bounded; mirrors `describe`'s API (`narrate(_:)`, `narrate(_:metadata:)`, `narrate(source:)`). |
 | Author words first | `describe(_:metadata:)` prepends the author's `accTitle`/front-matter `title` and `accDescr`, then the generated structural summary — author intent first, always backed by honest counts. |
 | Wired everywhere | `MermaidView`'s accessibility label, the embedded image's description, and `MermaidRenderer.altText(source:)` all use it; it survives the render-cache round-trip. |
 
@@ -161,13 +162,41 @@ Named properties with dedicated tests, run on every CI build.
 
 | Feature | Specific |
 | :--- | :--- |
-| Test suite | 188 package tests, 0 failures (2 intentionally env-gated skips: doc-image generation and single-type lint). 169 layout tests, 19 render tests. |
-| Cross-platform | 172 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` suite plus the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
+| Test suite | 311 package tests, 0 failures (2 intentionally env-gated skips: doc-image generation and single-type lint). 288 layout tests, 23 render tests. |
+| Cross-platform | 282 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` suite plus the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
 | Dependency policy | The Silica/Cairo Linux render backend is behind the `LinuxRaster` package trait (default OFF). A `from:`-pinned consumer resolves a Silica-free graph on every platform — no unstable branch dependency, no Cairo/PureSwift stack fetched on Apple. Linux users opt in with `traits: ["LinuxRaster"]`. |
 | CI | `test` (macOS): `swift build` + `swift test` on Xcode 26, plus a compile-only iOS-Simulator guard (a UIKit branch with no test host that must always compile). `linux`: installs Cairo/FontConfig, then `swift build --traits LinuxRaster` + `swift test --traits LinuxRaster`, and a `swift build --target MermaidLayout` proving the default Silica-free graph builds. |
 | Parser honesty | `ParserHonestyTests` (41 tests) pins that syntax once silently dropped or mangled now parses faithfully; `AdversarialInputTests` (11) that hostile input never crashes. |
 | Benchmarks | `RenderBenchmarks` is a correctness smoke: every fixture must parse, render, and rasterize (it forces the deferred CoreGraphics draw). It makes **no wall-clock assertion** — timing gates flake under CI load, so performance never gates a merge. The per-type millisecond table is opt-in (`BENCH_TABLE=1 swift test --filter RenderBenchmarks`) and lives in `docs/notes/performance.md`. |
-| Documentation | DocC catalogs for both targets (8 articles) plus `README.md`, `docs/GALLERY.md`, and three preserved design memos in `docs/notes/`. |
+| Documentation | DocC catalogs for both targets (8 articles) plus `README.md`, `docs/GALLERY.md`, and preserved design memos in `docs/notes/`. |
+
+### G10 — Alternate front-ends & DOT interchange
+
+MermaidKit is no longer Mermaid-only. Three additional front-ends parse into the
+same IR and render through the same layout and every backend; a DOT exporter
+closes the loop. `DOTParser.swift`, `DippinParser.swift`, `SQLDDLParser.swift`,
+`DOTExporter.swift` (all in `MermaidLayout`).
+
+| Feature | Specific |
+| :--- | :--- |
+| Graphviz DOT in | `DOTParser.parse(_:)` turns a `.dot` source into the `Flowchart` IR — subgraphs/clusters, attribute defaults, `dir=back`, and shape mapping. |
+| DOT out (converter) | `DOTExporter.export(_:)` emits a `Flowchart` back as Graphviz DOT — a **Mermaid ⇄ DOT converter**. Flat charts round-trip exactly (`parse(export(chart)) == chart`); clustered charts round-trip structurally. `export(_ diagram:) -> String?` covers the diagram union. |
+| Dippin in | `DippinParser.parse(_:)` maps Dippin's eight node kinds (agent, tool, human, conditional, parallel, fan_in, subgraph, manager_loop) to flowchart shapes and collapses simple `when` equalities to concise edge labels. |
+| SQL DDL → ER | `SQLDDLParser.parse(_:)` turns a `CREATE TABLE` schema dump into the `ERDiagram` IR: typed columns; `PRIMARY`/`FOREIGN`/`UNIQUE` keys, inline and table-level, surfaced via `ERDiagram.Attribute.keys` and drawn as `PK`/`FK`/`UK` badges; `REFERENCES` mapped to one-to-many crow's-foot relationships. Handles dialect quoting (`"x"`, `` `x` ``, `[x]`) and comments; ignores unknown clauses; degrades to `nil` on malformed/oversized input. |
+| Render a parsed diagram | `MermaidRenderer.pngData(diagram:)` / `image(diagram:)` / `rgbaRaster(diagram:)` render a `MermaidDiagram` without re-serializing to Mermaid text — the path the front-ends use. `rgbaRaster` bounds `targetWidth` (and derived height) to `maxRasterDimension` and rejects non-finite/oversized requests before allocating. |
+| Additive & safe | The `ERDiagram.Attribute.keys` field is defaulted and the badge is a no-op when empty, so existing `erDiagram` rendering and all `Attribute(type:name:)` call sites are unchanged. |
+
+### G11 — Terminal rendering
+
+A platform-free terminal renderer — the `mermaidkit-term` CLI — draws any
+Mermaid, DOT, or Dippin source straight to the terminal, no display server.
+Lives in `MermaidLayout` (`ASCIIPrototype.swift`, `Sources/mermaidkit-term/`).
+
+| Feature | Specific |
+| :--- | :--- |
+| Tier selection | Picks the best tier the terminal answers to: Kitty graphics (a real inline image) → half-block truecolor (1×2 color pixels) → colored box-drawing → plain ASCII, with OSC 11 background detection and capability probing. |
+| Any front-end | Renders Mermaid, DOT, or Dippin (auto-detected by extension/header, or forced with `--format`); `--mode kitty\|halfblock\|box\|plain\|auto` and `--width COLS` are explicit overrides. |
+| Platform-free | Because it lives in `MermaidLayout` and needs no CoreGraphics/Silica surface, it runs headless on Linux and in CI. |
 
 ---
 
@@ -218,7 +247,7 @@ regenerated by a gated test (`DocImageGeneration`, `GEN_DOC_IMAGES=1`).
 
 ## Note on Modularization
 
-Feature groups G1–G9 are self-indexing by shorthand; a marketing or docs surface
+Feature groups G1–G11 are self-indexing by shorthand; a marketing or docs surface
 can lift any single group as a standalone section, and the Approach table and
 Asset Inventory are each usable independently. Numeric claims (type count, test
 counts, input caps, image counts) should be re-pulled from the cited sources at

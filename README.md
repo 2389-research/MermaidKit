@@ -70,6 +70,33 @@ with zero dependencies and machine-checkable layout quality.
 Every type, rendered by MermaidKit itself, one image per diagram (light and
 dark): **[docs/GALLERY.md](docs/GALLERY.md)**.
 
+## Beyond Mermaid: DOT, Dippin, and SQL front-ends
+
+Mermaid is the primary input, but it isn't the only one. Three more front-ends
+parse into the same IR (`Flowchart` / `ERDiagram`) and render through the same
+layout and every backend — CoreGraphics/CoreText on Apple, Silica/Cairo on
+Linux, and the terminal — with no re-serialization back to Mermaid text:
+
+- **Graphviz DOT** — `DOTParser.parse(_:)` turns a `.dot` source into a
+  `Flowchart`, handling subgraphs/clusters, attribute defaults, `dir=back`, and
+  shape mapping. The inverse ships too: `DOTExporter.export(_:)` emits a
+  `Flowchart` back as DOT, so MermaidKit doubles as a **Mermaid ⇄ DOT
+  converter** — flat charts round-trip exactly, clustered charts round-trip
+  structurally.
+- **Dippin** (`.dip`) — `DippinParser.parse(_:)` maps Dippin's eight node kinds
+  (agent, tool, human, conditional, parallel, fan_in, subgraph, manager_loop)
+  to flowchart shapes and collapses simple `when` equalities to concise edge
+  labels.
+- **SQL DDL** — `SQLDDLParser.parse(_:)` turns a `CREATE TABLE` schema dump into
+  an `ERDiagram`: typed columns; `PRIMARY`/`FOREIGN`/`UNIQUE` keys, inline and
+  table-level, rendered as `PK`/`FK`/`UK` badges (`ERDiagram.Attribute.keys`);
+  and `REFERENCES` mapped to one-to-many crow's-foot relationships. It copes
+  with dialect quoting (`"x"`, `` `x` ``, `[x]`) and comments, ignores unknown
+  clauses, and degrades to `nil` on malformed or oversized input.
+
+Each hands its parsed diagram straight to `MermaidRenderer.pngData(diagram:)` /
+`image(diagram:)`.
+
 ## Supported diagram types — honestly
 
 All 30 types parse their **core syntax** — the constructs in the mermaid.js
@@ -92,7 +119,8 @@ mermaid.js, and the failure mode is deliberate:
   (`A --> B --> C`), `&` fan-out, inline `-- text -->` labels,
   bidirectional `<-->`, min-length links, `--o`/`--x` heads, edge IDs,
   `:::class` tolerance, nested `subgraph` group boxes (with inner
-  `direction` and edges that target a group id); the full everyday
+  `direction` and edges that target a group id), the hexagon `{{ }}` and
+  subroutine `[[ ]]` node shapes; the full everyday
   sequence set — combined
   fragments (`loop`/`alt`+`else`/`opt`/`par`/`critical`/`break`, nested)
   with `rect` bands, activation bars (`->>+`/`->>-`, `activate`), `box`
@@ -172,6 +200,14 @@ embedded image, and `MermaidRenderer.altText(source:)` hands it to hosts
 directly. Descriptions are generated from the parsed model — type, honest
 counts, leading names — deterministically, for all 30 types.
 
+Beyond that one-liner, `MermaidAltText.narrate(_:)` produces a step-by-step
+*walkthrough* — a richer companion to `describe`'s summary. It follows a
+flowchart's edges through its decisions, reads a state machine from its initial
+state, spells out an ER schema's cardinalities, and replays a sequence message
+by message; every other type falls back to `describe`. Deterministic and
+length-bounded, and it mirrors `describe`'s API (`narrate(_:)`,
+`narrate(_:metadata:)`, `narrate(source:)`).
+
 ## Robustness
 
 The parser and layout engines never crash on hostile input — empty/garbage
@@ -180,6 +216,20 @@ nodes, `NaN`/`Infinity`/`1e308` values, CRLF, RTL text. An adversarial suite
 (`AdversarialInputTests`) runs the full parse → layout → lint pipeline on all
 of it in CI. Numeric input is sanitized at the parser boundary
 (non-finite rejected, magnitude clamped) so geometry can't be poisoned.
+
+## Terminal rendering (experimental)
+
+`mermaidkit-term` is a CLI that renders any Mermaid, DOT, or Dippin source
+straight to the terminal — no display server, no window. It picks the best tier
+the terminal will answer to: **Kitty graphics** (a real inline image) →
+**half-block truecolor** (1×2 color pixels) → **colored box-drawing** → **plain
+ASCII**, with OSC 11 background detection and capability probing to choose. It
+lives in `MermaidLayout`, so it's platform-free and runs headless on Linux/CI.
+
+```
+swift run mermaidkit-term flowchart.mmd
+cat pipeline.dot | mermaidkit-term --format dot --mode plain
+```
 
 ## Architecture
 
@@ -194,7 +244,7 @@ Two targets:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "1.0.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "1.3.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
@@ -239,8 +289,15 @@ layout. Contributions welcome.
   as a single-attachment `NSAttributedString` for embedding in text views.
 - `MermaidRenderer.pdfData(source:theme:spacing:)` — single-page vector
   PDF from the same layout and draw code; the export/print path.
+- `MermaidRenderer.pngData(diagram:)` / `image(diagram:)` /
+  `rgbaRaster(diagram:)` — render an already-parsed `MermaidDiagram` without
+  re-serializing to Mermaid text; the path the DOT/Dippin/SQL front-ends take.
+- `DOTParser.parse(_:)`, `DippinParser.parse(_:)`, `SQLDDLParser.parse(_:)` —
+  the non-Mermaid front-ends (Graphviz DOT, Dippin, SQL DDL) into the same IR;
+  `DOTExporter.export(_:)` is the inverse (Flowchart → DOT).
 - `MermaidRenderer.altText(source:)` — a VoiceOver-ready description of
-  the diagram's content (see Accessibility below).
+  the diagram's content, and `MermaidAltText.narrate(source:)` a step-by-step
+  walkthrough (see Accessibility above).
 - `MermaidRenderer.textMeasurer` — the renderer's own CoreText measurer;
   pass it to `DiagramLayoutEngine.layout` / `DiagramScene.lower` when you
   want layout or lint geometry to match the render exactly.
