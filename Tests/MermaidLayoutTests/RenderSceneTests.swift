@@ -24,7 +24,11 @@ final class RenderSceneTests: XCTestCase {
         accent: DiagramColor(hex: 0x5B8FF9),
         canvas: DiagramColor(hex: 0xFFFFFF),
         hairline: DiagramColor(hex: 0x000000, alpha: 0.12),
-        secondaryText: DiagramColor(hex: 0x1D1D1F, alpha: 0.55))
+        secondaryText: DiagramColor(hex: 0x1D1D1F, alpha: 0.55),
+        tertiaryText: DiagramColor(hex: 0x1D1D1F, alpha: 0.38),
+        palette: [DiagramColor(hex: 0x5B8FF9), DiagramColor(hex: 0x61DDAA),
+                  DiagramColor(hex: 0xF6BD16), DiagramColor(hex: 0x7262FD),
+                  DiagramColor(hex: 0x78D3F8), DiagramColor(hex: 0xF08BB4)])
 
     private func layout(_ source: String) throws -> FlowchartLayout {
         guard let diagram = MermaidParser.parse(source),
@@ -222,6 +226,173 @@ final class RenderSceneTests: XCTestCase {
         let back = try JSONDecoder().decode(RenderScene.self, from: data)
         XCTAssertEqual(try enc.encode(back), data)
         XCTAssertEqual(SVGRenderer.svg(back), SVGRenderer.svg(scene))
+    }
+
+    // MARK: - Phase 0b families
+
+    /// Counts the three element kinds in a scene.
+    private func counts(_ scene: RenderScene) -> (shapes: Int, polylines: Int, texts: Int) {
+        var s = 0, p = 0, t = 0
+        for element in scene.elements {
+            switch element {
+            case .shape: s += 1
+            case .polyline: p += 1
+            case .text: t += 1
+            }
+        }
+        return (s, p, t)
+    }
+
+    /// Shared well-formedness assertions for a Phase 0b scene → SVG.
+    private func assertWellFormedSVG(_ scene: RenderScene) -> String {
+        let svg = SVGRenderer.svg(scene)
+        XCTAssertTrue(svg.hasPrefix("<svg"), "SVG must start with <svg")
+        XCTAssertTrue(svg.contains("</svg>"), "SVG must close")
+        let w = SVGRenderer.num(scene.size.width), h = SVGRenderer.num(scene.size.height)
+        XCTAssertTrue(svg.contains(#"viewBox="0 0 \#(w) \#(h)""#), "viewBox must match the scene size")
+        #if canImport(Darwin)
+        let parser = XMLParser(data: Data(svg.utf8))
+        XCTAssertTrue(parser.parse(), "SVG must be XML-parseable: \(parser.parserError as Any)")
+        #endif
+        // Determinism: a second render is byte-identical.
+        XCTAssertEqual(svg, SVGRenderer.svg(scene), "same scene must yield identical SVG")
+        return svg
+    }
+
+    // MARK: State
+
+    func testStateSceneAndSVG() throws {
+        let source = """
+        stateDiagram-v2
+            [*] --> Idle
+            Idle --> Running: start
+            Running --> Idle: stop
+            Running --> [*]
+        """
+        guard let diagram = MermaidParser.parse(source), case .state(let s) = diagram else {
+            throw XCTSkip("did not parse as a state diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(s, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // One glyph shape per node (start/end may add a second), plus containers.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.nodes.count)
+        // One shaft polyline per transition (containers add separator lines too).
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.edges.count)
+
+        let svg = assertWellFormedSVG(scene)
+        // A labeled transition ("start") is emitted as a <text>.
+        XCTAssertTrue(svg.contains(">start<"), "transition label should appear as text")
+        // Every transition draws an arrowhead polygon.
+        XCTAssertGreaterThanOrEqual(countOccurrences(of: "<polygon", in: svg), layout.edges.count)
+    }
+
+    // MARK: ER
+
+    func testERSceneAndSVG() throws {
+        // Mermaid erDiagram leaves key badges empty; build the model directly so
+        // the PK/FK badges (populated by the SQL-DDL front-end) are exercised.
+        let er = ERDiagram(
+            entities: [
+                ERDiagram.Entity(name: "USER", attributes: [
+                    ERDiagram.Attribute(type: "int", name: "id", keys: [.primary]),
+                    ERDiagram.Attribute(type: "int", name: "org_id", keys: [.foreign]),
+                ]),
+                ERDiagram.Entity(name: "ORG", attributes: [
+                    ERDiagram.Attribute(type: "int", name: "id", keys: [.primary]),
+                ]),
+            ],
+            relations: [
+                ERDiagram.Relation(from: "ORG", to: "USER", fromCard: .one, toCard: .oneOrMore,
+                                   label: "employs", identifying: true),
+            ])
+        let layout = DiagramLayoutEngine.layout(er, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.boxes.count, "one box shape per entity")
+        // Attribute rows produce type/name/badge texts + entity names.
+        XCTAssertGreaterThan(c.texts, layout.boxes.count)
+
+        let svg = assertWellFormedSVG(scene)
+        // The PK and FK key badges appear as <text> runs.
+        XCTAssertTrue(svg.contains(">PK<"), "a PK badge should render")
+        XCTAssertTrue(svg.contains(">FK<"), "an FK badge should render")
+        // The crow's-foot "many" marker is a stroked path.
+        XCTAssertTrue(svg.contains("<path"), "crow's-foot cardinality should render as a path")
+        // The relationship verb appears.
+        XCTAssertTrue(svg.contains(">employs<"))
+    }
+
+    // MARK: Class
+
+    func testClassSceneAndSVG() throws {
+        let source = """
+        classDiagram
+            Animal <|-- Dog
+            Animal : +String name
+            Animal : +move() void
+            Dog : +bark() void
+        """
+        guard let diagram = MermaidParser.parse(source), case .classDiagram(let cls) = diagram else {
+            throw XCTSkip("did not parse as a class diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(cls, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.boxes.count, "one box shape per class")
+
+        // Compartment separators: a box with members emits at least one hairline
+        // polyline spanning its full width.
+        let separators = scene.elements.filter {
+            guard case .polyline(let p) = $0, p.points.count == 2 else { return false }
+            return p.points[0].y == p.points[1].y && p.points[0].x != p.points[1].x
+        }
+        let boxesWithMembers = layout.boxes.filter { !$0.attributes.isEmpty || !$0.methods.isEmpty }
+        XCTAssertGreaterThanOrEqual(separators.count, boxesWithMembers.count,
+                                    "each populated class box draws a compartment separator")
+
+        let svg = assertWellFormedSVG(scene)
+        // The inheritance relation lowers to a hollow triangle polygon.
+        XCTAssertTrue(svg.contains("<polygon"), "inheritance marker should render as a polygon")
+        XCTAssertTrue(svg.contains(">Animal<") && svg.contains(">Dog<"))
+    }
+
+    // MARK: Sequence
+
+    func testSequenceSceneAndSVG() throws {
+        let source = """
+        sequenceDiagram
+            Alice->>Bob: Hello
+            Bob-->>Alice: Hi back
+            Alice->>Alice: think
+        """
+        guard let diagram = MermaidParser.parse(source), case .sequence(let seq) = diagram else {
+            throw XCTSkip("did not parse as a sequence diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(seq, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        XCTAssertGreaterThanOrEqual(layout.arrows.count, 3)
+
+        // One shaft polyline per message, plus one lifeline per participant.
+        let c = counts(scene)
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.arrows.count + layout.heads.count,
+                                    "a shaft per message and a lifeline per head")
+
+        let svg = assertWellFormedSVG(scene)
+        // Message shafts: at least one <polyline> per arrow (lifelines add more).
+        XCTAssertGreaterThanOrEqual(countOccurrences(of: "<polyline", in: svg), layout.arrows.count)
+        // The filled arrowhead of a solid message is a polygon.
+        XCTAssertTrue(svg.contains("<polygon"), "a filled message head should render as a polygon")
+        // Message captions appear.
+        XCTAssertTrue(svg.contains(">Hello<"))
     }
 
     // MARK: Helpers
