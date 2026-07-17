@@ -94,7 +94,8 @@ extension DiagramLayoutEngine {
         for entity in diagram.entities {
             var width = measure(entity.name, nodeFontSize).width + compartmentPadX * 2 + 8
             for attribute in entity.attributes {
-                let row = "\(attribute.type)  \(attribute.name)"
+                let badge = attribute.keyBadge.isEmpty ? "" : "   \(attribute.keyBadge)"
+                let row = "\(attribute.type)  \(attribute.name)\(badge)"
                 width = max(width, measure(row, labelFontSize).width + compartmentPadX * 2)
             }
             var height = compartmentNameHeight
