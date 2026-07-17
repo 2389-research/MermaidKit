@@ -22,7 +22,7 @@ import MermaidRender
 
 struct Options {
     var mode: String = "auto"          // kitty | halfblock | box | plain | auto
-    var format: String = "auto"        // mermaid | dot | dippin | auto
+    var format: String = "auto"        // mermaid | dot | dippin | gitlog | auto
     var color: ColorPreference = .auto // auto | always | never
     var theme: ThemePreference = .auto // auto | dark | light
     var width: Int?                    // halfblock target columns (nil → detect)
@@ -49,7 +49,7 @@ func parseArgs(_ argv: [String]) -> Options? {
             o.mode = v
         case a == "--format" || a.hasPrefix("--format="):
             guard let v = value(after: "--format"),
-                  ["mermaid", "dot", "dippin", "auto"].contains(v) else { return nil }
+                  ["mermaid", "dot", "dippin", "gitlog", "auto"].contains(v) else { return nil }
             o.format = v
         case a == "--color" || a.hasPrefix("--color="):
             guard let v = value(after: "--color"), let c = ColorPreference(rawValue: v) else { return nil }
@@ -76,16 +76,20 @@ mermaidkit-term — render a Mermaid flowchart to the terminal
 
 USAGE:
   mermaidkit-term [FILE] [--mode kitty|halfblock|box|plain|auto] [--width COLS]
-                  [--format mermaid|dot|dippin|auto]
+                  [--format mermaid|dot|dippin|gitlog|auto]
                   [--color auto|always|never] [--theme auto|dark|light]
   cat diagram.mmd | mermaidkit-term --mode halfblock --width 100
   cat pipeline.dot | mermaidkit-term --format dot --mode plain
   mermaidkit-term workflow.dip --mode plain
+  git log --all --topo-order --reverse --pretty=format:'%H %P%d %s' \\
+    | mermaidkit-term --format gitlog
 
 FORMAT (--format): auto detects Dippin by a .dip extension or a leading
   `workflow <Name>` header; else Graphviz DOT by a .dot/.gv extension or a
-  leading strict/graph/digraph … { content sniff; else parses Mermaid. DOT and
-  Dippin are parsed to the same Flowchart IR, so every mode renders them. A
+  leading strict/graph/digraph … { content sniff; else a `git log` paste by a
+  leading commit hash; else parses Mermaid. DOT and Dippin parse to the shared
+  Flowchart IR; a git-log paste (`%H %P%d %s`) parses to the GitGraph IR (commit
+  lanes + merges + tags) — the raster modes (kitty/halfblock) render it. A
   Dippin node kind maps to a distinct shape: agent=rect, tool=cylinder,
   human=stadium, conditional=diamond, parallel=hexagon, fan_in=circle,
   subgraph=subroutine [[ ]], manager_loop=rounded.
@@ -147,15 +151,17 @@ func run() -> Int32 {
 
     // Resolve the input format. DOT and Dippin are parsed up-front to the shared
     // Flowchart IR so every render mode below drives the same pipeline as Mermaid.
-    enum Frontend { case mermaid, dot, dippin }
+    enum Frontend { case mermaid, dot, dippin, gitlog }
     let frontend: Frontend
     switch opts.format {
     case "dot":     frontend = .dot
     case "dippin":  frontend = .dippin
+    case "gitlog":  frontend = .gitlog
     case "mermaid": frontend = .mermaid
-    default:        // auto: .dip beats DOT beats Mermaid
+    default:        // auto: .dip beats DOT beats a git-log paste beats Mermaid
         if looksLikeDippin(source, path: opts.path) { frontend = .dippin }
         else if looksLikeDOT(source, path: opts.path) { frontend = .dot }
+        else if looksLikeGitLog(source) { frontend = .gitlog }
         else { frontend = .mermaid }
     }
     var dotDiagram: MermaidDiagram?
@@ -172,6 +178,12 @@ func run() -> Int32 {
             return 1
         }
         dotDiagram = .flowchart(chart)
+    case .gitlog:
+        guard let graph = GitLogParser.parse(source) else {
+            FileHandle.standardError.write(Data("could not parse git log source\n".utf8))
+            return 1
+        }
+        dotDiagram = .gitGraph(graph)
     case .mermaid:
         break
     }
@@ -199,6 +211,19 @@ func run() -> Int32 {
         return renderHalfBlock(source, diagram: dotDiagram, background: background,
                                requestedWidth: opts.width)
     case .coloredBox, .plainBox:
+        // The box/plain ladder is flowchart-scoped (ASCIIRenderer draws the
+        // Flowchart IR only). A git-log paste lowers to the GitGraph IR, which
+        // these tiers can't draw — and when `auto` resolves to a box mode this is
+        // reached without the user having asked for it. Degrade with a dedicated
+        // message that points at a raster mode, rather than reparsing the raw git
+        // log as Mermaid and emitting a misleading "not a flowchart" error.
+        if case .gitGraph? = dotDiagram {
+            let msg = "git-log input renders as a gitGraph, which the box/plain "
+                + "modes can't draw (they are flowchart-scoped); rerun with "
+                + "--mode kitty or --mode halfblock\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            return 1
+        }
         let colorOn = (mode == .coloredBox)
         let color: ASCIIColorMode = colorOn ? .truecolor : .plain
         let out: String?
@@ -265,6 +290,23 @@ func looksLikeDOT(_ source: String, path: String?) -> Bool {
     let directions: Set<String> = ["td", "tb", "lr", "rl", "bt"]
     if let second = words.dropFirst().first, directions.contains(second) { return false }
     return firstLine.contains("{")                   // `graph { … }` header → DOT
+}
+
+/// Sniffs whether a source is `git log` output (`%H %P%d %s`): the first
+/// meaningful line (after any `git log --graph` art) begins with a bare object
+/// hash — 7+ hex digits. Mermaid, DOT, and Dippin all open with a keyword, never
+/// a raw hash, so this never trips them.
+func looksLikeGitLog(_ source: String) -> Bool {
+    let art: Set<Character> = ["*", "|", "/", "\\", "_", " ", "\t"]
+    for rawLine in source.split(separator: "\n", omittingEmptySubsequences: false) {
+        var line = Substring(rawLine)
+        while let f = line.first, art.contains(f) { line = line.dropFirst() }
+        if line.isEmpty { continue }
+        let token = line.prefix { $0 != " " && $0 != "\t" }
+        if token.count >= 7 && token.allSatisfy({ $0.isHexDigit }) { return true }
+        return false
+    }
+    return false
 }
 
 /// Tier 1: rasterize the diagram to PNG and stream it via the Kitty graphics
