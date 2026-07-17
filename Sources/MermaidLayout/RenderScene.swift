@@ -120,6 +120,22 @@ public struct RenderScene: Sendable, Codable {
             self.backing = backing
             self.rotation = rotation
         }
+
+        // `rotation` was added after the wire format shipped, so decode it
+        // if-present and default to 0 — scene JSON written before the field
+        // existed (the Android JNI boundary, versioned plugin/golden contract)
+        // must still decode. The synthesized encoding is unchanged: every
+        // field, `rotation` included, is always written.
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            string = try c.decode(String.self, forKey: .string)
+            center = try c.decode(CGPoint.self, forKey: .center)
+            fontSize = try c.decode(CGFloat.self, forKey: .fontSize)
+            weight = try c.decode(FontWeight.self, forKey: .weight)
+            color = try c.decode(DiagramColor.self, forKey: .color)
+            backing = try c.decodeIfPresent(DiagramColor.self, forKey: .backing)
+            rotation = try c.decodeIfPresent(CGFloat.self, forKey: .rotation) ?? 0
+        }
     }
 
     /// One item in the display list.

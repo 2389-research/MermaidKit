@@ -228,6 +228,26 @@ final class RenderSceneTests: XCTestCase {
         XCTAssertEqual(SVGRenderer.svg(back), SVGRenderer.svg(scene))
     }
 
+    func testTextDecodesWithoutRotationField() throws {
+        // `rotation` is additive on the wire (Android JNI boundary / versioned
+        // golden contract), so scene JSON written before it existed must still
+        // decode — a missing `rotation` defaults to 0 rather than failing.
+        let text = RenderScene.Text(
+            string: "Hi", center: CGPoint(x: 4, y: 8), fontSize: 11,
+            weight: .semibold, color: DiagramColor(hex: 0x112233), rotation: 1.5)
+        let data = try JSONEncoder().encode(text)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any],
+            "Text should encode as a JSON object")
+        XCTAssertNotNil(object["rotation"], "sanity: the encoded form still carries rotation")
+        object.removeValue(forKey: "rotation")   // emulate a pre-rotation blob
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+        let back = try JSONDecoder().decode(RenderScene.Text.self, from: legacy)
+        XCTAssertEqual(back.rotation, 0, "a missing rotation must default to 0")
+        XCTAssertEqual(back.string, "Hi")
+        XCTAssertEqual(back.fontSize, 11)
+    }
+
     // MARK: - Phase 0b families
 
     /// Counts the three element kinds in a scene.
@@ -407,8 +427,11 @@ final class RenderSceneTests: XCTestCase {
             Rel(user, sys, "Uses", "HTTPS")
             Rel(sys, ext, "Sends email via")
         """
-        guard let diagram = MermaidParser.parse(source), case .c4(let c4) = diagram else {
-            throw XCTSkip("did not parse as a C4 diagram")
+        guard let diagram = MermaidParser.parse(source) else {
+            throw XCTSkip("source did not parse")
+        }
+        guard case .c4(let c4) = diagram else {
+            return XCTFail("a C4 source should lower to a C4 diagram")
         }
         let layout = DiagramLayoutEngine.layout(c4, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -440,8 +463,11 @@ final class RenderSceneTests: XCTestCase {
             db:R --> L:server
             server:B --> T:j
         """
-        guard let diagram = MermaidParser.parse(source), case .architecture(let arch) = diagram else {
-            throw XCTSkip("did not parse as an architecture diagram")
+        guard let diagram = MermaidParser.parse(source) else {
+            throw XCTSkip("source did not parse")
+        }
+        guard case .architecture(let arch) = diagram else {
+            return XCTFail("an architecture source should lower to an architecture diagram")
         }
         let layout = DiagramLayoutEngine.layout(arch, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -467,8 +493,11 @@ final class RenderSceneTests: XCTestCase {
             a --> b
             b --> c
         """
-        guard let diagram = MermaidParser.parse(source), case .block(let block) = diagram else {
-            throw XCTSkip("did not parse as a block diagram")
+        guard let diagram = MermaidParser.parse(source) else {
+            throw XCTSkip("source did not parse")
+        }
+        guard case .block(let block) = diagram else {
+            return XCTFail("a block source should lower to a block diagram")
         }
         let layout = DiagramLayoutEngine.layout(block, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -499,8 +528,11 @@ final class RenderSceneTests: XCTestCase {
             B -->|yes| C
             B -.->|no| A
         """
-        guard let diagram = MermaidParser.parse(source), case .swimlane(let swimlane) = diagram else {
-            throw XCTSkip("did not parse as a swimlane diagram")
+        guard let diagram = MermaidParser.parse(source) else {
+            throw XCTSkip("source did not parse")
+        }
+        guard case .swimlane(let swimlane) = diagram else {
+            return XCTFail("a swimlane source should lower to a swimlane diagram")
         }
         let layout = DiagramLayoutEngine.layout(swimlane, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -534,8 +566,11 @@ final class RenderSceneTests: XCTestCase {
         B,D,10
         C,D,5
         """
-        guard let diagram = MermaidParser.parse(source), case .sankey(let sankey) = diagram else {
-            throw XCTSkip("did not parse as a sankey diagram")
+        guard let diagram = MermaidParser.parse(source) else {
+            throw XCTSkip("source did not parse")
+        }
+        guard case .sankey(let sankey) = diagram else {
+            return XCTFail("a sankey source should lower to a sankey diagram")
         }
         let layout = DiagramLayoutEngine.layout(sankey, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -569,8 +604,11 @@ final class RenderSceneTests: XCTestCase {
             }
             e1 - satisfies -> r1
         """
-        guard let diagram = MermaidParser.parse(source), case .requirement(let req) = diagram else {
-            throw XCTSkip("did not parse as a requirement diagram")
+        guard let diagram = MermaidParser.parse(source) else {
+            throw XCTSkip("source did not parse")
+        }
+        guard case .requirement(let req) = diagram else {
+            return XCTFail("a requirement source should lower to a requirement diagram")
         }
         let layout = DiagramLayoutEngine.layout(req, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
