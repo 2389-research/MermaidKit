@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.3.0
+
+Three new capabilities on the front/back-end seam — all additive; the rendered
+output of existing diagrams is unchanged.
+
+- **DOT export.** `DOTExporter.export(_:)` emits a `Flowchart` as Graphviz DOT —
+  the inverse of the DOT front-end, so MermaidKit is now a **Mermaid ⇄ DOT
+  converter**. Flat charts round-trip exactly (`parse(export(chart)) == chart`);
+  clustered charts round-trip structurally. Also `export(_ diagram:) -> String?`
+  for the diagram union.
+- **SQL DDL → ER front-end.** `SQLDDLParser.parse(_:)` turns a `CREATE TABLE`
+  schema dump into the `ERDiagram` IR: typed columns, `PRIMARY`/`FOREIGN`/`UNIQUE`
+  keys (inline and table-level), and `REFERENCES` mapped to one-to-many crow's-foot
+  relationships. Handles dialect quoting (`"x"`, `` `x` ``, `[x]`) and comments;
+  ignores unknown clauses; degrades to `nil` on malformed/huge input.
+  - **New:** `ERDiagram.Attribute.keys: [Key]` (`.primary`/`.foreign`/`.unique`),
+    rendered as a compact `PK`/`FK`/`UK` badge in the entity box. The field has a
+    defaulted initializer and the badge is a no-op when empty, so existing
+    `erDiagram` rendering and all `Attribute(type:name:)` call sites are unchanged.
+- **Diagram narration.** `MermaidAltText.narrate(_:)` gives a step-by-step
+  accessibility *walkthrough* (a richer companion to `describe`'s one-line
+  summary): it follows a flowchart's edges through its decisions, reads a state
+  machine from its initial state, spells out an ER schema's cardinalities, and
+  replays a sequence message by message; every other type falls back to
+  `describe`. Deterministic and length-bounded. Mirrors `describe`'s API
+  (`narrate(_:)`, `narrate(_:metadata:)`, `narrate(source:)`).
+- **Docs.** Design memos on how the project is built (`development-approach.md`)
+  and a runtime-plugin extensibility sketch (`plugin-extensibility.md`).
+
 ## 1.2.0
 
 Two new front-ends, a terminal renderer, and a layout-quality pass. Additive to
