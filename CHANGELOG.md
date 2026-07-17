@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.2.0
+
+Two new front-ends, a terminal renderer, and a layout-quality pass. Additive to
+the public API; the rendered output of the layered/graph families changes (for
+the better), so gallery images are regenerated to match.
+
+- **New front-ends: Graphviz DOT and Dippin.** `DOTParser.parse(_:)` and
+  `DippinParser.parse(_:)` turn a `.dot` or `.dip` source into MermaidKit's
+  `Flowchart` IR, so any DOT/Dippin file renders through the same layout and
+  every backend (CoreGraphics/CoreText on Apple, Silica/Cairo on Linux, and the
+  terminal). The DOT parser handles subgraphs/clusters, attribute defaults,
+  `dir=back`, and shape mapping; the Dippin parser maps its eight node kinds
+  (agent, tool, human, conditional, parallel, fan_in, subgraph, manager_loop)
+  to shapes and collapses simple `when` equalities to concise edge labels.
+- **New: render an already-parsed diagram.** `MermaidRenderer.pngData(diagram:)`,
+  `image(diagram:)`, and `rgbaRaster(diagram:)` render a `MermaidDiagram` without
+  re-serializing to Mermaid text — the path the front-ends use. `rgbaRaster`
+  bounds `targetWidth` (and the derived height) to `maxRasterDimension` and
+  rejects non-finite/oversized requests before allocating.
+- **New shapes:** `NodeShape.hexagon` and `.subroutine`.
+- **Terminal rendering (experimental).** A new `mermaidkit-term` CLI renders any
+  Mermaid/DOT/Dippin source in the terminal, picking the best tier the terminal
+  answers to: Kitty graphics (real image) → half-block truecolor (1×2 color
+  pixels) → colored box-drawing → plain ASCII, with OSC 11 background detection
+  and capability probing. Platform-free (lives in `MermaidLayout`), so it runs
+  headless on Linux/CI.
+- **Layout: edge labels and back-edges.** Flowchart (and the shared state /
+  swimlane / ER / class families) now center edge labels on the arrow-free run
+  midpoint and reserve enough connector length to clear a minimum visible stub,
+  stagger crowded parallel captions, route back-edges up a gutter, and
+  straighten needless jogs; fan-out edges sharing a source spread onto distinct
+  tracks. New geometry-linter rules ratchet all of this: `label-on-fixture`,
+  `label-crowds-edge`, and `edges-doubled`. Gallery/website images for the
+  affected families are regenerated; all others render pixel-identical.
+
 ## 1.1.0
 
 Performance and metadata refinements — additive and output-identical. The public
