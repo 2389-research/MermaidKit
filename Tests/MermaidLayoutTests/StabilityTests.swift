@@ -27,9 +27,17 @@ final class StabilityTests: XCTestCase {
     }
 
     /// Bit-for-bit determinism: the same source lays out identically across
-    /// repeated runs (guards Set-iteration order in the optimizer).
+    /// repeated runs (guards Set-iteration order in the optimizer). This is the
+    /// WITHIN-process property — one fixed hash seed. The cross-process property
+    /// (same source → same pixels in two different app launches, issue #1) is a
+    /// separate seed per process and can't be observed here; `scripts/
+    /// check-determinism.sh` renders every fixture in two processes and diffs.
     func testLayoutIsDeterministicAcrossRuns() throws {
-        for name in ["flowchart", "class", "er", "state", "architecture"] {
+        // Covers the layered families and the non-layered types (zenuml,
+        // architecture, wardley, cynefin, …) that iterate their own collections.
+        for name in ["flowchart", "class", "er", "state", "architecture",
+                     "zenuml", "sequence", "c4", "block", "swimlane",
+                     "wardley", "cynefin", "requirement", "mindmap", "sankey"] {
             let source = try fixtureSource(name)
             let first = try scene(source)
             for _ in 0..<3 {
