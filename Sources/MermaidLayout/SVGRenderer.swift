@@ -89,7 +89,14 @@ public enum SVGRenderer {
             let cw = estWidth + pad * 2, ch = estHeight + pad * 2
             out += #"<rect x="\#(num(text.center.x - cw / 2))" y="\#(num(text.center.y - ch / 2))" width="\#(num(cw))" height="\#(num(ch))" fill="\#(rgba(backing))"/>"# + "\n"
         }
-        out += #"<text x="\#(num(text.center.x))" y="\#(num(text.center.y))" font-size="\#(num(text.fontSize))" font-weight="\#(fontWeight(text.weight))" text-anchor="middle" dominant-baseline="central" fill="\#(rgba(text.color))">\#(escape(text.string))</text>"# + "\n"
+        // A rotated run (swimlane lane titles) spins clockwise about its center;
+        // radians → degrees so SVG's rotate(deg cx cy) matches the CG transform.
+        var transform = ""
+        if text.rotation != 0 {
+            let deg = text.rotation * 180 / .pi
+            transform = #" transform="rotate(\#(num(deg)) \#(num(text.center.x)) \#(num(text.center.y)))""#
+        }
+        out += #"<text x="\#(num(text.center.x))" y="\#(num(text.center.y))" font-size="\#(num(text.fontSize))" font-weight="\#(fontWeight(text.weight))" text-anchor="middle" dominant-baseline="central"\#(transform) fill="\#(rgba(text.color))">\#(escape(text.string))</text>"# + "\n"
         return out
     }
 

@@ -21,9 +21,10 @@ import CoreGraphics
 /// `Codable` so a scene can cross a process boundary (SVG export, a plugin, a
 /// JSON bridge to Kotlin) byte-for-byte.
 ///
-/// Phase 0a lowered the flowchart family; Phase 0b adds state, ER, class, and
-/// sequence (one `RenderScene.from(_:theme:measure:)` per family, dispatched by
-/// `RenderScene.from(_ diagram:theme:measure:spacing:)`).
+/// Phase 0a lowered the flowchart family; Phase 0b-1 adds state, ER, class, and
+/// sequence; Phase 0b-2 adds c4, architecture, block, swimlane, sankey, and
+/// requirement (one `RenderScene.from(_:theme:measure:)` per family, dispatched
+/// by `RenderScene.from(_ diagram:theme:measure:spacing:)`).
 public struct RenderScene: Sendable, Codable {
 
     /// Relative typographic weight, mapped by each backend to its font system.
@@ -97,7 +98,9 @@ public struct RenderScene: Sendable, Codable {
 
     /// A text run centered on `center`. `backing`, when set, is an opaque chip
     /// color painted behind the text (edge labels sit on a canvas-colored chip
-    /// so the routed line doesn't show through).
+    /// so the routed line doesn't show through). `rotation` is a clockwise angle
+    /// in radians about `center` (0 for the common horizontal run) — swimlane
+    /// lane titles read bottom-to-top at −π/2, matching `drawTextRotated`.
     public struct Text: Sendable, Codable {
         public var string: String
         public var center: CGPoint
@@ -105,15 +108,33 @@ public struct RenderScene: Sendable, Codable {
         public var weight: FontWeight
         public var color: DiagramColor
         public var backing: DiagramColor?
+        public var rotation: CGFloat
         public init(string: String, center: CGPoint, fontSize: CGFloat,
                     weight: FontWeight = .regular, color: DiagramColor,
-                    backing: DiagramColor? = nil) {
+                    backing: DiagramColor? = nil, rotation: CGFloat = 0) {
             self.string = string
             self.center = center
             self.fontSize = fontSize
             self.weight = weight
             self.color = color
             self.backing = backing
+            self.rotation = rotation
+        }
+
+        // `rotation` was added after the wire format shipped, so decode it
+        // if-present and default to 0 — scene JSON written before the field
+        // existed (the Android JNI boundary, versioned plugin/golden contract)
+        // must still decode. The synthesized encoding is unchanged: every
+        // field, `rotation` included, is always written.
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            string = try c.decode(String.self, forKey: .string)
+            center = try c.decode(CGPoint.self, forKey: .center)
+            fontSize = try c.decode(CGFloat.self, forKey: .fontSize)
+            weight = try c.decode(FontWeight.self, forKey: .weight)
+            color = try c.decode(DiagramColor.self, forKey: .color)
+            backing = try c.decodeIfPresent(DiagramColor.self, forKey: .backing)
+            rotation = try c.decodeIfPresent(CGFloat.self, forKey: .rotation) ?? 0
         }
     }
 
@@ -157,10 +178,15 @@ public struct RenderTheme: Sendable, Hashable {
     /// Categorical hues, cycled by index — sequence box bands and note fills
     /// pick from it (Phase 0b). Empty when a family doesn't need it.
     public var palette: [DiagramColor]
+    /// Whether the theme targets a dark canvas. A handful of Phase 0b-2 fills
+    /// (architecture/block tints, sankey bands) lift their alpha on dark so the
+    /// tint reads — the platform-free twin of `DiagramTheme.prefersDark`.
+    public var prefersDark: Bool
 
     public init(ink: DiagramColor, accent: DiagramColor, canvas: DiagramColor,
                 hairline: DiagramColor, secondaryText: DiagramColor,
-                tertiaryText: DiagramColor, palette: [DiagramColor] = []) {
+                tertiaryText: DiagramColor, palette: [DiagramColor] = [],
+                prefersDark: Bool = false) {
         self.ink = ink
         self.accent = accent
         self.canvas = canvas
@@ -168,6 +194,7 @@ public struct RenderTheme: Sendable, Hashable {
         self.secondaryText = secondaryText
         self.tertiaryText = tertiaryText
         self.palette = palette
+        self.prefersDark = prefersDark
     }
 
     /// Phase 0a compatibility overload: keeps the original five-color

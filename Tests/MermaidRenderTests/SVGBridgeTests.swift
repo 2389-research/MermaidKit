@@ -52,6 +52,30 @@ final class SVGBridgeTests: XCTestCase {
         }
     }
 
+    func testPhase0b2FamiliesRenderSVG() throws {
+        // c4, architecture, block, swimlane, sankey, requirement all lower now.
+        let sources = [
+            "C4Context\n    Person(u, \"User\")\n    System(s, \"App\")\n    Rel(u, s, \"Uses\")",
+            "architecture-beta\n    group g(cloud)[G]\n    service a(server)[A] in g\n" +
+                "    service b(database)[B] in g\n    a:R --> L:b",
+            "block-beta\n    columns 2\n    a[\"One\"] b((\"Two\"))\n    a --> b",
+            "swimlane-beta LR\n    subgraph l[Lane]\n        A[Start] --> B[End]\n    end",
+            "sankey-beta\n\nA,B,10\nB,C,5",
+            "requirementDiagram\n    requirement r { id: R1\n text: works\n }\n" +
+                "    element e { type: module\n }\n    e - satisfies -> r",
+        ]
+        for source in sources {
+            let svg = try XCTUnwrap(MermaidRenderer.svg(source: source, theme: theme),
+                                    "expected an SVG for:\n\(source)")
+            XCTAssertTrue(svg.hasPrefix("<svg"))
+            XCTAssertTrue(svg.contains("</svg>"))
+            #if canImport(Darwin)
+            XCTAssertTrue(XMLParser(data: Data(svg.utf8)).parse(),
+                          "bridged SVG must be XML-parseable for:\n\(source)")
+            #endif
+        }
+    }
+
     func testUnloweredFamilyReturnsNil() {
         // Families not yet lowered still decline (marked `// Phase 0b:`).
         let pie = "pie\n    \"A\" : 40\n    \"B\" : 60"
