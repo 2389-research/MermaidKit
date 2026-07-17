@@ -314,10 +314,25 @@ public struct ERDiagram: Hashable, Sendable {
         case zeroOrMore     // o{ / }o
     }
 
-    /// One attribute row inside an entity box: a type and a name.
+    /// One attribute row inside an entity box: a type and a name, with any key
+    /// constraints shown as a compact badge.
     public struct Attribute: Hashable, Sendable {
+        /// A key constraint on a column, rendered as a `PK`/`FK`/`UK` badge.
+        public enum Key: String, Hashable, Sendable {
+            case primary = "PK"
+            case foreign = "FK"
+            case unique  = "UK"
+        }
         public let type: String
         public let name: String
+        /// Key constraints; empty for a plain attribute. Populated by the
+        /// SQL-DDL front-end (Mermaid `erDiagram` leaves it empty for now).
+        public var keys: [Key]
+        public init(type: String, name: String, keys: [Key] = []) {
+            self.type = type; self.name = name; self.keys = keys
+        }
+        /// Compact badge text (`"PK"`, `"FK"`, `"PK,FK"`); empty when no keys.
+        public var keyBadge: String { keys.map(\.rawValue).joined(separator: ",") }
     }
 
     /// An entity box. Identity is the entity `name`.

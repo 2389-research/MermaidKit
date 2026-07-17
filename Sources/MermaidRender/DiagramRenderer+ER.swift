@@ -63,6 +63,12 @@ extension DiagramRenderer {
                     let typeWidth = measure(attribute.type, size: 10.5).width
                     drawTextLeft(attribute.name, at: CGPoint(x: typeX + typeWidth + 8, y: center),
                                  size: 10.5, weight: .medium, color: theme.ink, in: context)
+                    let badge = attribute.keyBadge
+                    if !badge.isEmpty {
+                        let badgeWidth = measure(badge, size: 10.5).width
+                        drawTextLeft(badge, at: CGPoint(x: box.frame.maxX - 10 - badgeWidth, y: center),
+                                     size: 10.5, weight: .semibold, color: theme.secondaryTextColor, in: context)
+                    }
                     rowY += box.rowHeight
                 }
             }
