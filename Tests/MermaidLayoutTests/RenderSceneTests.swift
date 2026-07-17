@@ -641,7 +641,7 @@ final class RenderSceneTests: XCTestCase {
             "Cats" : 35
             "Birds" : 25
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .pie(let pie) = diagram else { return XCTFail("expected a pie diagram") }
         let layout = DiagramLayoutEngine.layout(pie, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -674,7 +674,7 @@ final class RenderSceneTests: XCTestCase {
             Task one :done, t1, 2026-01-01, 3d
             Mark :milestone, m1, 2026-01-04, 0d
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .gantt(let gantt) = diagram else { return XCTFail("expected a gantt diagram") }
         let layout = DiagramLayoutEngine.layout(gantt, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -702,7 +702,7 @@ final class RenderSceneTests: XCTestCase {
                 2020 : Alpha : Beta
                 2021 : Gamma
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .timeline(let timeline) = diagram else { return XCTFail("expected a timeline diagram") }
         let layout = DiagramLayoutEngine.layout(timeline, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -729,7 +729,7 @@ final class RenderSceneTests: XCTestCase {
               Code : 5: Me
               Email : 2: Me, Boss
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .journey(let journey) = diagram else { return XCTFail("expected a journey diagram") }
         let layout = DiagramLayoutEngine.layout(journey, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -759,7 +759,7 @@ final class RenderSceneTests: XCTestCase {
             Alpha: [0.3, 0.6]
             Beta: [0.7, 0.8]
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .quadrant(let quadrant) = diagram else { return XCTFail("expected a quadrant diagram") }
         let layout = DiagramLayoutEngine.layout(quadrant, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -788,7 +788,7 @@ final class RenderSceneTests: XCTestCase {
             bar [10, 20, 30]
             line [5, 15, 25]
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .xychart(let xychart) = diagram else { return XCTFail("expected an xychart diagram") }
         let layout = DiagramLayoutEngine.layout(xychart, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -818,7 +818,7 @@ final class RenderSceneTests: XCTestCase {
             max 5
             ticks 4
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .radar(let radar) = diagram else { return XCTFail("expected a radar diagram") }
         let layout = DiagramLayoutEngine.layout(radar, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -846,7 +846,7 @@ final class RenderSceneTests: XCTestCase {
         16-31: "Dest"
         32: "F"
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .packet(let packet) = diagram else { return XCTFail("expected a packet diagram") }
         let layout = DiagramLayoutEngine.layout(packet, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
@@ -872,7 +872,7 @@ final class RenderSceneTests: XCTestCase {
           done[Done]
             c2[Finished]@{ ticket: MK-2 }
         """
-        guard let diagram = MermaidParser.parse(source) else { throw XCTSkip("source did not parse") }
+        let diagram = try XCTUnwrap(MermaidParser.parse(source), "supported fixture must parse")
         guard case .kanban(let kanban) = diagram else { return XCTFail("expected a kanban diagram") }
         let layout = DiagramLayoutEngine.layout(kanban, measure: measure)
         let scene = RenderScene.from(layout, theme: theme, measure: measure)
