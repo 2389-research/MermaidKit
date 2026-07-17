@@ -12,8 +12,10 @@ extension RenderScene {
     ///
     /// Phase 0a lowered flowchart; Phase 0b-1 added state, ER, class, and
     /// sequence; Phase 0b-2 adds c4, architecture, block, swimlane, sankey, and
-    /// requirement. Every remaining case returns nil (marked `// Phase 0b:`)
-    /// until a later slice lowers it — the bridge then declines those sources.
+    /// requirement; Phase 0b-3a adds the chart families — pie, gantt, timeline,
+    /// journey, quadrant, xychart, radar, packet, and kanban. Every remaining
+    /// case returns nil (marked `// Phase 0b:`) until a later slice lowers it —
+    /// the bridge then declines those sources.
     public static func from(_ diagram: MermaidDiagram, theme: RenderTheme,
                             measure: DiagramTextMeasurer,
                             spacing: DiagramSpacing = .regular) -> RenderScene? {
@@ -51,9 +53,35 @@ extension RenderScene {
         case .requirement(let requirement):
             return from(DiagramLayoutEngine.layout(requirement, measure: measure),
                         theme: theme, measure: measure)
+        case .pie(let pie):
+            return from(DiagramLayoutEngine.layout(pie, measure: measure),
+                        theme: theme, measure: measure)
+        case .gantt(let gantt):
+            return from(DiagramLayoutEngine.layout(gantt, measure: measure),
+                        theme: theme, measure: measure)
+        case .timeline(let timeline):
+            return from(DiagramLayoutEngine.layout(timeline, measure: measure),
+                        theme: theme, measure: measure)
+        case .journey(let journey):
+            return from(DiagramLayoutEngine.layout(journey, measure: measure),
+                        theme: theme, measure: measure)
+        case .quadrant(let quadrant):
+            return from(DiagramLayoutEngine.layout(quadrant, measure: measure),
+                        theme: theme, measure: measure)
+        case .xychart(let xychart):
+            return from(DiagramLayoutEngine.layout(xychart, measure: measure),
+                        theme: theme, measure: measure)
+        case .radar(let radar):
+            return from(DiagramLayoutEngine.layout(radar, measure: measure),
+                        theme: theme, measure: measure)
+        case .packet(let packet):
+            return from(DiagramLayoutEngine.layout(packet, measure: measure),
+                        theme: theme, measure: measure)
+        case .kanban(let kanban):
+            return from(DiagramLayoutEngine.layout(kanban, measure: measure),
+                        theme: theme, measure: measure)
         // Phase 0b: the remaining families lower in a later slice.
-        case .pie, .gantt, .timeline, .mindmap, .journey, .quadrant, .packet,
-             .xychart, .kanban, .radar, .treemap, .treeView, .venn, .cynefin,
+        case .mindmap, .treemap, .treeView, .venn, .cynefin,
              .wardley, .ishikawa, .eventModeling, .gitGraph, .zenuml:
             return nil
         }

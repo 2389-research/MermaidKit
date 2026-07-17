@@ -76,11 +76,41 @@ final class SVGBridgeTests: XCTestCase {
         }
     }
 
+    func testPhase0b3aChartFamiliesRenderSVG() throws {
+        // pie, gantt, timeline, journey, quadrant, xychart, radar, packet,
+        // kanban all lower now (Phase 0b-3a).
+        let sources = [
+            "pie title Pets\n    \"Dogs\" : 40\n    \"Cats\" : 60",
+            "gantt\n    dateFormat YYYY-MM-DD\n    section A\n    T1 :t1, 2026-01-01, 3d\n" +
+                "    M :milestone, m1, 2026-01-04, 0d",
+            "timeline\n    title T\n    section S\n        2020 : Alpha\n        2021 : Beta",
+            "journey\n    title J\n    section Work\n      Code : 5: Me\n      Email : 2: Me",
+            "quadrantChart\n    x-axis Low --> High\n    y-axis Bad --> Good\n" +
+                "    quadrant-1 Do\n    Alpha: [0.3, 0.6]",
+            "xychart-beta\n    x-axis [jan, feb, mar]\n    y-axis \"Rev\" 0 --> 30\n" +
+                "    bar [10, 20, 30]\n    line [5, 15, 25]",
+            "radar-beta\n    axis a[\"A\"], b[\"B\"], c[\"C\"]\n" +
+                "    curve x[\"X\"]{a: 3, b: 4, c: 2}\n    max 5\n    ticks 4",
+            "packet-beta\n    0-15: \"Source\"\n    16-31: \"Dest\"",
+            "kanban\n  todo[To Do]\n    c1[Do a thing]@{ ticket: MK-1 }",
+        ]
+        for source in sources {
+            let svg = try XCTUnwrap(MermaidRenderer.svg(source: source, theme: theme),
+                                    "expected an SVG for:\n\(source)")
+            XCTAssertTrue(svg.hasPrefix("<svg"))
+            XCTAssertTrue(svg.contains("</svg>"))
+            #if canImport(Darwin)
+            XCTAssertTrue(XMLParser(data: Data(svg.utf8)).parse(),
+                          "bridged SVG must be XML-parseable for:\n\(source)")
+            #endif
+        }
+    }
+
     func testUnloweredFamilyReturnsNil() {
         // Families not yet lowered still decline (marked `// Phase 0b:`).
-        let pie = "pie\n    \"A\" : 40\n    \"B\" : 60"
-        XCTAssertNil(MermaidRenderer.svg(source: pie, theme: theme))
-        XCTAssertNil(MermaidRenderer.renderScene(source: pie, theme: theme))
+        let mindmap = "mindmap\n  root\n    child a\n    child b"
+        XCTAssertNil(MermaidRenderer.svg(source: mindmap, theme: theme))
+        XCTAssertNil(MermaidRenderer.renderScene(source: mindmap, theme: theme))
     }
 
     func testUnparseableReturnsNil() {
