@@ -395,6 +395,203 @@ final class RenderSceneTests: XCTestCase {
         XCTAssertTrue(svg.contains(">Hello<"))
     }
 
+    // MARK: C4
+
+    func testC4SceneAndSVG() throws {
+        let source = """
+        C4Context
+            title System Context
+            Person(user, "User", "An end user")
+            System(sys, "Web App", "Delivers content")
+            System_Ext(ext, "Email System", "Sends notifications")
+            Rel(user, sys, "Uses", "HTTPS")
+            Rel(sys, ext, "Sends email via")
+        """
+        guard let diagram = MermaidParser.parse(source), case .c4(let c4) = diagram else {
+            throw XCTSkip("did not parse as a C4 diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(c4, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // One rounded-rect per box, plus a canvas+color arrowhead pair per edge.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.boxes.count + layout.edges.count)
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.edges.count, "a shaft per relation")
+
+        let svg = assertWellFormedSVG(scene)
+        // The centered diagram title renders.
+        XCTAssertTrue(svg.contains(">System Context<"), "C4 title should render")
+        // Each relation draws a filled arrowhead polygon.
+        XCTAssertGreaterThanOrEqual(countOccurrences(of: "<polygon", in: svg), layout.edges.count)
+        // The external system's dashed border.
+        XCTAssertTrue(svg.contains(#"stroke-dasharray="4 3""#), "external box border should dash")
+    }
+
+    // MARK: Architecture
+
+    func testArchitectureSceneAndSVG() throws {
+        let source = """
+        architecture-beta
+            group api(cloud)[API]
+            service db(database)[Database] in api
+            service server(server)[Server] in api
+            junction j
+            db:R --> L:server
+            server:B --> T:j
+        """
+        guard let diagram = MermaidParser.parse(source), case .architecture(let arch) = diagram else {
+            throw XCTSkip("did not parse as an architecture diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(arch, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A group box per group, a box (or 3 dot shapes for a junction) per service.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.groups.count + layout.services.count)
+
+        let svg = assertWellFormedSVG(scene)
+        XCTAssertTrue(svg.contains("<ellipse"), "a junction dot should render as an ellipse")
+        // Service/group labels appear.
+        XCTAssertTrue(svg.contains(">Database<") || svg.contains(">Server<"))
+    }
+
+    // MARK: Block
+
+    func testBlockSceneAndSVG() throws {
+        let source = """
+        block-beta
+            columns 3
+            a["One"] b(("Two")) c("Three")
+            a --> b
+            b --> c
+        """
+        guard let diagram = MermaidParser.parse(source), case .block(let block) = diagram else {
+            throw XCTSkip("did not parse as a block diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(block, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let drawn = layout.nodes.filter { $0.shape != .space }
+        let c = counts(scene)
+        XCTAssertGreaterThanOrEqual(c.shapes, drawn.count, "one (or two, for circles) shapes per block")
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.edges.count, "a shaft per edge")
+
+        let svg = assertWellFormedSVG(scene)
+        // The `(( ))` circle block lowers to an ellipse.
+        XCTAssertTrue(svg.contains("<ellipse"), "a circle block should render as an ellipse")
+        XCTAssertGreaterThanOrEqual(countOccurrences(of: "<polygon", in: svg), layout.edges.count)
+    }
+
+    // MARK: Swimlane
+
+    func testSwimlaneSceneAndSVG() throws {
+        let source = """
+        swimlane-beta LR
+            subgraph host[Host]
+                A[Start] --> B{Choice}
+            end
+            subgraph work[Work]
+                C[Do it]
+            end
+            B -->|yes| C
+            B -.->|no| A
+        """
+        guard let diagram = MermaidParser.parse(source), case .swimlane(let swimlane) = diagram else {
+            throw XCTSkip("did not parse as a swimlane diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(swimlane, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A band per lane and a shape per node.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.lanes.count + layout.nodes.count)
+        XCTAssertGreaterThanOrEqual(c.polylines, layout.edges.count)
+
+        let svg = assertWellFormedSVG(scene)
+        // Lane titles render rotated (bottom-to-top) via an SVG transform.
+        let laneLabeled = layout.lanes.contains { !$0.label.isEmpty }
+        if laneLabeled {
+            XCTAssertTrue(svg.contains("transform=\"rotate("), "lane title should be rotated")
+        }
+        // A dashed connector honors the dash flag.
+        if layout.edges.contains(where: { $0.dashed }) {
+            XCTAssertTrue(svg.contains(#"stroke-dasharray="4 3""#), "dashed connector should dash")
+        }
+    }
+
+    // MARK: Sankey
+
+    func testSankeySceneAndSVG() throws {
+        let source = """
+        sankey-beta
+
+        A,B,10
+        A,C,5
+        B,D,10
+        C,D,5
+        """
+        guard let diagram = MermaidParser.parse(source), case .sankey(let sankey) = diagram else {
+            throw XCTSkip("did not parse as a sankey diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(sankey, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        // A ribbon per link + a bar per node.
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.links.count + layout.nodes.count)
+        // A label per named node.
+        XCTAssertGreaterThanOrEqual(c.texts, layout.nodes.filter { !$0.label.isEmpty }.count)
+
+        let svg = assertWellFormedSVG(scene)
+        // Flow ribbons lower to filled quad-curve paths.
+        XCTAssertTrue(svg.contains("<path"), "sankey ribbon should render as a path")
+        XCTAssertTrue(svg.contains(" Q "), "ribbon edges should use quad-curve verbs")
+    }
+
+    // MARK: Requirement
+
+    func testRequirementSceneAndSVG() throws {
+        let source = """
+        requirementDiagram
+            requirement r1 {
+                id: R1
+                text: The system shall work
+                risk: high
+                verifymethod: test
+            }
+            element e1 {
+                type: module
+            }
+            e1 - satisfies -> r1
+        """
+        guard let diagram = MermaidParser.parse(source), case .requirement(let req) = diagram else {
+            throw XCTSkip("did not parse as a requirement diagram")
+        }
+        let layout = DiagramLayoutEngine.layout(req, measure: measure)
+        let scene = RenderScene.from(layout, theme: theme, measure: measure)
+
+        XCTAssertEqual(scene.size, layout.size)
+        let c = counts(scene)
+        XCTAssertGreaterThanOrEqual(c.shapes, layout.boxes.count, "one box per requirement/element")
+        // Each populated box draws a full-width hairline separator polyline.
+        let separators = scene.elements.filter {
+            guard case .polyline(let p) = $0, p.points.count == 2 else { return false }
+            return p.points[0].y == p.points[1].y && p.points[0].x != p.points[1].x
+        }
+        XCTAssertGreaterThanOrEqual(separators.count, layout.boxes.count,
+                                    "each box draws a compartment separator")
+
+        let svg = assertWellFormedSVG(scene)
+        // The typed relation label renders on a chip.
+        XCTAssertTrue(svg.contains(">satisfies<"), "relation type should render as text")
+        XCTAssertTrue(svg.contains(">«element»<") || svg.contains("element"), "stereotype should render")
+    }
+
     // MARK: Helpers
 
     private func countOccurrences(of needle: String, in haystack: String) -> Int {

@@ -10,9 +10,10 @@ extension RenderScene {
     /// Canvas bridges call: it runs the matching `DiagramLayoutEngine.layout`
     /// and hands the placed layout to the family's `from(_:theme:measure:)`.
     ///
-    /// Phase 0a lowered flowchart; Phase 0b adds state, ER, class, and sequence.
-    /// Every remaining case returns nil (marked `// Phase 0b:`) until a later
-    /// slice lowers it — the bridge then simply declines those sources.
+    /// Phase 0a lowered flowchart; Phase 0b-1 added state, ER, class, and
+    /// sequence; Phase 0b-2 adds c4, architecture, block, swimlane, sankey, and
+    /// requirement. Every remaining case returns nil (marked `// Phase 0b:`)
+    /// until a later slice lowers it — the bridge then declines those sources.
     public static func from(_ diagram: MermaidDiagram, theme: RenderTheme,
                             measure: DiagramTextMeasurer,
                             spacing: DiagramSpacing = .regular) -> RenderScene? {
@@ -32,11 +33,28 @@ extension RenderScene {
         case .sequence(let sequence):
             return from(DiagramLayoutEngine.layout(sequence, measure: measure),
                         theme: theme, measure: measure)
+        case .c4(let c4):
+            return from(DiagramLayoutEngine.layout(c4, measure: measure),
+                        theme: theme, measure: measure)
+        case .architecture(let arch):
+            return from(DiagramLayoutEngine.layout(arch, measure: measure, spacing: spacing),
+                        theme: theme, measure: measure)
+        case .block(let block):
+            return from(DiagramLayoutEngine.layout(block, measure: measure),
+                        theme: theme, measure: measure)
+        case .swimlane(let swimlane):
+            return from(DiagramLayoutEngine.layout(swimlane, measure: measure),
+                        theme: theme, measure: measure)
+        case .sankey(let sankey):
+            return from(DiagramLayoutEngine.layout(sankey, measure: measure),
+                        theme: theme, measure: measure)
+        case .requirement(let requirement):
+            return from(DiagramLayoutEngine.layout(requirement, measure: measure),
+                        theme: theme, measure: measure)
         // Phase 0b: the remaining families lower in a later slice.
         case .pie, .gantt, .timeline, .mindmap, .journey, .quadrant, .packet,
              .xychart, .kanban, .radar, .treemap, .treeView, .venn, .cynefin,
-             .wardley, .ishikawa, .eventModeling, .swimlane, .gitGraph, .sankey,
-             .requirement, .zenuml, .c4, .architecture, .block:
+             .wardley, .ishikawa, .eventModeling, .gitGraph, .zenuml:
             return nil
         }
     }

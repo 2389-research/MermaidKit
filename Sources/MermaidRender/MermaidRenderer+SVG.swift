@@ -11,8 +11,9 @@ import MermaidLayout
 
 /// End-to-end SVG / `RenderScene` entry points — the bridge from Mermaid source
 /// to the platform-free scene IR (MermaidLayout/RenderScene) and its SVG
-/// backend. This slice covers the flowchart family; other diagram types return
-/// nil until Phase 0b lowers them.
+/// backend. Covers the flowchart family plus the Phase 0b-1 (state, ER, class,
+/// sequence) and 0b-2 (c4, architecture, block, swimlane, sankey, requirement)
+/// families; other diagram types return nil until a later slice lowers them.
 extension MermaidRenderer {
 
     /// Lowers Mermaid `source` to a platform-free ``RenderScene``, mapping the
@@ -30,7 +31,8 @@ extension MermaidRenderer {
             hairline: theme.resolved.hairline,
             secondaryText: theme.resolved.secondaryText,
             tertiaryText: theme.resolved.tertiaryText,
-            palette: theme.resolved.palette)
+            palette: theme.resolved.palette,
+            prefersDark: theme.prefersDark)
         return RenderScene.from(diagram, theme: renderTheme, measure: textMeasurer, spacing: spacing)
     }
 
