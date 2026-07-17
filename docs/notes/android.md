@@ -13,6 +13,17 @@ Three things, together — not a cheap port:
 3. **Zero-hassle bridges** — they snap it into their app with no NDK, no Swift,
    no JNI, no friction.
 
+## Cross-project alignment (Vinculum)
+
+An independent design at Vinculum converged on nearly the same architecture:
+on-device native, Swift-thinks / Kotlin-draws-natively, prebuilt multi-ABI AAR
+from Maven, Compose + View, a pure-Swift foundation with a reference renderer
+before the NDK, and emulator CI. Their production experience sharpened two
+decisions recorded below — **pin measurement to the drawing engine** and **thread
+accessibility through the bridge from the first surface** — both from bugs they
+actually shipped. Where the projects *diverge* (the font axis) is deliberate and
+correct; see Fonts.
+
 ## What "fidelity" means on Android
 
 Crucially, it does **not** mean shipping macOS's exact pixels. It means drawing
@@ -92,51 +103,112 @@ to diff and read, and it's a shippable export in its own right).
 
 ## Utility wins (an interactive diagram, not a static image)
 
-- **Accessibility for free** — wire Android `contentDescription` straight from
-  `MermaidAltText.narrate` (the step-by-step walkthrough already shipped). Instant
-  differentiator.
+- **Accessibility, designed in from the first surface** — thread the
+  `MermaidAltText.narrate` walkthrough through the JNI boundary as part of the
+  *initial* C ABI (returned alongside the scene), wired to `contentDescription`.
+  **Not** bolted on per-view later: cheap if designed in, painful to retrofit
+  (Vinculum's lesson). Instant differentiator.
 - **Tap callbacks** — the scene carries every node's frame, so hit-testing gives
   `onNodeClick(nodeId)` with no extra layout work.
 - **Material theming** (`DiagramTheme` ← `MaterialTheme` colors), light/dark,
   DPI-aware, and export to PNG/SVG/PDF from Kotlin.
 
-## Measurement (the subtle fidelity detail)
+## Measurement — decided: measure with the engine that draws
 
-Layout is only correct if it measures with the fonts that draw. Two clean ways;
-pick during step 3:
-- **Bundled Roboto + FreeType (Swift-side):** ship Android's default font, measure
-  it with FreeType, draw it with Canvas — fast (no JNI per label), high fidelity
-  as long as we control the font. Simplest.
-- **JNI measurement callback:** Swift layout calls back into Kotlin
-  `Paint.measureText`, **batched over one JNI hop** (all label strings+sizes in,
-  all metrics out) and memoized (measurement is already memoized in the perf
-  work). Highest fidelity when the app wants *its own* font.
+Layout is only correct if it measures with the **exact face that draws**.
+**Decision (product surface): the batched `Paint.measureText` callback — the
+device's Skia face both measures and draws.** This is committed, not an "or."
+
+Why we pin it rather than leave it open (Vinculum's lesson, their issue #62):
+measuring with a bundled Roboto in Swift while drawing with the device's
+Skia/Roboto is *two different faces* — they diverge by font **version**,
+**hinting**, and the user's system **font-scale** (accessibility) setting — which
+clips and misaligns labels in a way **no renderer-conformance check can catch**
+(both renderers faithfully draw a scene that was laid out against the wrong
+metrics; the ratchet only guarantees scene→pixels fidelity, not that the metrics
+were right). So: Swift layout calls back into Kotlin `Paint.measureText`,
+**batched over one JNI hop** (all label strings + sizes in, all metrics out),
+memoized (the measurement path is already memoized from the perf work).
+
+Bundled-Roboto + FreeType measurement stays **only** as the headless/SVG fallback
+(no device present) — never the product path.
+
+**Standing seam check — a cross-backend golden gate.** Measure a shared corpus
+and diff *size-normalized ink signatures* across backends (CoreText / Skia /
+FreeType); drift means the measure-face and draw-face have separated on some
+backend. Same shape as the cross-process determinism gate we just shipped — a
+ratchet on a seam unit tests structurally can't see.
+
+## Fonts: device Skia for labels; the math axis stays different
+
+The principle *measure with the engine that draws* is universal; the **font
+choice is not**, and Vinculum and MermaidKit correctly diverge here — keep it.
+For diagram **labels**, native = fidelity, so MermaidKit draws device text via
+Skia and measures with the **same Skia face**; we do **not** bundle a label font.
+Math is the exception a math-rendering project faces: its glyphs come from an
+OpenType `MATH` table no system font ships, so that project bundles a math font
+and draws/measures it via FreeType. Same principle, different fonts — do not
+unify this axis.
 
 ## Obstacles, and how the decision handles each
 
 - **No CoreGraphics on Android** → we don't need it; Kotlin draws with Canvas.
 - **No FontConfig on Android** → irrelevant; native `Paint` handles fonts.
-- **Swift↔Kotlin bridge** → tiny **C ABI** (`source + options + measure cb →
-  scene bytes`, plus diagnostics), not the rich Swift API; hidden inside the AAR.
+- **Swift↔Kotlin bridge** → tiny **C ABI**: takes `source + options + a batched
+  measure callback`, returns the **scene + the narration/alt-text + diagnostics**
+  (accessibility threaded from the first surface, per Vinculum). Not the rich
+  Swift API; hidden inside the AAR.
 - **Toolchain friction** → borne once, in *our* CI (NDK + Swift Android SDK);
   invisible to consumers.
 - **`MermaidView` (SwiftUI)** → doesn't port; Android gets the headless render +
   its own Compose/View wrappers.
 
-## Staged plan
+## Phased plan
 
-1. **Complete `RenderScene` + a reference SVG backend** (pure Swift, provable now;
-   guarded by the draw-vs-scene ratchet). ← the linchpin; shared with #15/#14.
-2. **C ABI + NDK build** of the Swift core → per-ABI `.so`, with the measurement
-   callback.
-3. **Kotlin `SceneRenderer`** (Canvas) + Compose/View wrappers + Material theming
-   + narration→`contentDescription` + tap callbacks.
-4. **Maven Central AAR** + a Gradle sample app; CI on an emulator.
+Each phase is independently valuable and testable; nothing needs the Android
+toolchain until Phase 1.
+
+### Phase 0 — Complete `RenderScene` + SVG reference renderer (pure Swift) ← START HERE
+The linchpin. A new **complete, `Codable` `RenderScene`** that fully determines
+the picture — shaped nodes (frame, shape, fill/stroke/dash), edges (polyline +
+arrowheads + dash), text with font size, containers, canvas — lowered from the
+per-type `*Layout`, plus an **SVG backend** that renders it. Buildable and provable
+now, no NDK. Ships value on its own as SVG export (#15) and *is* the plugin/Android
+scene contract (#14).
+- **0a:** `RenderScene` types + `RenderScene.from(.flowchart, theme:, measure:)`
+  + `SVGRenderer` for the flowchart family + tests (valid SVG, expected shapes).
+- **0b:** extend `from(…)` to the remaining diagram families (about one commit
+  per family), reusing what `DiagramRenderer` already knows how to draw.
+- **0c:** the cross-backend golden gate — size-normalized ink-signature diff
+  across backends as a standing seam check.
+- *Acceptance:* every fixture lowers to a `RenderScene` and renders to valid SVG;
+  no field the renderer needs is missing (the scene fully determines the picture).
+
+### Phase 1 — C ABI + NDK cross-compile
+Swift core → per-ABI `.so` (arm64-v8a, armeabi-v7a, x86_64) via the NDK + Swift
+Android SDK. Thin C ABI: `source + options + batched measure callback → scene +
+narration/alt-text + diagnostics`.
+- *Acceptance:* a headless C harness on Android returns a `RenderScene` for a fixture.
+
+### Phase 2 — Kotlin `SceneRenderer` + snap-in surface
+`SceneRenderer` draws the `RenderScene` with `Canvas`/`Paint`; the batched
+`Paint.measureText` callback feeds layout; `MermaidDiagram` Compose + `MermaidView`
+View; `MermaidTheme.fromMaterial()`; `contentDescription` from the narration;
+`onNodeClick(nodeId)` hit-testing.
+- *Acceptance:* a sample app renders every fixture natively, light/dark, with
+  a11y labels and tap callbacks.
+
+### Phase 3 — Distribution
+Maven Central `.aar` bundling the prebuilt `.so`; a one-Gradle-line sample app;
+emulator CI.
+- *Acceptance:* `implementation("ai.2389:mermaidkit-android:…")` in a fresh app
+  renders a diagram with no NDK/Swift setup.
 
 ## Open questions (decide as we go)
 
-- Measurement: bundled-font vs JNI-callback (step 3) — likely start bundled, add
-  callback as an opt-in.
+- ~~Measurement seam~~ — **decided**: device `Paint.measureText` callback on the
+  product surface; bundled-Roboto only as the headless/SVG fallback (see
+  Measurement).
 - Serialization: JSON (readable, `Codable` today) vs a tighter binary/FlatBuffer
   if per-frame scene transfer ever gets hot.
 - Swift-Java interop vs a hand-rolled C ABI as that ecosystem matures.
