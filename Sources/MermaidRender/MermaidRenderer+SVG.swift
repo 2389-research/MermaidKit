@@ -11,18 +11,14 @@ import MermaidLayout
 
 /// End-to-end SVG / `RenderScene` entry points — the bridge from Mermaid source
 /// to the platform-free scene IR (MermaidLayout/RenderScene) and its SVG
-/// backend. Covers the flowchart family plus the Phase 0b-1 (state, ER, class,
-/// sequence), 0b-2 (c4, architecture, block, swimlane, sankey, requirement), and
-/// 0b-3a (pie, gantt, timeline, journey, quadrant, xychart, radar, packet,
-/// kanban) families; other diagram types return nil until a later slice lowers
-/// them.
+/// backend. Every one of the 30 diagram types lowers to a scene and renders to
+/// SVG; these entry points return nil only when `source` fails to parse.
 extension MermaidRenderer {
 
     /// Lowers Mermaid `source` to a platform-free ``RenderScene``, mapping the
-    /// theme's resolved colors into a ``RenderTheme``. Nil when the source isn't
-    /// a family that lowers yet (Phase 0a: flowchart; Phase 0b: + state, ER,
-    /// class, sequence). The top-level ``RenderScene/from(_:theme:measure:spacing:)``
-    /// dispatcher decides which families produce a scene.
+    /// theme's resolved colors into a ``RenderTheme``. Every diagram type lowers,
+    /// so this is nil only when `source` fails to parse. The top-level
+    /// ``RenderScene/from(_:theme:measure:spacing:)`` dispatcher builds the scene.
     public static func renderScene(source: String, theme: DiagramTheme,
                                    spacing: DiagramSpacing = .regular) -> RenderScene? {
         guard let diagram = MermaidParser.parse(source) else { return nil }
@@ -39,7 +35,7 @@ extension MermaidRenderer {
     }
 
     /// Renders Mermaid `source` to a standalone SVG document string, or nil when
-    /// the source isn't a family that lowers yet (Phase 0a + 0b families).
+    /// `source` fails to parse (every diagram type renders to SVG).
     public static func svg(source: String, theme: DiagramTheme,
                            spacing: DiagramSpacing = .regular) -> String? {
         guard let scene = renderScene(source: source, theme: theme, spacing: spacing) else { return nil }
