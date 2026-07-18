@@ -1202,8 +1202,11 @@ final class RenderSceneTests: XCTestCase {
                                         "fixture must parse: \(file.lastPathComponent)")
             let scene = RenderScene.from(diagram, theme: theme, measure: measure)
             XCTAssertNotNil(scene, "every diagram type must lower: \(file.lastPathComponent)")
-            // The scene must be a non-empty, well-formed SVG too.
+            // The scene must actually contain drawn elements, and be a
+            // well-formed SVG (an empty scene still emits an <svg> wrapper).
             if let scene {
+                XCTAssertFalse(scene.elements.isEmpty,
+                               "scene must have rendered elements: \(file.lastPathComponent)")
                 let svg = SVGRenderer.svg(scene)
                 XCTAssertTrue(svg.hasPrefix("<svg"), "SVG for \(file.lastPathComponent)")
                 XCTAssertTrue(svg.contains("</svg>"), "SVG close for \(file.lastPathComponent)")

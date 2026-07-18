@@ -85,13 +85,15 @@ extension RenderScene {
                     stroke: Stroke(color: theme.ink, width: 3))))
             }
             let text = node.decorator.map { "\(node.name) (\($0))" } ?? node.name
-            let nameWidth = measure(node.name, 10.5).width
+            // Measure the full DECORATED label so it left-anchors at labelFrame.minX
+            // (center = minX + halfWidth); node.name alone would shift it left.
+            let textWidth = measure(text, 10.5).width
             elements.append(.shape(Shape(
                 path: .roundedRect(node.labelFrame.insetBy(dx: -2, dy: -1), radius: 0),
                 fill: theme.canvas.withAlpha(0.88), stroke: nil)))
             elements.append(.text(Text(
                 string: text,
-                center: CGPoint(x: node.labelFrame.minX + nameWidth / 2, y: node.labelFrame.midY),
+                center: CGPoint(x: node.labelFrame.minX + textWidth / 2, y: node.labelFrame.midY),
                 fontSize: 10.5, weight: node.isAnchor ? .semibold : .regular, color: theme.ink)))
         }
         for note in layout.notes {

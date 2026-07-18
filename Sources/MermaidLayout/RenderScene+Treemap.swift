@@ -63,6 +63,11 @@ extension RenderScene {
     /// Integer when whole, else one decimal — the treemap value chip's text
     /// (the platform-free twin of `formatTreemapValue`).
     private static func formatTreemapValue(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+        // Guard non-finite / out-of-Int-range values so `Int(value)` can't trap
+        // (the parser already sanitizes numeric input; this keeps the lowering
+        // crash-proof regardless).
+        guard value.isFinite else { return "" }
+        if value == value.rounded(), abs(value) < 1e15 { return String(Int(value)) }
+        return String(format: "%.1f", value)
     }
 }
