@@ -4,8 +4,8 @@
 // iterates a hashed collection into coordinates can render one source two ways
 // across app launches (issue #1). A single test process has one fixed seed, so
 // `StabilityTests.testLayoutIsDeterministicAcrossRuns` (two calls, same process)
-// can't see it. This test only DUMPS a raster signature per fixture; the actual
-// assertion runs it in two fresh processes and diffs — see
+// can't see it. This test only DUMPS a raster + RenderScene/SVG signature per
+// fixture; the actual assertion runs it in two fresh processes and diffs — see
 // `scripts/check-determinism.sh`. Gated, so it's inert in the normal suite.
 #if canImport(AppKit) || canImport(UIKit)
 import XCTest
@@ -47,6 +47,13 @@ final class DeterminismSignatureTests: XCTestCase {
                                            targetWidth: 500, background: bg),
                 "\(name): fixture failed to rasterize")
             lines.append("\(name)\t\(r.width)x\(r.height):\(fnv1a(r.pixels))")
+            // Also the platform-free RenderScene → SVG pipeline (Phase 0): every
+            // family lowers, so this must be non-nil and byte-stable across runs
+            // — the deterministic wire form the JNI boundary and plugin golden need.
+            let svg = try XCTUnwrap(
+                MermaidRenderer.svg(source: src, theme: DiagramTheme(prefersDark: false)),
+                "\(name): fixture failed to render SVG")
+            lines.append("\(name)-svg\t\(svg.count):\(fnv1a([UInt8](svg.utf8)))")
         }
         try (lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
     }
