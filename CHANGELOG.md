@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.4.0
+
+A platform-free render IR with SVG output, and a fifth input front-end. Additive;
+the rendered output of existing diagrams is unchanged.
+
+- **SVG export.** `MermaidRenderer.svg(source:theme:)` renders **any of the 30
+  diagram types** to a standalone SVG document — with **no CoreGraphics**. It goes
+  through a new public, platform-free render IR:
+  - **`RenderScene`** (`MermaidLayout`) — a `Codable` display list that fully
+    determines the picture (shaped nodes, arrowed/dashed edges, text, containers,
+    canvas), lowered from every diagram type. `MermaidRenderer.renderScene(source:theme:)`
+    builds it; `SVGRenderer.svg(_:)` paints it. This is the foundation for the
+    planned native Android renderer and a plugin/interchange contract (see
+    `docs/notes/android.md`).
+  - Cross-process determinism is CI-gated for the RenderScene/SVG pipeline as well
+    as the raster path — the same source serializes byte-identically across
+    process launches (the wire-format guarantee those consumers need).
+- **New front-end: `git log` → gitgraph.** `GitLogParser.parse(_:)` turns
+  `git log` output into the `GitGraph` IR — a fifth input front-end after Mermaid,
+  DOT, Dippin, and SQL. Two-pass topological ordering, branch-lane derivation from
+  ref decorations, and `--format gitlog` in `mermaidkit-term`.
+- **Docs.** An Android support plan (`docs/notes/android.md`) and a development
+  approach memo (`docs/notes/development-approach.md`).
+
 ## 1.3.0
 
 Three new capabilities on the front/back-end seam — all additive; the rendered

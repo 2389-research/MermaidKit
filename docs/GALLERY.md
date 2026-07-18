@@ -7,13 +7,15 @@ follows your GitHub theme; both variants live in
 [`docs/images/types/`](images/types).
 
 These are Mermaid sources, but the engine isn't Mermaid-only: Graphviz DOT
-(`DOTParser`), Dippin (`DippinParser`), and SQL DDL (`SQLDDLParser`, `CREATE
-TABLE` → ER with PK/FK/UK badges) parse into the same IR and render through the
-same layout and backends — and `DOTExporter` emits a flowchart back as DOT, so
-MermaidKit doubles as a Mermaid ⇄ DOT converter. The same diagrams also render
-in the terminal via the platform-free `mermaidkit-term` CLI (Kitty graphics,
-half-block truecolor, box-drawing, or plain ASCII). See the
-[README](../README.md) for details.
+(`DOTParser`), Dippin (`DippinParser`), SQL DDL (`SQLDDLParser`, `CREATE TABLE` →
+ER with PK/FK/UK badges), and raw `git log` output (`GitLogParser` → gitgraph)
+parse into the same IR and render through the same layout and backends — and
+`DOTExporter` emits a flowchart back as DOT, so MermaidKit doubles as a
+Mermaid ⇄ DOT converter. Every type also exports to standalone SVG
+(`MermaidRenderer.svg(source:theme:)`, via the platform-free `RenderScene` IR and
+`SVGRenderer`), and renders in the terminal via the platform-free
+`mermaidkit-term` CLI (Kitty graphics, half-block truecolor, box-drawing, or
+plain ASCII). See the [README](../README.md) for details.
 
 ## Architecture
 
