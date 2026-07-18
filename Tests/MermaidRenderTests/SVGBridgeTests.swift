@@ -106,11 +106,54 @@ final class SVGBridgeTests: XCTestCase {
         }
     }
 
-    func testUnloweredFamilyReturnsNil() {
-        // Families not yet lowered still decline (marked `// Phase 0b:`).
-        let mindmap = "mindmap\n  root\n    child a\n    child b"
-        XCTAssertNil(MermaidRenderer.svg(source: mindmap, theme: theme))
-        XCTAssertNil(MermaidRenderer.renderScene(source: mindmap, theme: theme))
+    func testPhase0b3bFinalFamiliesRenderSVG() throws {
+        // mindmap, treemap, treeView, venn, cynefin, wardley, ishikawa,
+        // eventModeling, zenuml, gitGraph all lower now (Phase 0b-3b) — the
+        // final families, completing full ~30-family coverage.
+        let sources = [
+            "mindmap\n  root((Root))\n    A\n      A1\n    B",
+            "treemap\n    \"Root\"\n        \"Group\"\n            \"Leaf\": 10\n        \"Other\": 20",
+            "treeView-beta\n    Root/\n        File.swift ## a leaf\n        Sub/\n            Deep.swift",
+            "venn-beta\n    set a [\"Alpha\"] : 3\n    set b [\"Beta\"] : 3\n    union a, b [\"both\"]",
+            "cynefin-beta\n    title F\n    clear\n        \"item\"\n    complicated\n        \"analyze\"\n" +
+                "    complex\n        \"probe\"\n    chaotic\n        \"act\"\n    chaotic --> clear : \"go\"",
+            "wardley-beta\n    title M\n    anchor User [0.95, 0.6]\n    component Site [0.7, 0.5]\n" +
+                "    User -> Site\n    evolve Site 0.8",
+            "ishikawa-beta\n    Effect\n        Cause A\n            Sub\n        Cause B",
+            "eventmodeling\n    tf 1 ui View\n    tf 2 command Request\n    tf 3 event Parsed",
+            "zenuml\n    title Flow\n    @Actor User\n    @Control Service\n    User->Service: go\n" +
+                "    Service->Service: work\n    Service->User: done",
+            "gitGraph\n    commit id: \"first\"\n    commit id: \"tagged\" tag: \"v1.0.0\"\n" +
+                "    branch feat\n    commit id: \"work\"\n    checkout main\n    merge feat",
+        ]
+        for source in sources {
+            let svg = try XCTUnwrap(MermaidRenderer.svg(source: source, theme: theme),
+                                    "expected an SVG for:\n\(source)")
+            XCTAssertTrue(svg.hasPrefix("<svg"))
+            XCTAssertTrue(svg.contains("</svg>"))
+            #if canImport(Darwin)
+            XCTAssertTrue(XMLParser(data: Data(svg.utf8)).parse(),
+                          "bridged SVG must be XML-parseable for:\n\(source)")
+            #endif
+        }
+    }
+
+    func testEveryFixtureFamilyRendersSVG() throws {
+        // Full coverage: every diagram family now lowers end-to-end, so the
+        // bridge produces an SVG for each fixture — none returns nil.
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/diagrams")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "mmd" }
+        XCTAssertGreaterThanOrEqual(files.count, 30, "expected the full fixture corpus")
+        for file in files {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            let svg = try XCTUnwrap(MermaidRenderer.svg(source: source, theme: theme),
+                                    "every family must render: \(file.lastPathComponent)")
+            XCTAssertTrue(svg.hasPrefix("<svg"), "SVG for \(file.lastPathComponent)")
+            XCTAssertTrue(svg.contains("</svg>"), "SVG close for \(file.lastPathComponent)")
+        }
     }
 
     func testUnparseableReturnsNil() {

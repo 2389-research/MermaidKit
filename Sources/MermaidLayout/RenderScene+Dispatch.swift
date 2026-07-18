@@ -5,17 +5,20 @@ import CoreGraphics
 
 extension RenderScene {
 
-    /// Lowers any parsed ``MermaidDiagram`` to a ``RenderScene``, or nil for a
-    /// family this phase doesn't cover yet. This is the single switch the SVG /
-    /// Canvas bridges call: it runs the matching `DiagramLayoutEngine.layout`
-    /// and hands the placed layout to the family's `from(_:theme:measure:)`.
+    /// Lowers any parsed ``MermaidDiagram`` to a ``RenderScene``. Every one of
+    /// the ~30 diagram families now lowers, so this never returns nil — the
+    /// optional result is kept only for source-compatibility with callers that
+    /// still branch on it. This is the single switch the SVG / Canvas bridges
+    /// call: it runs the matching `DiagramLayoutEngine.layout` and hands the
+    /// placed layout to the family's `from(_:theme:measure:)`.
     ///
     /// Phase 0a lowered flowchart; Phase 0b-1 added state, ER, class, and
     /// sequence; Phase 0b-2 adds c4, architecture, block, swimlane, sankey, and
     /// requirement; Phase 0b-3a adds the chart families — pie, gantt, timeline,
-    /// journey, quadrant, xychart, radar, packet, and kanban. Every remaining
-    /// case returns nil (marked `// Phase 0b:`) until a later slice lowers it —
-    /// the bridge then declines those sources.
+    /// journey, quadrant, xychart, radar, packet, and kanban; Phase 0b-3b
+    /// completes coverage with mindmap, treemap, treeView, venn, cynefin,
+    /// wardley, ishikawa, eventModeling, zenuml, and gitGraph. The switch is now
+    /// exhaustive over all diagram types.
     public static func from(_ diagram: MermaidDiagram, theme: RenderTheme,
                             measure: DiagramTextMeasurer,
                             spacing: DiagramSpacing = .regular) -> RenderScene? {
@@ -80,10 +83,36 @@ extension RenderScene {
         case .kanban(let kanban):
             return from(DiagramLayoutEngine.layout(kanban, measure: measure),
                         theme: theme, measure: measure)
-        // Phase 0b: the remaining families lower in a later slice.
-        case .mindmap, .treemap, .treeView, .venn, .cynefin,
-             .wardley, .ishikawa, .eventModeling, .gitGraph, .zenuml:
-            return nil
+        case .mindmap(let mindmap):
+            return from(DiagramLayoutEngine.layout(mindmap, measure: measure),
+                        theme: theme, measure: measure)
+        case .treemap(let treemap):
+            return from(DiagramLayoutEngine.layout(treemap, measure: measure),
+                        theme: theme, measure: measure)
+        case .treeView(let treeView):
+            return from(DiagramLayoutEngine.layout(treeView, measure: measure),
+                        theme: theme, measure: measure)
+        case .venn(let venn):
+            return from(DiagramLayoutEngine.layout(venn, measure: measure),
+                        theme: theme, measure: measure)
+        case .cynefin(let cynefin):
+            return from(DiagramLayoutEngine.layout(cynefin, measure: measure),
+                        theme: theme, measure: measure)
+        case .wardley(let wardley):
+            return from(DiagramLayoutEngine.layout(wardley, measure: measure),
+                        theme: theme, measure: measure)
+        case .ishikawa(let ishikawa):
+            return from(DiagramLayoutEngine.layout(ishikawa, measure: measure),
+                        theme: theme, measure: measure)
+        case .eventModeling(let eventModeling):
+            return from(DiagramLayoutEngine.layout(eventModeling, measure: measure),
+                        theme: theme, measure: measure)
+        case .zenuml(let zenuml):
+            return from(DiagramLayoutEngine.layout(zenuml, measure: measure),
+                        theme: theme, measure: measure)
+        case .gitGraph(let gitGraph):
+            return from(DiagramLayoutEngine.layout(gitGraph, measure: measure),
+                        theme: theme, measure: measure)
         }
     }
 }
