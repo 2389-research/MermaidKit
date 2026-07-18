@@ -36,6 +36,12 @@ let package = Package(
     products: [
         .library(name: "MermaidLayout", targets: ["MermaidLayout"]),
         .library(name: "MermaidRender", targets: ["MermaidRender"]),
+        // The C ABI over the render pipeline — the surface Android's JNI layer
+        // calls (Phase 1a of docs/notes/android.md). Depends ONLY on the
+        // platform-free MermaidLayout (no CoreGraphics/CoreText, no Silica), so
+        // it builds and tests on macOS + Linux today and cross-compiles for the
+        // NDK later. Keeps the no-trait graph Silica-free.
+        .library(name: "MermaidKitC", targets: ["MermaidKitC"]),
     ],
     traits: [
         .trait(
@@ -80,7 +86,19 @@ let package = Package(
             name: "mermaidkit-term",
             dependencies: ["MermaidLayout", "MermaidRender"],
             path: "Sources/mermaidkit-term"),
+        // The C ABI (`@_cdecl`, `mmk_` prefix) that Android's JNI layer calls:
+        // parse → RenderScene.from(diagram, theme:, measure:) → deterministic
+        // JSON, plus narration for accessibility. Pure Swift on MermaidLayout,
+        // so it builds Silica-free on macOS + Linux. `include/mermaidkit.h` is
+        // the hand-written C contract for JNI consumers (informational to
+        // SwiftPM, which builds the Swift `@_cdecl` symbols regardless).
+        .target(
+            name: "MermaidKitC",
+            dependencies: ["MermaidLayout"],
+            path: "Sources/MermaidKitC",
+            exclude: ["include/mermaidkit.h"]),
         .testTarget(name: "MermaidLayoutTests", dependencies: ["MermaidLayout"], path: "Tests/MermaidLayoutTests"),
         .testTarget(name: "MermaidRenderTests", dependencies: ["MermaidRender", "MermaidLayout"], path: "Tests/MermaidRenderTests"),
+        .testTarget(name: "MermaidKitCTests", dependencies: ["MermaidKitC", "MermaidLayout"], path: "Tests/MermaidKitCTests"),
     ]
 )
