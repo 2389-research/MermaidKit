@@ -55,27 +55,29 @@ sub-millisecond), and results are cached per (source, theme, spacing).
 | Runtime | Swift + CoreGraphics | JS engine + web process | Swift (elk-swift layout) |
 | Dependencies | **none** | mermaid.js bundle | elk-swift |
 | Rendering | sync, ~ms, cached | async round-trip | sync + async |
-| Output | `NSImage`/`UIImage`, `NSAttributedString`, SwiftUI | HTML/SVG in webview | image, SVG, ASCII |
+| Output | `NSImage`/`UIImage`, PDF, SVG, `NSAttributedString`, SwiftUI | HTML/SVG in webview | image, SVG, ASCII |
 | Layout engine | network-simplex layering, label-space reservation, fixed-side ports | dagre / ELK | elk-swift |
 | Layout verification | **geometric linter in CI** + stability tests | — | — |
 | Density control | `DiagramSpacing` presets | config | — |
 | Syntax coverage | core syntax per type (see matrix) | reference | core syntax, 6 types |
 
-If you need SVG output, iOS 15, or pixel-parity with mermaid.js, those other
-rows are good choices. MermaidKit's bet is breadth of *native* type coverage
-with zero dependencies and machine-checkable layout quality.
+If you need iOS 15 or pixel-parity with mermaid.js, those other rows are good
+choices. MermaidKit's bet is breadth of *native* type coverage with zero
+dependencies and machine-checkable layout quality (and it now exports SVG too —
+see [SVG export](#svg-export-and-the-renderscene-ir)).
 
 ## The full set
 
 Every type, rendered by MermaidKit itself, one image per diagram (light and
 dark): **[docs/GALLERY.md](docs/GALLERY.md)**.
 
-## Beyond Mermaid: DOT, Dippin, and SQL front-ends
+## Beyond Mermaid: DOT, Dippin, SQL, and git-log front-ends
 
-Mermaid is the primary input, but it isn't the only one. Three more front-ends
-parse into the same IR (`Flowchart` / `ERDiagram`) and render through the same
-layout and every backend — CoreGraphics/CoreText on Apple, Silica/Cairo on
-Linux, and the terminal — with no re-serialization back to Mermaid text:
+Mermaid is the primary input, but it isn't the only one. Four more front-ends
+parse into the same IR (`Flowchart` / `ERDiagram` / `GitGraph`) and render
+through the same layout and every backend — CoreGraphics/CoreText on Apple,
+Silica/Cairo on Linux, and the terminal — with no re-serialization back to
+Mermaid text:
 
 - **Graphviz DOT** — `DOTParser.parse(_:)` turns a `.dot` source into a
   `Flowchart`, handling subgraphs/clusters, attribute defaults, `dir=back`, and
@@ -93,6 +95,13 @@ Linux, and the terminal — with no re-serialization back to Mermaid text:
   and `REFERENCES` mapped to one-to-many crow's-foot relationships. It copes
   with dialect quoting (`"x"`, `` `x` ``, `[x]`) and comments, ignores unknown
   clauses, and degrades to `nil` on malformed or oversized input.
+- **git log** — `GitLogParser.parse(_:)` turns raw `git log` output — piped
+  straight in — into a `GitGraph`. Topology is resolved in two passes (so the
+  parse never depends on the caller's `--date-order`/`--topo-order` choice), and
+  branch lanes are derived from the ref decorations
+  (`(HEAD -> main, origin/main)`), then propagated backward along first-parent
+  ancestry so a feature branch's interior commits share the tip's lane.
+  `mermaidkit-term --format gitlog` renders it straight to the terminal.
 
 Each hands its parsed diagram straight to `MermaidRenderer.pngData(diagram:)` /
 `image(diagram:)`.
@@ -231,6 +240,35 @@ swift run mermaidkit-term flowchart.mmd
 cat pipeline.dot | mermaidkit-term --format dot --mode plain
 ```
 
+## SVG export and the RenderScene IR
+
+Every diagram also renders to a standalone SVG document — no CoreGraphics, no
+platform image. `MermaidRenderer.svg(source:theme:)` returns the SVG string for
+any of the **30 diagram types**; `MermaidRenderer.renderScene(source:theme:)`
+hands back the `RenderScene` behind it.
+
+```swift
+let svg = MermaidRenderer.svg(
+    source: "flowchart TD\n  A --> B",
+    theme: DiagramTheme(prefersDark: false)
+)   // -> "<svg …>…</svg>"
+```
+
+`RenderScene` is a new public, `Codable`, **platform-free** render IR (in
+`MermaidLayout`): a complete display list — shaped nodes, arrowed edges, text,
+containers — with every shape's geometry resolved exactly once, so a backend
+just paints primitives in order rather than re-deriving a diamond's vertices or
+a cylinder's arcs. Every diagram type lowers to it, and the SVG backend
+(`SVGRenderer`) consumes `RenderScene` alone — it needs no drawing surface, so
+the scene → SVG path runs headless on Linux and in CI. Because the whole tree is
+`Codable`, a scene can also cross a process boundary intact; a cross-process
+determinism gate diffs both the raster and the RenderScene/SVG signatures in CI.
+
+`RenderScene` is the foundation for the planned plugin contract and a planned
+Android (Kotlin Canvas) renderer. To keep the framing honest: today it drives
+SVG; Android is a plan, not a shipped backend — see
+[`docs/notes/android.md`](docs/notes/android.md).
+
 ## Architecture
 
 Two targets:
@@ -244,7 +282,7 @@ Two targets:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "1.3.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "1.4.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
@@ -268,9 +306,13 @@ plot). The linter runs in this
 package's test suite over dense fixtures for all 30 types, so layout
 regressions fail CI as *geometry* ("edge #3 passes through node 'DiagramScene' (165pt inside)"), not as pixel diffs.
 
-The scene IR is also the extension seam: a different backend (SVG, say)
-would consume `DiagramScene`/the layout structs without touching parsing or
-layout. Contributions welcome.
+The scene IR is also the extension seam — and it's now realized. Alongside the
+lint-focused `DiagramScene`, a render-focused `RenderScene` (see
+[SVG export](#svg-export-and-the-renderscene-ir)) lowers from every type and is
+consumed by the built-in `SVGRenderer` to export standalone SVG, all inside the
+platform-free `MermaidLayout` target without touching parsing or layout. The
+same IR is the foundation for the planned plugin contract and a planned Android
+renderer (`docs/notes/android.md`). Further backends welcome.
 
 ## API
 
@@ -289,11 +331,18 @@ layout. Contributions welcome.
   as a single-attachment `NSAttributedString` for embedding in text views.
 - `MermaidRenderer.pdfData(source:theme:spacing:)` — single-page vector
   PDF from the same layout and draw code; the export/print path.
+- `MermaidRenderer.svg(source:theme:spacing:)` — a standalone SVG document for
+  any of the 30 types, and `MermaidRenderer.renderScene(source:theme:spacing:)`
+  the platform-free `RenderScene` behind it.
+- `RenderScene` / `SVGRenderer` (in `MermaidLayout`) — the `Codable`,
+  CoreGraphics-free render display list and its SVG backend; consume
+  `RenderScene` to reach a new output format without touching parsing or layout.
 - `MermaidRenderer.pngData(diagram:)` / `image(diagram:)` /
   `rgbaRaster(diagram:)` — render an already-parsed `MermaidDiagram` without
   re-serializing to Mermaid text; the path the DOT/Dippin/SQL front-ends take.
-- `DOTParser.parse(_:)`, `DippinParser.parse(_:)`, `SQLDDLParser.parse(_:)` —
-  the non-Mermaid front-ends (Graphviz DOT, Dippin, SQL DDL) into the same IR;
+- `DOTParser.parse(_:)`, `DippinParser.parse(_:)`, `SQLDDLParser.parse(_:)`,
+  `GitLogParser.parse(_:)` — the non-Mermaid front-ends (Graphviz DOT, Dippin,
+  SQL DDL, and `git log` output → gitgraph) into the same IR;
   `DOTExporter.export(_:)` is the inverse (Flowchart → DOT).
 - `MermaidRenderer.altText(source:)` — a VoiceOver-ready description of
   the diagram's content, and `MermaidAltText.narrate(source:)` a step-by-step
@@ -325,8 +374,11 @@ and the most-wanted list.
 **Does it render on Linux?** Yes, since v0.11.0 — `MermaidRender` draws with
 Silica (Cairo/FontConfig) on Linux, sharing the exact layout and per-type draw
 code as the Apple backend (`docs/notes/linux-rendering-via-silica.md`). The
-layout target (`MermaidLayout`) was always platform-free. A vector SVG backend
-over the scene IR is still wanted — it's the most-requested contribution.
+layout target (`MermaidLayout`) was always platform-free — and a vector SVG
+backend over the scene IR now ships from there too:
+`MermaidRenderer.svg(source:theme:)` exports standalone SVG for all 30 types via
+the CoreGraphics-free `SVGRenderer` (see
+[SVG export](#svg-export-and-the-renderscene-ir)).
 
 **Why doesn't the output look exactly like mermaid.js?** Deliberate.
 MermaidKit renders diagrams in a native Apple aesthetic (system fonts, your
