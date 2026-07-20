@@ -50,6 +50,16 @@ copy_closure() {
 }
 copy_closure /out/libmermaidkit.so
 
-echo "== [$ABI] jniLibs bundle =="
+# Strip each .so with llvm-objcopy (== llvm-strip) — removes .symtab/debug while
+# keeping the exported .dynsym (the Java_* entry points + NEEDED deps the loader
+# and JNI resolve). AGP does NOT strip PREBUILT jniLibs (only libs it builds via
+# CMake/ndk-build), so this is the authoritative strip. llvm-objcopy handles every
+# Android ELF, including the x86_64 one host GNU strip can't parse.
+STRIP=$(command -v llvm-objcopy || command -v llvm-strip)
+before=$(du -sb /out | cut -f1)
+for so in /out/*.so; do "$STRIP" --strip-unneeded "$so"; done
+after=$(du -sb /out | cut -f1)
+
+echo "== [$ABI] jniLibs bundle (stripped) =="
 ls -1 /out | sort
-echo "total: $(ls -1 /out | wc -l) .so, $(du -sh /out | cut -f1)"
+echo "total: $(ls -1 /out | wc -l) .so, $((after/1024/1024))M (was $((before/1024/1024))M unstripped)"

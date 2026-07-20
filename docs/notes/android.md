@@ -276,10 +276,20 @@ also emit a node→rect hit-test map).
   source→scene seam proven; the measure callback + snap-in surface remain.)*
 
 ### Phase 3 — Distribution
-Maven Central `.aar` bundling the prebuilt `.so`; a one-Gradle-line sample app;
-emulator CI.
+**Done + verified:** the release `.aar` bundles prebuilt, **stripped** `.so` for
+all three ABIs (`arm64-v8a`, `armeabi-v7a`, `x86_64`) — cross-compiled via
+`android/native/build-jni.sh` (llvm-objcopy strip; AGP does *not* strip prebuilt
+jniLibs), assembled and published to a local Maven repo (`maven-publish`,
+`ai.2389:mermaidkit-android:0.1.0`, with sources + POM carrying the transitive
+deps). A **fresh consumer app** resolves the artifact from `mavenLocal()`, uses
+the full public API, and packages `libmermaidkit.so` + its runtime closure into
+its APK. CI's `android-aar` job builds all three ABIs, assembles, publishes, and
+asserts every ABI is bundled. *Still open:* the actual Maven Central push
+(credentials + `ai.2389` namespace verification + artifact signing), and trimming
+the ~64 MB/ABI Foundation/ICU payload.
 - *Acceptance:* `implementation("ai.2389:mermaidkit-android:…")` in a fresh app
-  renders a diagram with no NDK/Swift setup.
+  renders a diagram with no NDK/Swift setup. ✅ (consumer app builds + packages
+  the artifact; Central publish is the remaining infra step.)
 
 ## Open questions (decide as we go)
 
