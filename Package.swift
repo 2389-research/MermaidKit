@@ -42,6 +42,12 @@ let package = Package(
         // it builds and tests on macOS + Linux today and cross-compiles for the
         // NDK later. Keeps the no-trait graph Silica-free.
         .library(name: "MermaidKitC", targets: ["MermaidKitC"]),
+        // A dynamic (shared-library) twin of the same target — the Windows DLL the
+        // .NET bridge P/Invokes. `swift build --product MermaidKitCShared` emits
+        // `MermaidKitCShared.dll` exporting the `mmk_*` C ABI (with the Swift
+        // runtime as dependent DLLs). The static `MermaidKitC` product above is
+        // unchanged for macOS/Linux consumers. See windows/.
+        .library(name: "MermaidKitCShared", type: .dynamic, targets: ["MermaidKitC"]),
     ],
     traits: [
         .trait(

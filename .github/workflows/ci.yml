@@ -225,20 +225,42 @@ jobs:
           done
           echo "✓ all three ABIs bundled"
 
-  # The .NET / SkiaSharp rendering half of the Windows bridge (docs/notes/windows.md):
-  # the SceneWire model + SceneRenderer (SkiaSharp) that draws the platform-free
-  # scene the C ABI emits. Runs on a real Windows runner — the authoritative target
-  # (and where system fonts render text, unlike the headless Linux Skia build).
+  # The full Windows bridge (docs/notes/windows.md) on a real Windows runner: the
+  # Swift core built as MermaidKitCShared.dll, the .NET SceneWire model +
+  # SceneRenderer (SkiaSharp), AND the P/Invoke seam (a Mermaid source string →
+  # the native mmk_* ABI → SceneWire → Skia). System fonts render text here too.
   windows-dotnet:
-    name: windows (.net skiasharp)
+    name: windows (.net skiasharp + pinvoke)
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Install Swift toolchain
+        uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-6.2-release
+          tag: 6.2-RELEASE
+      - name: Build the Swift core as a Windows DLL
+        shell: bash
+        run: swift build -c release --product MermaidKitCShared
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Build + test the .NET renderer
-        run: dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj --nologo
+      - name: Build the .NET tests
+        shell: bash
+        run: dotnet build windows/MermaidKit.Tests/MermaidKit.Tests.csproj -c Release --nologo
+      - name: Stage the native DLL next to the test assembly
+        shell: bash
+        run: |
+          dll=$(find .build -name 'MermaidKitCShared.dll' | head -1)
+          echo "native DLL: $dll"
+          cp "$dll" windows/MermaidKit.Tests/bin/Release/net8.0/
+      # MMK_NATIVE=1 makes the P/Invoke tests REQUIRE the DLL (a missing/broken
+      # native path fails here rather than soft-skipping as it does off-Windows).
+      - name: Test (renderer + native P/Invoke seam)
+        shell: bash
+        env:
+          MMK_NATIVE: "1"
+        run: dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj -c Release --no-build --nologo
