@@ -7,6 +7,19 @@ import Glibc
 import Android
 #elseif canImport(Bionic)
 import Bionic
+#elseif canImport(WASILibc)
+import WASILibc
+#endif
+
+// Whether the platform has a POSIX controlling terminal (termios / tty ioctls).
+// WASI/WebAssembly does not — it has no `/dev/tty`, termios, or `isatty` — so
+// the TTY-detection and OSC-11 background-query paths compile out there. The
+// core (parse → layout → RenderScene → SceneWire/SVG) that WASM actually uses
+// carries no terminal dependency; only this capability-ladder file did.
+#if canImport(Darwin) || canImport(Glibc) || canImport(Android) || canImport(Bionic)
+private let hasPOSIXTerminal = true
+#else
+private let hasPOSIXTerminal = false
 #endif
 
 // Terminal capability detection + the Kitty graphics transport. Pure bytes and
@@ -75,13 +88,18 @@ public struct TerminalEnvironment: Sendable {
     public static func current() -> TerminalEnvironment {
         let env = ProcessInfo.processInfo.environment
         let ghostty = env.keys.contains { $0.hasPrefix("GHOSTTY_") }
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Android) || canImport(Bionic)
+        let stdoutIsTTY = isatty(STDOUT_FILENO) != 0
+        #else
+        let stdoutIsTTY = false // WASI/WebAssembly has no controlling terminal
+        #endif
         return TerminalEnvironment(
             term: env["TERM"],
             colorterm: env["COLORTERM"],
             termProgram: env["TERM_PROGRAM"],
             kittyWindowID: env["KITTY_WINDOW_ID"],
             hasGhosttyMarker: ghostty,
-            stdoutIsTTY: isatty(STDOUT_FILENO) != 0,
+            stdoutIsTTY: stdoutIsTTY,
             colorFGBG: env["COLORFGBG"])
     }
 }
@@ -184,7 +202,13 @@ public enum TerminalCapabilities {
     /// non-canonical, no-echo mode with the given read deadline, writes the
     /// query, reads the reply (poll-gated so a silent terminal just times out),
     /// then restores the original termios. Returns nil on any failure/timeout.
+    ///
+    /// On WASI/WebAssembly (no controlling terminal, no termios) this is a
+    /// compile-time no-op that returns nil — callers fall back to `$COLORFGBG`
+    /// then a dark default, exactly as for a non-interactive/piped run.
     public static func queryBackgroundOSC11(timeout: TimeInterval = 0.2) -> TerminalBackground? {
+        guard hasPOSIXTerminal else { return nil }
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Android) || canImport(Bionic)
         let fd = open("/dev/tty", O_RDWR)
         guard fd >= 0 else { return nil }
         defer { close(fd) }
@@ -227,6 +251,9 @@ public enum TerminalCapabilities {
         guard let text = String(bytes: reply, encoding: .utf8),
               let rgb = parseOSC11Color(text) else { return nil }
         return classifyBackground(r: rgb.r, g: rgb.g, b: rgb.b)
+        #else
+        return nil // unreachable (guarded by hasPOSIXTerminal above); satisfies the compiler
+        #endif
     }
 }
 

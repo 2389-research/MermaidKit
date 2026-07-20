@@ -259,29 +259,43 @@ public extension SceneWire {
     init(_ scene: RenderScene) {
         self.init(
             version: SceneWire.currentVersion,
-            size: Size(w: Double(scene.size.width), h: Double(scene.size.height)),
+            size: Size(w: SceneWire.q(scene.size.width), h: SceneWire.q(scene.size.height)),
             background: SceneWire.hex(scene.background),
             elements: scene.elements.map(SceneWire.element))
+    }
+
+    /// Quantize a coordinate to an exact 1/256 (2⁻⁸) grid before it enters the
+    /// wire. This is the CROSS-PLATFORM byte-stability seam: raw `Double`s from
+    /// layout arithmetic serialize differently across Foundation implementations
+    /// (Darwin emits the shortest round-trip, e.g. `111.8`; swift-corelibs on
+    /// Linux/Android/WASM emits full precision, `111.80000000000001`), so the
+    /// same scene would not be byte-identical across platforms. An exact binary
+    /// fraction has ONE shortest representation every encoder agrees on, so
+    /// snapping to a 2⁻⁸ grid (~0.004 px — sub-pixel, imperceptible) makes the
+    /// wire JSON identical on macOS, Linux, Android, WASM, and Windows. SVG is
+    /// unaffected (it formats its own numbers via `SVGRenderer.num`).
+    static func q(_ value: CGFloat) -> Double {
+        (Double(value) * 256).rounded() / 256
     }
 
     private static func hex(_ c: DiagramColor) -> String { "#" + c.hexString }
 
     private static func point(_ p: CGPoint) -> Point {
-        Point(x: Double(p.x), y: Double(p.y))
+        Point(x: q(p.x), y: q(p.y))
     }
 
     private static func rect(_ r: CGRect) -> Rect {
-        Rect(x: Double(r.origin.x), y: Double(r.origin.y),
-             w: Double(r.size.width), h: Double(r.size.height))
+        Rect(x: q(r.origin.x), y: q(r.origin.y),
+             w: q(r.size.width), h: q(r.size.height))
     }
 
     private static func stroke(_ s: RenderScene.Stroke) -> Stroke {
-        Stroke(color: hex(s.color), width: Double(s.width), dashed: s.dashed)
+        Stroke(color: hex(s.color), width: q(s.width), dashed: s.dashed)
     }
 
     private static func shapePath(_ p: RenderScene.ShapePath) -> ShapePath {
         switch p {
-        case let .roundedRect(r, radius): return .roundedRect(rect: rect(r), radius: Double(radius))
+        case let .roundedRect(r, radius): return .roundedRect(rect: rect(r), radius: q(radius))
         case let .ellipse(r):             return .ellipse(rect: rect(r))
         case let .polygon(pts):           return .polygon(points: pts.map(point))
         case let .path(verbs):            return .path(verbs: verbs.map(pathVerb))
@@ -308,9 +322,9 @@ public extension SceneWire {
                              startArrow: p.startArrow, endArrow: p.endArrow)
         case let .text(t):
             return .text(Text(string: t.string, center: point(t.center),
-                              fontSize: Double(t.fontSize), weight: t.weight.rawValue,
+                              fontSize: q(t.fontSize), weight: t.weight.rawValue,
                               color: hex(t.color), backing: t.backing.map(hex),
-                              rotation: Double(t.rotation)))
+                              rotation: q(t.rotation)))
         }
     }
 }

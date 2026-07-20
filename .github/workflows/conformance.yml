@@ -1,0 +1,77 @@
+name: Cross-platform conformance
+
+# Proves the platform-free core produces BYTE-IDENTICAL SceneWire+SVG on every
+# platform it compiles to. Each job runs the same harness (tools/conformance) and
+# asserts the same COMBINED signature. A divergence — a platform-math difference,
+# a non-deterministic encoding — fails the build. See
+# docs/notes/cross-platform-conformance.md.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # The reference signature; every platform must match it.
+  MMK_CONFORMANCE_REF: "3f94e22042aa59eb"
+
+jobs:
+  macos:
+    name: conformance (macOS)
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select newest Xcode 26
+        run: sudo xcode-select -s "$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' -print | sort -V | tail -n 1)"
+      - run: ./scripts/check-conformance.sh "$MMK_CONFORMANCE_REF"
+
+  linux:
+    name: conformance (Linux / glibc)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: ./scripts/check-conformance.sh "$MMK_CONFORMANCE_REF"
+
+  wasm:
+    name: conformance (WebAssembly / WASI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.3.3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install the Swift WebAssembly SDK
+        run: |
+          swift sdk install \
+            https://download.swift.org/swift-6.3.3-release/wasm-sdk/swift-6.3.3-RELEASE/swift-6.3.3-RELEASE_wasm.artifactbundle.tar.gz \
+            --checksum cabfa08b73bb8ac783927ecd15fa386e99d0c139c5f232445067bcf58379cae7
+      # The harness runs under the toolchain's bundled WasmKit runtime.
+      - run: ./scripts/check-conformance.sh "$MMK_CONFORMANCE_REF" swift-6.3.3-RELEASE_wasm
+
+  windows:
+    name: conformance (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Swift toolchain
+        uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-6.2-release
+          tag: 6.2-RELEASE
+      - name: Run conformance harness
+        shell: bash
+        run: ./scripts/check-conformance.sh "$MMK_CONFORMANCE_REF"

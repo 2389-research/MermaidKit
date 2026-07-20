@@ -84,7 +84,16 @@ extension RenderScene {
     static func arcQuads(center: CGPoint, radius: CGFloat,
                          start: CGFloat, end: CGFloat) -> [PathVerb] {
         let sweep = end - start
-        let steps = max(1, Int((abs(sweep) / (.pi / 8)).rounded(.up)))
+        // Segment count = ceil(sweep / (π/8)). For "nice" sweeps that are an exact
+        // multiple of π/8 (e.g. a 50% slice → sweep = π = 8·(π/8)), the ratio is
+        // an integer ± 1 ULP, and a raw `ceil` turns that 1-ULP noise into a ±1
+        // segment-count difference — which discretizes the whole arc differently.
+        // Because sin/cos/π differ by ~1 ULP across platform math libraries
+        // (Darwin vs glibc vs wasi-libc), that made pie arcs diverge on WASM. A
+        // tiny epsilon before the ceil absorbs the noise so the count is identical
+        // everywhere (a genuine +ε sweep still rounds up; the lost sub-ULP segment
+        // is imperceptible). This is the cross-platform-determinism seam for arcs.
+        let steps = max(1, Int((abs(sweep) / (.pi / 8) - 1e-6).rounded(.up)))
         let dt = sweep / CGFloat(steps)
         func rim(_ a: CGFloat) -> CGPoint {
             CGPoint(x: center.x + radius * cos(a), y: center.y + radius * sin(a))
