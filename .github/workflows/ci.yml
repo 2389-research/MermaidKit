@@ -173,3 +173,54 @@ jobs:
           target: google_apis
           working-directory: android
           script: ./gradlew --no-daemon :mermaidkit:connectedDebugAndroidTest
+
+  # The release AAR: cross-compile the native .so for all three ABIs (arm64-v8a,
+  # armeabi-v7a, x86_64), assemble the release AAR bundling them, and publish to a
+  # local Maven repo as a dry run — proving the artifact assembles + is well-formed
+  # (this is what `implementation("ai.2389:mermaidkit-android:…")` resolves to).
+  android-aar:
+    name: android (release aar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Cross-compile JNI native libs for all ABIs
+        working-directory: .
+        run: |
+          docker pull -q swift:6.2.0
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p "android/mermaidkit/src/main/jniLibs/$abi"
+            docker run --rm \
+              -v "$PWD":/MermaidKit \
+              -v "$PWD/android/mermaidkit/src/main/jniLibs/$abi":/out \
+              swift:6.2.0 bash -c "
+                swift sdk install \
+                  'https://github.com/finagolfin/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-24-0.1.artifactbundle.tar.gz' \
+                  --checksum 'c26ebfd4e32c0ca1beabcc45729b62042da57ee76d7d043f63f2235da90dc491' >/dev/null 2>&1
+                bash /MermaidKit/android/native/build-jni.sh $abi
+              "
+          done
+          sudo chown -R "$(id -u):$(id -g)" android/mermaidkit/src/main/jniLibs
+          chmod -R a+r android/mermaidkit/src/main/jniLibs
+          du -sh android/mermaidkit/src/main/jniLibs/*
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Assemble + publish the release AAR (dry run to Maven Local)
+        run: ./gradlew --no-daemon --console=plain :mermaidkit:assembleRelease :mermaidkit:publishReleasePublicationToMavenLocal
+      - name: Verify the AAR bundles all three ABIs
+        run: |
+          aar=$(find mermaidkit/build/outputs/aar -name '*-release.aar' | head -1)
+          echo "AAR: $aar ($(du -h "$aar" | cut -f1))"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -l "$aar" | grep -q "jni/$abi/libmermaidkit.so" \
+              || { echo "MISSING libmermaidkit.so for $abi"; exit 1; }
+          done
+          echo "✓ all three ABIs bundled"

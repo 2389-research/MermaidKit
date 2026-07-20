@@ -3,7 +3,14 @@ plugins {
     kotlin("android")
     kotlin("plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose")
+    `maven-publish`
 }
+
+// The published Android artifact — `ai.2389:mermaidkit-android`. Versioned
+// independently of the Swift package (this bridge is younger); 0.x while the
+// measure/theme/interaction surface still settles.
+group = "ai.2389"
+version = "0.1.0"
 
 android {
     namespace = "ai.mermaidkit"
@@ -22,6 +29,37 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    // The jniLibs are already stripped by android/native/build-jni.sh
+    // (llvm-objcopy) — AGP does not strip prebuilt native libs, only ones it
+    // builds itself.
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+publishing {
+    publications {
+        register<MavenPublication>("release") {
+            groupId = "ai.2389"
+            artifactId = "mermaidkit-android"
+            version = project.version.toString()
+            afterEvaluate { from(components["release"]) }
+            pom {
+                name.set("MermaidKit for Android")
+                description.set("Native Mermaid diagram rendering for Android — " +
+                    "source string to a themed, accessible Canvas diagram.")
+                url.set("https://github.com/2389-research/MermaidKit")
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://github.com/2389-research/MermaidKit/blob/main/LICENSE")
+                    }
+                }
+            }
+        }
     }
 }
 

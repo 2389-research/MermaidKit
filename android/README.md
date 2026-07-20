@@ -11,6 +11,36 @@ source ─▶ MermaidNative ─(JNI)▶ mmk_scene_json ─▶ SceneWire JSON ─
  (app)     (this module)     (Swift core, libmermaidkit.so)          (the contract)     (@Serializable, no glue)
 ```
 
+## Installation
+
+The library ships as an `.aar` with prebuilt native `.so` for all three ABIs
+(`arm64-v8a`, `armeabi-v7a`, `x86_64`) — the consumer never touches Swift, the
+NDK, or JNI.
+
+```kotlin
+// build.gradle.kts
+implementation("ai.2389:mermaidkit-android:0.1.0")
+```
+
+Until it's on Maven Central, publish it to your local Maven repo first (the AAR's
+native libs are cross-compiled in Docker, so Docker + a native x86_64 host are
+needed to build it — see `android/native/`):
+
+```bash
+# from android/ — build all three ABIs, then assemble + publish the AAR:
+for abi in arm64-v8a armeabi-v7a x86_64; do
+  docker run --rm -v "$PWD/..":/MermaidKit \
+    -v "$PWD/mermaidkit/src/main/jniLibs/$abi":/out \
+    swift-android-6.2 bash /MermaidKit/android/native/build-jni.sh "$abi"
+done
+./gradlew :mermaidkit:publishReleasePublicationToMavenLocal   # → mavenLocal()
+```
+
+> Size: one ABI's native payload is ~64 MB (the Swift runtime + Foundation/ICU),
+> stripped. With per-ABI APK splits or an app bundle, a device downloads only its
+> own ABI. Trimming the Foundation/ICU surface is the main size lever, and a
+> follow-up.
+
 Because [`RenderScene`](../Sources/MermaidLayout/RenderScene.swift) flattens all
 30 diagram types into a tiny universal vocabulary (shape / polyline / text + a
 theme), this module never needs to know what a "sequence diagram" is — it just
@@ -93,11 +123,8 @@ docker run --rm -v "$PWD/..":/MermaidKit \
 The `jniLibs` `.so`s are **build artifacts** (gitignored) — CI (and a release
 build) run step 1 to produce them. AAPT2 ships x86_64-only, so the Gradle build
 must run on a native x86_64 host, and the emulator needs KVM — see
-`.github/workflows/ci.yml`.
-
-> Native size: the Swift runtime + Foundation/ICU make one ABI's `jniLibs` ~88 MB
-> unstripped. Stripping and trimming the Foundation surface are follow-ups before
-> a Maven release.
+`.github/workflows/ci.yml` (the `android-aar` job builds all three ABIs,
+assembles the release AAR, and publishes it to a local Maven repo as a dry run).
 
 The **device measure seam** is wired: pass a `MermaidNative.Measurer` (use
 `PaintMeasurer` over your drawing `Paint`) to `MermaidNative.scene(source,
@@ -117,5 +144,9 @@ those colors instead of a built-in preset.
 
 - **`onNodeClick(nodeId)` hit-testing** — needs the ABI to emit a node→rect map
   alongside the scene; `SceneWire` is flattened primitives with no node identity.
-- **Distribution** — per-ABI `.so`s (arm64-v8a, armeabi-v7a, x86_64) bundled into
-  a stripped Maven Central AAR.
+- **Maven Central push** — the AAR builds, bundles all three stripped ABIs, and
+  publishes to a local repo today (verified: a fresh consumer app resolves
+  `ai.2389:mermaidkit-android:0.1.0` and packages the `.so` into its APK). Pushing
+  to Central still needs credentials + namespace verification + signing.
+- **Native size** — trim the Foundation/ICU surface to shrink the ~64 MB/ABI
+  payload.
