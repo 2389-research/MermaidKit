@@ -145,7 +145,11 @@ public func mmk_scene_json(_ source: UnsafePointer<CChar>?,
     guard let scene = RenderScene.from(diagram, theme: theme, measure: measurer) else {
         return nil
     }
-    guard let data = try? sceneEncoder.encode(scene),
+    // Encode the explicit wire schema (`SceneWire`), not `RenderScene`'s
+    // synthesized Codable — the JNI/plugin boundary reads self-describing,
+    // `type`-tagged JSON with named fields, not Swift's `_0`/positional-array
+    // quirks. See `SceneWire`.
+    guard let data = try? sceneEncoder.encode(SceneWire(scene)),
           let json = String(data: data, encoding: .utf8) else {
         return nil
     }

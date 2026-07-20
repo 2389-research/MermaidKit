@@ -23,6 +23,14 @@ final class DeterminismSignatureTests: XCTestCase {
         return h
     }
 
+    /// Sorted keys so the wire signature is byte-identical to what the C ABI
+    /// emits (`mmk_scene_json` uses the same option).
+    private let wireEncoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.sortedKeys]
+        return e
+    }()
+
     func testEmitRasterSignatures() throws {
         guard let path = ProcessInfo.processInfo.environment["DETERMINISM_OUT"] else {
             throw XCTSkip("gated: set DETERMINISM_OUT (run via scripts/check-determinism.sh)")
@@ -54,6 +62,14 @@ final class DeterminismSignatureTests: XCTestCase {
                 MermaidRenderer.svg(source: src, theme: DiagramTheme(prefersDark: false)),
                 "\(name): fixture failed to render SVG")
             lines.append("\(name)-svg\t\(svg.count):\(fnv1a([UInt8](svg.utf8)))")
+            // And the SceneWire JSON — the exact bytes `mmk_scene_json` hands the
+            // Android JNI boundary. Cross-process byte-stability here is the
+            // issue-#1 contract for the wire, not just the SVG.
+            let scene = try XCTUnwrap(
+                MermaidRenderer.renderScene(source: src, theme: DiagramTheme(prefersDark: false)),
+                "\(name): fixture failed to lower to a RenderScene")
+            let wire = try wireEncoder.encode(SceneWire(scene))
+            lines.append("\(name)-wire\t\(wire.count):\(fnv1a([UInt8](wire)))")
         }
         try (lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
     }

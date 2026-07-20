@@ -46,4 +46,24 @@ public struct DiagramColor: Hashable, Sendable, Codable {
     public func withAlpha(_ value: Double) -> DiagramColor {
         DiagramColor(red: red, green: green, blue: blue, alpha: value)
     }
+
+    /// Parse the inverse of `hexString`: `RRGGBBAA` or `RRGGBB` (a leading `#`
+    /// is tolerated; a 6-digit form is fully opaque). Returns nil on any other
+    /// length or a non-hex digit. This is the wire form's color decoder —
+    /// symmetric with `hexString` so `SceneWire` round-trips.
+    public init?(hexString: String) {
+        var s = Substring(hexString)
+        if s.first == "#" { s = s.dropFirst() }
+        guard s.count == 6 || s.count == 8,
+              let value = UInt32(s, radix: 16) else { return nil }
+        if s.count == 8 {
+            self.init(
+                red: Double((value >> 24) & 0xFF) / 255,
+                green: Double((value >> 16) & 0xFF) / 255,
+                blue: Double((value >> 8) & 0xFF) / 255,
+                alpha: Double(value & 0xFF) / 255)
+        } else {
+            self.init(hex: value)
+        }
+    }
 }
