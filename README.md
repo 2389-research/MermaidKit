@@ -9,6 +9,15 @@ JavaScript, no WebView. Parse, lay out, and render **30 Mermaid diagram
 types**, drawn with CoreGraphics/CoreText on Apple platforms and with Silica
 (Cairo/FontConfig) on Linux.
 
+As of **v2.0.0, MermaidKit renders natively on five platforms** — macOS/iOS,
+Linux, **Android** (Kotlin + `Canvas`), **Windows/.NET** (SkiaSharp), and
+**WebAssembly** — from one Swift layout core. A platform-free scene contract
+(`SceneWire`) carries the fully-resolved diagram across the C ABI; each platform
+paints it with a thin native renderer, and the core's output is proven
+**byte-identical across all five** in CI. See
+[`docs/notes/cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md),
+[`android/`](android/), and [`windows/`](windows/).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
   <img alt="MermaidKit's own render pipeline as a sankey diagram, rendered by MermaidKit" src="docs/images/hero-light.png">
@@ -52,6 +61,7 @@ sub-millisecond), and results are cached per (source, theme, spacing).
 |  | MermaidKit | mermaid.js + WKWebView | [BeautifulMermaid](https://github.com/lukilabs/beautiful-mermaid-swift) |
 |---|---|---|---|
 | Diagram types | **30** | all | 6 |
+| Native platforms | **macOS, iOS, Linux, Android, Windows, WASM** | anywhere a webview runs | Apple |
 | Runtime | Swift + CoreGraphics | JS engine + web process | Swift (elk-swift layout) |
 | Dependencies | **none** | mermaid.js bundle | elk-swift |
 | Rendering | sync, ~ms, cached | async round-trip | sync + async |
@@ -70,6 +80,41 @@ see [SVG export](#svg-export-and-the-renderscene-ir)).
 
 Every type, rendered by MermaidKit itself, one image per diagram (light and
 dark): **[docs/GALLERY.md](docs/GALLERY.md)**.
+
+## Native on five platforms
+
+One Swift layout core; a thin native renderer per platform. The parse → layout →
+`RenderScene` pipeline is platform-free, so it cross-compiles to every target and
+its output is **byte-identical across all five** (proven in CI —
+[`cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md)). The
+fully-resolved scene crosses the C ABI as the language-neutral **`SceneWire`**
+JSON; each platform paints it.
+
+| Platform | Renderer | Bridge | Get it |
+|---|---|---|---|
+| macOS / iOS / visionOS | CoreGraphics / CoreText | in-process | `import MermaidRender` |
+| Linux | Silica (Cairo/FontConfig) | in-process | `LinuxRaster` trait |
+| **Android** | Kotlin `Canvas` (Skia) | JNI → `.so` | `implementation("ai.2389:mermaidkit-android:…")` — [`android/`](android/) |
+| **Windows / .NET** | SkiaSharp | P/Invoke → `.dll` | `MermaidKit` NuGet — [`windows/`](windows/) |
+| **WebAssembly** | SVG / Canvas2D | WASI | `swift build --swift-sdk …wasm` |
+
+On Android, the whole integration is one line — and it themes itself to the app:
+
+```kotlin
+MermaidDiagram("flowchart LR\n A[Start] --> B[End]", Modifier.fillMaxWidth())
+```
+
+On Windows/.NET, a source string in, a Skia diagram out:
+
+```csharp
+var scene = MermaidNative.Scene("flowchart LR\n A[Start] --> B[End]");
+new SceneRenderer().Draw(scene, canvas);
+```
+
+Both go **source string → native Swift core → `SceneWire` → native renderer**,
+with no Swift toolchain or scene-building on the consumer's side. Android adds
+Material theming (`MermaidTheme.fromMaterial`), device-font measurement, and
+`contentDescription` from the narration; Windows the same shape via SkiaSharp.
 
 ## Beyond Mermaid: DOT, Dippin, SQL, and git-log front-ends
 
@@ -264,10 +309,16 @@ the scene → SVG path runs headless on Linux and in CI. Because the whole tree 
 `Codable`, a scene can also cross a process boundary intact; a cross-process
 determinism gate diffs both the raster and the RenderScene/SVG signatures in CI.
 
-`RenderScene` is the foundation for the planned plugin contract and a planned
-Android (Kotlin Canvas) renderer. To keep the framing honest: today it drives
-SVG; Android is a plan, not a shipped backend — see
-[`docs/notes/android.md`](docs/notes/android.md).
+`RenderScene` — projected to the explicit, language-neutral **`SceneWire`** JSON
+contract — is the foundation for the shipped **Android** and **Windows/.NET**
+renderers and the WebAssembly build. Each consumes the same scene and paints it
+natively (Android with `Canvas`, Windows with SkiaSharp), so all thirty diagram
+types render on every platform with no per-type work on the consumer side. The
+core's `SceneWire`/SVG output is byte-identical across macOS, Linux, Android,
+WASM, and Windows (CI-gated) — see
+[`docs/notes/android.md`](docs/notes/android.md),
+[`docs/notes/windows.md`](docs/notes/windows.md), and
+[`docs/notes/cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md).
 
 ## Architecture
 
@@ -282,7 +333,7 @@ Two targets:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "1.4.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.0.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
@@ -306,13 +357,15 @@ plot). The linter runs in this
 package's test suite over dense fixtures for all 30 types, so layout
 regressions fail CI as *geometry* ("edge #3 passes through node 'DiagramScene' (165pt inside)"), not as pixel diffs.
 
-The scene IR is also the extension seam — and it's now realized. Alongside the
-lint-focused `DiagramScene`, a render-focused `RenderScene` (see
-[SVG export](#svg-export-and-the-renderscene-ir)) lowers from every type and is
-consumed by the built-in `SVGRenderer` to export standalone SVG, all inside the
-platform-free `MermaidLayout` target without touching parsing or layout. The
-same IR is the foundation for the planned plugin contract and a planned Android
-renderer (`docs/notes/android.md`). Further backends welcome.
+The scene IR is also the extension seam — and it's now realized across five
+platforms. Alongside the lint-focused `DiagramScene`, a render-focused
+`RenderScene` (see [SVG export](#svg-export-and-the-renderscene-ir)) lowers from
+every type and is consumed by the built-in `SVGRenderer` to export standalone
+SVG, all inside the platform-free `MermaidLayout` target without touching parsing
+or layout. Projected to the `SceneWire` JSON contract and crossed via the C ABI,
+that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
+**Windows/.NET** (SkiaSharp) renderers and the WebAssembly build
+(`docs/notes/android.md`, `docs/notes/windows.md`). Further backends welcome.
 
 ## API
 
@@ -379,6 +432,21 @@ backend over the scene IR now ships from there too:
 `MermaidRenderer.svg(source:theme:)` exports standalone SVG for all 30 types via
 the CoreGraphics-free `SVGRenderer` (see
 [SVG export](#svg-export-and-the-renderscene-ir)).
+
+**Does it run on Android / Windows / the web?** Yes — natively, as of v2.0.0.
+The Swift layout core cross-compiles to each; a thin native renderer paints the
+shared `SceneWire` scene (Kotlin `Canvas` on Android, SkiaSharp on Windows/.NET,
+SVG or Canvas2D on WebAssembly). An app passes a Mermaid *source string* and gets
+a drawn diagram — no Swift toolchain of its own. See [`android/`](android/),
+[`windows/`](windows/), and the platform notes in `docs/notes/`.
+
+**Is the output really the same on every platform?** The scene is: the core's
+`SceneWire`/SVG output is byte-identical across macOS, Linux, Android, WASM, and
+Windows, checked on every push by a
+[conformance gate](docs/notes/cross-platform-conformance.md). Getting there
+surfaced (and fixed) two real cross-platform determinism bugs — a `Double`→JSON
+formatting difference between Foundation implementations, and a `ceil` that
+amplified a 1-ULP `sin`/`cos` difference in pie tessellation.
 
 **Why doesn't the output look exactly like mermaid.js?** Deliberate.
 MermaidKit renders diagrams in a native Apple aesthetic (system fonts, your

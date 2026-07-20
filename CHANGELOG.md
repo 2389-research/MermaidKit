@@ -1,5 +1,55 @@
 # Changelog
 
+## 2.0.0 — Native everywhere
+
+MermaidKit renders natively on **five platforms** — macOS/iOS, Linux, **Android**,
+**Windows/.NET**, and **WebAssembly** — from one Swift layout core. The Swift
+package's public API is **additive** (no breaking changes); the major bump marks
+the platform expansion. Android, Windows, and .NET ship as their own `0.1.0`
+artifacts.
+
+- **Native Android rendering.** The [`android/`](android/) Gradle module renders
+  all 30 diagram types with a Kotlin `Canvas`:
+  - A `SceneWire` Kotlin model (plain `@Serializable`) + a `SceneRenderer` (Skia
+    `Canvas`) that draws the platform-free scene the core emits.
+  - A **JNI bridge** — `MermaidNative` over a per-ABI `libmermaidkit.so` (the
+    Swift core + a C shim, built by `android/native/build-jni.sh`) — so an app
+    passes a Mermaid *source string*: `MermaidDiagram("…", Modifier.fillMaxWidth())`.
+  - The **device measure seam** (`Paint.measureText` threaded through JNI, so
+    layout measures with the face that draws), **Material theming**
+    (`MermaidTheme.fromMaterial(MaterialTheme.colorScheme)`, default), a Compose
+    `MermaidDiagram` + classic `MermaidView`, and `contentDescription` from the
+    narration.
+  - A release **AAR** bundling stripped `.so` for arm64-v8a, armeabi-v7a, and
+    x86_64; verified end-to-end on an android-34 emulator in CI.
+- **Native Windows / .NET rendering.** The [`windows/`](windows/) .NET library
+  renders with **SkiaSharp** (real Skia — the same engine as Android, a fidelity
+  match; no SVG fallback): a `SceneWire` model, a `SceneRenderer` over `SKCanvas`,
+  and a **P/Invoke bridge** (`MermaidNative` over a Swift-built
+  `MermaidKitCShared.dll`) so a .NET app goes from a source string to a Skia
+  diagram. Gated on `windows-latest` in CI.
+- **WebAssembly.** The platform-free core compiles to `wasm32-unknown-wasi` and
+  emits SVG (or a Canvas2D scene) in the browser.
+- **Cross-platform conformance — proven byte-identical.** A new conformance
+  harness (`tools/conformance`) + CI gate (`conformance.yml`) run the same
+  fixtures through the core on macOS, Linux, Android, WASM, and Windows and assert
+  one signature. Reaching byte-identity caught and fixed two real determinism bugs:
+  - `JSONEncoder` serializes `Double`s differently across Foundation
+    implementations (Darwin's shortest round-trip vs swift-corelibs' full
+    precision) — `SceneWire` now **quantizes coordinates to an exact 1/256 grid**
+    (sub-pixel; SVG unaffected) so the wire JSON is identical everywhere.
+  - Pie arc tessellation used `ceil(sweep / (π/8))`, which flipped the segment
+    count on a 1-ULP `sin`/`cos` difference (WASM's math lib vs glibc/Darwin) —
+    fixed with an epsilon before the `ceil`.
+- **C ABI additions** (`MermaidKitC`, still `MermaidLayout`-only):
+  - `mmk_scene_json_themed(source, theme_json, measure, userdata)` — theme a scene
+    with explicit caller colors via the new **`ThemeWire`** JSON, instead of a
+    built-in preset.
+  - A dynamic **`MermaidKitCShared`** product (the C ABI as a shared library — the
+    Windows DLL the .NET bridge P/Invokes).
+  - WASI portability: `TerminalCapabilities` guards its termios/tty paths for
+    WebAssembly; libc imports guard for Bionic/Android.
+
 ## 1.4.0
 
 A platform-free render IR with SVG output, and a fifth input front-end. Additive;
