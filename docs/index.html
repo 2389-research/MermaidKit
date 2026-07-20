@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MermaidKit — native Mermaid diagrams in Swift</title>
-<meta name="description" content="MermaidKit renders all 30 Mermaid diagram types natively in Swift — CoreGraphics on Apple, Silica/Cairo on Linux. No JavaScript, no WebView, zero dependencies.">
+<meta name="description" content="MermaidKit renders all 30 Mermaid diagram types natively in Swift — on macOS/iOS, Linux, Android, Windows, and WebAssembly, with byte-identical output. No JavaScript, no WebView, zero dependencies.">
 <meta property="og:title" content="MermaidKit">
 <meta property="og:description" content="All 30 Mermaid diagram types, rendered natively in Swift. No JavaScript. No WebView. No dependencies.">
 <meta property="og:image" content="images/hero-light.png">
@@ -343,6 +343,7 @@
 <header class="top"><div class="wrap">
   <span class="brand"><img class="mark" src="images/logo.svg" alt="" width="26" height="26"><span class="wm"><b>Mermaid</b>Kit</span></span>
   <nav>
+    <a href="#platforms">Platforms</a>
     <a href="#gallery">Examples</a>
     <a href="#lint" class="hide-sm">Quality</a>
     <a href="#api" class="hide-sm">API</a>
@@ -355,7 +356,7 @@
 <div class="hero"><div class="wrap glass">
   <img class="herologo" src="images/logo.svg" alt="MermaidKit logo" width="84" height="84">
   <h1>Native Mermaid diagrams in Swift.</h1>
-  <p class="tag">All 30 Mermaid diagram types, parsed, laid out, and rendered in pure Swift — CoreGraphics on Apple, Silica/Cairo on Linux.</p>
+  <p class="tag">All 30 Mermaid diagram types, parsed, laid out, and rendered in pure Swift — natively on macOS/iOS, Linux, Android, Windows, and WebAssembly, with byte-identical output across every one.</p>
   <div class="hook"><span>No JavaScript</span><span>No WebView</span><span>Zero dependencies</span></div>
   <div class="cta">
     <a class="btn primary" href="https://github.com/2389-research/MermaidKit">View on GitHub</a>
@@ -378,7 +379,7 @@
       <div class="kicker" style="margin-top:22px">Install</div>
 <pre>.<span class="tt">package</span>(
   <span class="ta">url:</span> <span class="ts">"https://github.com/2389-research/MermaidKit.git"</span>,
-  <span class="ta">from:</span> <span class="ts">"1.4.0"</span>
+  <span class="ta">from:</span> <span class="ts">"2.0.0"</span>
 )</pre>
     </div>
     <div>
@@ -391,6 +392,20 @@ flowchart TD
     B --&gt;|no| D[Skip]
 <span class="ts">"""</span>)</pre>
     </div>
+  </div>
+</div></section>
+
+<section id="platforms"><div class="wrap glass">
+  <div class="kicker">New in 2.0 — native everywhere</div>
+  <h2>One Swift core. Five native platforms. Byte-identical output.</h2>
+  <p class="lead">The platform-free layout core cross-compiles to every target; a fully-resolved scene crosses the C ABI as a language-neutral JSON contract (<code>SceneWire</code>), and each platform paints it with a thin native renderer. The scene's output is proven <b>byte-identical across all five</b> on every push.</p>
+  <div class="feats" style="margin-top:20px">
+    <div><h3>Apple — CoreGraphics</h3><p>macOS, iOS, visionOS. <code>MermaidView</code> and the <code>MermaidRenderer</code> image/PDF/SVG API, drawn with CoreGraphics/CoreText.</p></div>
+    <div><h3>Linux — Silica</h3><p>Headless Cairo/FontConfig rendering behind the <code>LinuxRaster</code> trait; the platform-free layout runs anywhere Swift does.</p></div>
+    <div><h3>Android — Kotlin Canvas</h3><p><code>MermaidDiagram("…", Modifier.fillMaxWidth())</code> — one line, themed from <code>MaterialTheme</code>, device-font measured, <code>contentDescription</code> from the narration. JNI over a per-ABI <code>.so</code>, shipped as an AAR.</p></div>
+    <div><h3>Windows — .NET / SkiaSharp</h3><p><code>MermaidNative.Scene("…")</code> → <code>SceneRenderer.Draw(canvas)</code>. Real Skia — the same engine as Android — over a P/Invoked Swift DLL. No SVG fallback.</p></div>
+    <div><h3>WebAssembly</h3><p>The core compiles to <code>wasm32-unknown-wasi</code> and emits SVG (or a Canvas2D scene) in the browser — the layout engine, running client-side.</p></div>
+    <div><h3>Proven identical</h3><p>A conformance harness runs the same fixtures on every platform and asserts one signature. It caught two real cross-platform determinism bugs — and now gates them forever.</p></div>
   </div>
 </div></section>
 
@@ -478,7 +493,7 @@ flowchart TD
   <div class="feats" style="margin-top:20px">
     <div><h3>SwiftUI drop-in</h3><p><code>MermaidView(source, theme:spacing:)</code> — light/dark aware, self-sizing, cached, VoiceOver-described.</p></div>
     <div><h3>Image, PDF, attributed string</h3><p><code>MermaidRenderer.image / pdfData / attachmentString</code> — same layout and draw code; vector PDF for crisp export and print.</p></div>
-    <div><h3>Standalone SVG, no CoreGraphics</h3><p><code>MermaidRenderer.svg(source:theme:)</code> exports a standalone SVG document for all 30 types. It lowers through <code>RenderScene</code> — a <code>Codable</code>, platform-free render IR — so the SVG backend runs headless on Linux and in CI, and is the foundation for a planned plugin contract and Android renderer.</p></div>
+    <div><h3>Standalone SVG, no CoreGraphics</h3><p><code>MermaidRenderer.svg(source:theme:)</code> exports a standalone SVG document for all 30 types. It lowers through <code>RenderScene</code> — a <code>Codable</code>, platform-free render IR — so the SVG backend runs headless on Linux and in CI, and, projected to the <code>SceneWire</code> JSON contract, is the foundation for the shipped native Android and Windows renderers.</p></div>
     <div><h3>Accessibility from day one</h3><p><code>altText(source:)</code> generates a deterministic content description for every one of the 30 types; <code>MermaidAltText.narrate(_:)</code> adds a step-by-step walkthrough — decisions, states, ER cardinalities, sequence messages.</p></div>
     <div><h3>Themed with a single value</h3><p><code>DiagramTheme</code> — six colors plus a categorical palette re-skin all 30 types at once; <code>DiagramSpacing</code> sets density.</p></div>
     <div><h3>Diagnose parse failures</h3><p><code>MermaidParser.diagnose(_:)</code> explains failures with line numbers and did-you-mean suggestions for typo'd headers.</p></div>
@@ -496,11 +511,11 @@ flowchart TD
     <div class="stat"><div class="n">5</div><div class="l">input front-ends: Mermaid, DOT, Dippin, SQL DDL, git log</div></div>
     <div class="stat"><div class="n">0</div><div class="l">third-party deps by default (Silica-free), JS, or WebView</div></div>
     <div class="stat"><div class="n">~25 ms</div><div class="l">worst cold render incl. rasterization (sankey); most types under ~15 ms</div></div>
-    <div class="stat"><div class="n">374</div><div class="l">tests in CI on macOS (356 on Linux)</div></div>
-    <div class="stat"><div class="n">2</div><div class="l">render backends: CoreGraphics + Silica/Cairo</div></div>
+    <div class="stat"><div class="n">398</div><div class="l">tests in CI on macOS (380 on Linux)</div></div>
+    <div class="stat"><div class="n">5</div><div class="l">native platforms: macOS/iOS, Linux, Android, Windows, WASM</div></div>
     <div class="stat"><div class="n">MIT</div><div class="l">license</div></div>
   </div>
-  <p class="lead" style="margin-top:22px">Repeat renders hit an in-memory cache keyed by (source, theme, spacing). Input caps mirror mermaid.js — 50,000-character sources, 500 flowchart edges; oversized input returns nil fast. Requires Swift 6.2 / Xcode 26. Platforms: macOS 14+, iOS 17+, visionOS 1+, and Linux (via the <code>LinuxRaster</code> package trait).</p>
+  <p class="lead" style="margin-top:22px">Repeat renders hit an in-memory cache keyed by (source, theme, spacing). Input caps mirror mermaid.js — 50,000-character sources, 500 flowchart edges; oversized input returns nil fast. Requires Swift 6.2 / Xcode 26. Platforms: macOS 14+, iOS 17+, visionOS 1+, Linux (via the <code>LinuxRaster</code> package trait), and — via the platform-free scene core — Android, Windows/.NET, and WebAssembly.</p>
   <p class="lead" style="margin-top:14px"><b>Where the time goes:</b> drawing (rasterization) is ~75% of a cold render; the parse-and-layout plumbing is lean, with a ~0.2 ms fixed floor. It's profiled, not guessed — the one "obvious" win, an 8-bit sRGB backing store, measured ~2× <em>slower</em> on Apple silicon, so it stayed f16. <a href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/performance.md">Full performance analysis →</a></p>
 </div></section>
 
@@ -510,7 +525,7 @@ flowchart TD
   <div class="feats" style="margin-top:20px">
     <div><h3>Nothing breaks the host app</h3><p>Unknown dialects degrade to readable monospaced source. Styling directives are ignored, not fatal. Garbage, 100k-character labels, and NaN/Infinity are contained by an adversarial test suite with numeric sanitation at the parser boundary.</p></div>
     <div><h3>What you wrote is what parses</h3><p>A dedicated "parser honesty" effort eliminated silent content loss and phantom content across the parsers — each fix pinned by a regression test using the exact previously-broken syntax.</p></div>
-    <div><h3>Apple and Linux, one code path</h3><p>The same layout and per-type draw code renders through a single <code>CGContext</code> seam: CoreGraphics/CoreText on Apple, Silica/Cairo/FontConfig on Linux.</p></div>
+    <div><h3>One core, five platforms</h3><p>The same platform-free layout core renders through native backends: CoreGraphics on Apple, Silica/Cairo on Linux, Kotlin <code>Canvas</code> on Android, SkiaSharp on Windows/.NET, and SVG/Canvas2D on WebAssembly — with the scene's output proven <b>byte-identical across all five</b> in CI.</p></div>
     <div><h3>Honest support matrix</h3><p>The README states plainly what parses, what's ignored, and what's a known gap worth filing. SVG export now ships for all 30 types; lower OS floors sit at the top of the roadmap.</p></div>
   </div>
 </div></section>
@@ -527,6 +542,9 @@ flowchart TD
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidRender/MermaidRender.docc/EmbeddingInTextViews.md"><b>Embedding in Text Views</b><span>Drop a diagram into an NSAttributedString, VoiceOver description included.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/Sources/MermaidLayout/MermaidLayout.docc/AddingADiagramType.md"><b>Adding a Diagram Type</b><span>The three small pieces — parser, layout, renderer — behind every type.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/linux-rendering-via-silica.md"><b>Linux Rendering via Silica</b><span>How the one CoreGraphics seam maps to Cairo/FontConfig for headless Linux output.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/cross-platform-conformance.md"><b>Cross-platform Conformance</b><span>Proving the core's output is byte-identical on macOS, Linux, Android, WASM, and Windows — and the two determinism bugs it caught.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/android.md"><b>MermaidKit on Android</b><span>The Kotlin/Canvas renderer, the JNI seam, Material theming, and the AAR — source string to a themed, accessible diagram.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/windows.md"><b>MermaidKit on Windows</b><span>The .NET/SkiaSharp renderer and the P/Invoke bridge — the same scene, a native Skia surface, no SVG fallback.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/mermaid-coverage-audit.md"><b>Mermaid Coverage Audit</b><span>What each type parses, what's ignored, and where the known gaps are.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/performance.md"><b>Performance</b><span>Methodology, per-type numbers, where the time goes, and the fixable-vs-irreducible costs.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/terminal-rendering-capabilities.md"><b>Terminal Rendering</b><span>Beyond ASCII — the Kitty-graphics → half-block → box-drawing capability ladder, and how each tier degrades.</span></a>
@@ -535,7 +553,7 @@ flowchart TD
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/sequence-primitives-research.md"><b>Sequence Primitives</b><span>The maximal set of sequence-diagram primitives, surveyed across mermaid.js, PlantUML, and ZenUML.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/docs/notes/development-approach.md"><b>How It's Built</b><span>The practices behind the project — strong boundaries, tests that encode taste, and verifying against reality.</span></a>
     <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CONTRIBUTING.md"><b>Contributing</b><span>The lay of the land, the geometry-first review bar, and developing on Linux.</span></a>
-    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release through 1.4 — SVG export and the RenderScene IR, a git-log front-end, DOT and SQL front-ends, terminal rendering — with the reasoning behind each change.</span></a>
+    <a class="doccard" href="https://github.com/2389-research/MermaidKit/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release through 2.0 — native Android/Windows/WASM rendering and cross-platform conformance, SVG export and the RenderScene IR, four extra front-ends — with the reasoning behind each change.</span></a>
   </div>
 </div></section>
 
