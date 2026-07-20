@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>MermaidKit</RootNamespace>
+    <AssemblyName>MermaidKit</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>CS1591</NoWarn>
+    <!-- Package metadata (ai.2389 org; the Windows/.NET rendering half). -->
+    <PackageId>MermaidKit</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Native Mermaid diagram rendering for .NET — a source string to a themed Skia diagram.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SkiaSharp is the native renderer: real Skia (the same engine the Android
+         Canvas uses), so Windows output is a fidelity match for Android. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+  </ItemGroup>
+
+</Project>

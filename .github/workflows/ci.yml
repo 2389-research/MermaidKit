@@ -224,3 +224,21 @@ jobs:
               || { echo "MISSING libmermaidkit.so for $abi"; exit 1; }
           done
           echo "✓ all three ABIs bundled"
+
+  # The .NET / SkiaSharp rendering half of the Windows bridge (docs/notes/windows.md):
+  # the SceneWire model + SceneRenderer (SkiaSharp) that draws the platform-free
+  # scene the C ABI emits. Runs on a real Windows runner — the authoritative target
+  # (and where system fonts render text, unlike the headless Linux Skia build).
+  windows-dotnet:
+    name: windows (.net skiasharp)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build + test the .NET renderer
+        run: dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj --nologo
