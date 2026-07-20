@@ -70,12 +70,13 @@ must run on a native x86_64 host, and the emulator needs KVM — see
 > unstripped. Stripping and trimming the Foundation surface are follow-ups before
 > a Maven release.
 
+The **device measure seam** is wired: pass a `MermaidNative.Measurer` (use
+`PaintMeasurer` over your drawing `Paint`) to `MermaidNative.scene(source,
+measurer = …)` and native layout measures text with the same face that draws it
+— a C trampoline bridges each measure request back into Kotlin on the JNI thread.
+
 ## Not yet here (next slices)
 
-- **The measure seam.** `MermaidNative` passes a null measure callback today, so
-  native layout uses a coarse glyph-box metric. Threading the device
-  `Paint.measureText` callback through JNI (so layout measures with the face that
-  draws) is next.
 - **Compose / View wrappers, `MermaidTheme.fromMaterial()`, `contentDescription`
   from the narration, `onNodeClick` hit-testing** — the snap-in surface.
 - **Distribution** — per-ABI `.so`s (arm64-v8a, armeabi-v7a, x86_64) bundled into
