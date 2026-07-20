@@ -86,6 +86,46 @@ it in Swift first — provable *now*, no NDK required — with a **reference SVG
 backend** as the proof that the scene fully determines the drawing (SVG is easy
 to diff and read, and it's a shippable export in its own right).
 
+### The wire schema (`SceneWire`)
+
+`RenderScene` is `Codable`, but its *synthesized* JSON leaks Swift-compiler
+quirks — enum cases become `{"case":{"_0":…}}`, and `CGPoint`/`CGRect` become
+bare positional arrays (`[x,y]`, `[[x,y],[w,h]]`). A Kotlin/JS reader would need
+bespoke deserializers keyed on those quirks, and any internal Swift rename would
+silently break the boundary. So `mmk_scene_json` emits **`SceneWire`** instead: a
+flat, self-describing schema every language deserializes with plain data classes.
+
+- Every element/shape/verb is a **flat object tagged by `type`** (`shape` /
+  `polyline` / `text`; `roundedRect` / `ellipse` / `polygon` / `path`; `move` /
+  `line` / `quad` / `close`).
+- Points are `{"x":…,"y":…}`; rects `{"x":…,"y":…,"w":…,"h":…}`; colors are
+  `#RRGGBBAA` strings (8-bit — exactly what `Paint`/Skia draws at).
+- A top-level `version` carries the schema revision so the boundary evolves
+  compatibly.
+
+```json
+{
+  "version": 1,
+  "size": { "w": 357.76, "h": 80.8 },
+  "background": "#FFFFFFFF",
+  "elements": [
+    { "type": "polyline", "points": [ {"x":76,"y":40.4}, {"x":129,"y":40.4} ],
+      "endArrow": true, "startArrow": false,
+      "stroke": { "color": "#1D1D1F59", "width": 1, "dashed": false } },
+    { "type": "shape",
+      "path": { "type": "roundedRect", "rect": {"x":12,"y":23.4,"w":64,"h":34}, "radius": 4 },
+      "fill": "#5B8FF90F", "stroke": { "color": "#1D1D1F59", "width": 1, "dashed": false } },
+    { "type": "text", "string": "Start", "center": {"x":44,"y":40.4},
+      "fontSize": 12, "weight": "medium", "color": "#1D1D1FFF", "rotation": 0 }
+  ]
+}
+```
+
+`SceneWire` is a lossless projection of `RenderScene` (it round-trips back,
+modulo the 8-bit color quantization), it's the same schema the plugin/backend
+contract (#14) reads, and its bytes are **determinism-gated across processes**
+(the issue-#1 class, now covered for the JNI boundary — `DeterminismSignatureTests`).
+
 ## The snap-in surface (zero friction for the Android dev)
 
 - **Compose-first + classic View**, mirroring the Apple `MermaidView`:
@@ -157,7 +197,10 @@ unify this axis.
 - **Swift↔Kotlin bridge** → tiny **C ABI**: takes `source + options + a batched
   measure callback`, returns the **scene + the narration/alt-text + diagnostics**
   (accessibility threaded from the first surface, per Vinculum). Not the rich
-  Swift API; hidden inside the AAR.
+  Swift API; hidden inside the AAR. The scene crosses as the explicit
+  **`SceneWire`** JSON schema (see below), not `RenderScene`'s synthesized
+  `Codable` — Kotlin reads self-describing, `type`-tagged objects, not Swift
+  compiler quirks.
 - **Toolchain friction** → borne once, in *our* CI (NDK + Swift Android SDK);
   invisible to consumers.
 - **`MermaidView` (SwiftUI)** → doesn't port; Android gets the headless render +
@@ -209,8 +252,10 @@ emulator CI.
 - ~~Measurement seam~~ — **decided**: device `Paint.measureText` callback on the
   product surface; bundled-Roboto only as the headless/SVG fallback (see
   Measurement).
-- Serialization: JSON (readable, `Codable` today) vs a tighter binary/FlatBuffer
-  if per-frame scene transfer ever gets hot.
+- ~~Serialization~~ — **decided**: an explicit, versioned JSON schema
+  (`SceneWire`), not `RenderScene`'s synthesized `Codable`. A tighter
+  binary/FlatBuffer form stays on the table only if per-frame scene transfer
+  ever gets hot; the readable JSON is the contract until then.
 - Swift-Java interop vs a hand-rolled C ABI as that ecosystem matures.
 
 Related: `ir-compilation-targets.md`, `plugin-extensibility.md`, and issues #14

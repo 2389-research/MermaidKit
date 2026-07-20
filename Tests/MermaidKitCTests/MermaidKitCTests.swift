@@ -104,28 +104,33 @@ final class MermaidKitCTests: XCTestCase {
                 continue
             }
 
-            // Decode the ABI JSON and confirm it is a real, non-empty scene.
+            // The ABI emits the explicit `SceneWire` schema (not RenderScene's
+            // synthesized Codable). Decode it and confirm it's a real, non-empty
+            // scene tagged with the current schema version.
             let data = Data(abiJSON.utf8)
-            let decoded = try JSONDecoder().decode(RenderScene.self, from: data)
+            let decoded = try JSONDecoder().decode(SceneWire.self, from: data)
             XCTAssertGreaterThan(decoded.elements.count, 0,
                                  "ABI scene must have elements")
+            XCTAssertEqual(decoded.version, SceneWire.currentVersion)
 
             // Compute the reference scene in-process with the SAME measurer and
-            // theme, encode it the same way, and require byte-for-byte equality
-            // — the proof the ABI faithfully wraps RenderScene.from(...).
+            // theme, project it to the wire form, encode it the same way, and
+            // require byte-for-byte equality — the proof the ABI faithfully
+            // wraps RenderScene.from(...) through SceneWire.
             guard let diagram = MermaidParser.parse(source),
                   let reference = RenderScene.from(diagram, theme: referenceTheme,
                                                    measure: directMeasure) else {
                 XCTFail("reference lowering failed for a valid fixture")
                 continue
             }
-            let referenceJSON = String(decoding: try encoder.encode(reference),
+            let referenceJSON = String(decoding: try encoder.encode(SceneWire(reference)),
                                        as: UTF8.self)
             XCTAssertEqual(abiJSON, referenceJSON,
-                           "ABI JSON must match direct RenderScene.from output")
+                           "ABI JSON must match SceneWire(RenderScene.from(...))")
 
-            // And the decoded size / first element match the reference.
-            XCTAssertEqual(decoded.size, reference.size)
+            // And the decoded size / element count match the reference.
+            XCTAssertEqual(decoded.size.w, Double(reference.size.width))
+            XCTAssertEqual(decoded.size.h, Double(reference.size.height))
             XCTAssertEqual(decoded.elements.count, reference.elements.count)
         }
     }
@@ -137,11 +142,11 @@ final class MermaidKitCTests: XCTestCase {
             XCTFail("null-measure path returned nil")
             return
         }
-        let scene = try JSONDecoder().decode(RenderScene.self, from: Data(json.utf8))
+        let scene = try JSONDecoder().decode(SceneWire.self, from: Data(json.utf8))
         XCTAssertGreaterThan(scene.elements.count, 0,
                              "fallback measurer must still produce a scene")
-        XCTAssertGreaterThan(scene.size.width, 0)
-        XCTAssertGreaterThan(scene.size.height, 0)
+        XCTAssertGreaterThan(scene.size.w, 0)
+        XCTAssertGreaterThan(scene.size.h, 0)
     }
 
     // MARK: - Dark theme
@@ -151,9 +156,11 @@ final class MermaidKitCTests: XCTestCase {
         let dark = try XCTUnwrap(sceneJSON(flowchart, prefersDark: 1))
         XCTAssertNotEqual(light, dark, "prefers_dark must change the scene")
 
-        let darkScene = try JSONDecoder().decode(RenderScene.self, from: Data(dark.utf8))
-        // Dark canvas is near-black (0x1B1B1D), so well below mid-gray.
-        XCTAssertLessThan(darkScene.background.red, 0.5)
+        let darkScene = try JSONDecoder().decode(SceneWire.self, from: Data(dark.utf8))
+        // Background is a #RRGGBBAA string; dark canvas is near-black (0x1B1B1D),
+        // so well below mid-gray once parsed back to a color.
+        let bg = try XCTUnwrap(DiagramColor(hexString: darkScene.background))
+        XCTAssertLessThan(bg.red, 0.5)
     }
 
     // MARK: - Narration
