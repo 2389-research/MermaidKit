@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # The package manifest is swift-tools-version 6.2 and uses package traits
       # (SwiftPM 6.1+) to gate the Linux Silica backend, so the toolchain floor
       # is Swift 6.2 / Xcode 26 on every platform.
@@ -58,6 +60,8 @@ jobs:
     container: swift:6.2
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # MermaidRender's Linux backend draws with Silica (Cairo/FontConfig), so
       # the container needs the graphics + font system libraries and a font.
       # (Off-Apple, MermaidLayout must build on swift-corelibs-foundation where
@@ -100,6 +104,8 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -123,6 +129,8 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
