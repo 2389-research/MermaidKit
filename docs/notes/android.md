@@ -228,18 +228,33 @@ scene contract (#14).
   no field the renderer needs is missing (the scene fully determines the picture).
 
 ### Phase 1 — C ABI + NDK cross-compile
-Swift core → per-ABI `.so` (arm64-v8a, armeabi-v7a, x86_64) via the NDK + Swift
-Android SDK. Thin C ABI: `source + options + batched measure callback → scene +
-narration/alt-text + diagnostics`.
-- *Acceptance:* a headless C harness on Android returns a `RenderScene` for a fixture.
+Thin C ABI (`MermaidKitC`): `source + options + batched measure callback → scene
+(SceneWire JSON) + narration/alt-text`. **Done + verified:** the `mmk_*` ABI
+lands (`mmk_scene_json`/`mmk_narrate`/`mmk_free`/`mmk_version`) and
+**cross-compiles cleanly to Android arm64 + x86_64** via the Swift Android SDK,
+with the `@_cdecl` symbols exported unmangled (`scripts/check-android-build.sh`,
+CI-gated). *Still open:* packaging per-ABI `.so`s (arm64-v8a, armeabi-v7a,
+x86_64) through the NDK and bundling them in the AAR.
+- *Acceptance:* the C ABI builds for Android and returns a `SceneWire` for a
+  fixture. ✅ (cross-compile + symbol export proven; on-device `.so` load is
+  Phase 2's JNI slice.)
 
 ### Phase 2 — Kotlin `SceneRenderer` + snap-in surface
-`SceneRenderer` draws the `RenderScene` with `Canvas`/`Paint`; the batched
-`Paint.measureText` callback feeds layout; `MermaidDiagram` Compose + `MermaidView`
-View; `MermaidTheme.fromMaterial()`; `contentDescription` from the narration;
+`SceneRenderer` draws the scene with `Canvas`/`Paint`. **Done + verified:** the
+`android/` module — the `SceneWire` Kotlin model (plain `@Serializable`, parses
+the exact C-ABI JSON with zero custom serializers) and `SceneRenderer`
+(rounded-rect/ellipse/polygon/path shapes, stroked+arrowed edges, centered/rotated
+text with backing chips) — **builds against Android SDK 34, its JVM unit tests
+pass, and its instrumented test renders a scene through a real device's Skia
+`Canvas` on an android-34 emulator** (CI: build + JVM tests on a native runner,
+instrumented render on a KVM emulator). *Still open:* the JNI seam wiring Kotlin
+→ `mmk_scene_json` → the `.so` (so the app passes a *source* + a
+`Paint.measureText` callback), plus `MermaidDiagram` Compose + `MermaidView`,
+`MermaidTheme.fromMaterial()`, `contentDescription` from the narration, and
 `onNodeClick(nodeId)` hit-testing.
 - *Acceptance:* a sample app renders every fixture natively, light/dark, with
-  a11y labels and tap callbacks.
+  a11y labels and tap callbacks. *(Renderer + on-device draw proven; the
+  snap-in surface + JNI are the remaining slices.)*
 
 ### Phase 3 — Distribution
 Maven Central `.aar` bundling the prebuilt `.so`; a one-Gradle-line sample app;
