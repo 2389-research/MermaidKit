@@ -253,11 +253,14 @@ the module builds against SDK 34, JVM unit tests pass, and the instrumented test
 **both render a scene through the device's Skia `Canvas` AND drive the full native
 seam — a Mermaid *source string* → JNI → the Swift `mmk_*` ABI → `SceneWire` →
 render** (CI: build + JVM tests on a native runner; jniLibs cross-compile +
-render + native seam on a KVM emulator). *Still open:* threading the device
-`Paint.measureText` callback through JNI (today native layout uses the coarse
-fallback metric), plus `MermaidDiagram` Compose + `MermaidView`,
-`MermaidTheme.fromMaterial()`, `contentDescription` from the narration, and
-`onNodeClick(nodeId)` hit-testing.
+render + native seam on a KVM emulator). The **device measure seam is threaded**:
+a Kotlin `Measurer` (backed by `PaintMeasurer` over the drawing `Paint`) is passed
+through JNI as the C `MmkMeasure` callback, so native layout measures text with
+the same face that draws it (the issue-#62 lesson) — a C trampoline bridges each
+measure request into the Kotlin callback on the JNI thread, and a throwing
+measurer falls back rather than aborting layout. *Still open:* `MermaidDiagram`
+Compose + `MermaidView`, `MermaidTheme.fromMaterial()`, `contentDescription` from
+the narration, and `onNodeClick(nodeId)` hit-testing.
 - *Acceptance:* a sample app renders every fixture natively, light/dark, with
   a11y labels and tap callbacks. *(Renderer, on-device draw, and the native
   source→scene seam proven; the measure callback + snap-in surface remain.)*

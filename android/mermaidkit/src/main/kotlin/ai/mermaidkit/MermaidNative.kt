@@ -11,27 +11,48 @@ import ai.mermaidkit.scene.SceneWire
  * drawable scene without any Swift or NDK of its own: [scene] parses the source
  * natively and returns a [SceneWire] ready for [ai.mermaidkit.scene.SceneRenderer].
  *
- * Measurement note: this first slice passes no measure callback, so native
- * layout uses a coarse glyph-box metric. Threading the device `Paint.measureText`
- * callback through JNI (so layout measures with the face that draws) is the next
- * slice — see docs/notes/android.md.
+ * Measurement: pass a [Measurer] so native layout measures text with the *same*
+ * face that draws it (the pinned measure seam — see docs/notes/android.md and the
+ * issue-#62 lesson). Use [PaintMeasurer] to back it with the drawing `Paint`.
+ * With no measurer, layout falls back to a coarse glyph-box metric.
  */
 object MermaidNative {
     init {
         System.loadLibrary("mermaidkit")
     }
 
+    /**
+     * A text-measurement seam the native layout calls back into. [measure] returns
+     * `[width, height]` in points for `text` at `fontSize` — measured with the face
+     * that will ultimately draw, so on-device layout and draw agree.
+     *
+     * Called synchronously from native code on the calling thread; keep it fast
+     * and allocation-light (it runs once per text run). A throwing measurer is
+     * caught natively and treated as "no measurement" for that run.
+     */
+    fun interface Measurer {
+        fun measure(text: String, fontSize: Double): DoubleArray
+    }
+
     private external fun nativeSceneJson(source: String, prefersDark: Int): String?
+    private external fun nativeSceneJsonMeasured(
+        source: String, prefersDark: Int, measurer: Measurer): String?
     private external fun nativeNarrate(source: String): String?
     private external fun nativeVersion(): String
 
     /** The scene as wire JSON, or null when `source` is empty or fails to parse. */
-    fun sceneJson(source: String, prefersDark: Boolean = false): String? =
-        nativeSceneJson(source, if (prefersDark) 1 else 0)
+    fun sceneJson(source: String, prefersDark: Boolean = false, measurer: Measurer? = null): String? {
+        val dark = if (prefersDark) 1 else 0
+        return if (measurer != null) nativeSceneJsonMeasured(source, dark, measurer)
+        else nativeSceneJson(source, dark)
+    }
 
-    /** Parse `source` natively into a [SceneWire], or null when it fails to parse. */
-    fun scene(source: String, prefersDark: Boolean = false): SceneWire? =
-        sceneJson(source, prefersDark)?.let { SceneWire.parse(it) }
+    /**
+     * Parse `source` natively into a [SceneWire], or null when it fails to parse.
+     * Pass a [measurer] (e.g. [PaintMeasurer]) for device-faithful text metrics.
+     */
+    fun scene(source: String, prefersDark: Boolean = false, measurer: Measurer? = null): SceneWire? =
+        sceneJson(source, prefersDark, measurer)?.let { SceneWire.parse(it) }
 
     /** An accessibility walkthrough of `source` for `contentDescription`, or null. */
     fun narrate(source: String): String? = nativeNarrate(source)

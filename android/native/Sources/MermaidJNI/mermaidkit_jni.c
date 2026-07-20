@@ -17,8 +17,12 @@
 
 #include <jni.h>
 
+// Mirrors MmkMeasure in Sources/MermaidKitC/include/mermaidkit.h.
+typedef void (*MmkMeasure)(const char *text, double font_size, void *userdata,
+                           double *out_w, double *out_h);
+
 extern char *mmk_scene_json(const char *source, int prefers_dark,
-                            void *measure, void *userdata);
+                            MmkMeasure measure, void *userdata);
 extern char *mmk_narrate(const char *source);
 extern void mmk_free(char *ptr);
 extern const char *mmk_version(void);
@@ -34,11 +38,79 @@ Java_ai_mermaidkit_MermaidNative_nativeSceneJson(JNIEnv *env, jclass clazz,
     if (src == NULL) return NULL; // OOM already thrown by the VM
 
     // Null measure callback → the coarse glyph-box fallback in MermaidKitC.
-    // (The device Paint.measureText callback is threaded in a later slice.)
+    // (nativeSceneJsonMeasured threads the device Paint.measureText through.)
     char *json = mmk_scene_json(src, prefersDark, NULL, NULL);
     (*env)->ReleaseStringUTFChars(env, source, src);
 
     if (json == NULL) return NULL; // nil/invalid source or parse failure
+    jstring result = (*env)->NewStringUTF(env, json);
+    mmk_free(json);
+    return result;
+}
+
+// The device-measure seam. `userdata` carries the JVM handles a trampoline needs
+// to call back into a Kotlin `MermaidNative.Measurer`. mmk_scene_json invokes the
+// callback synchronously on THIS (the JNI) thread, so `env` stays valid — no
+// AttachCurrentThread, no cross-thread ref juggling.
+typedef struct {
+    JNIEnv *env;
+    jobject measurer;   // MermaidNative.Measurer
+    jmethodID measure;  // double[] measure(String text, double fontSize)
+} MeasureCtx;
+
+// The C function pointer handed to mmk_scene_json. Bridges one measure request
+// into the Kotlin callback and writes the width/height back through the ABI's
+// out-pointers. On any failure it leaves the outputs untouched (<= 0), which the
+// ABI treats as "absent" and falls back to its coarse metric for that run.
+static void measure_trampoline(const char *text, double font_size, void *userdata,
+                               double *out_w, double *out_h) {
+    MeasureCtx *ctx = (MeasureCtx *)userdata;
+    JNIEnv *env = ctx->env;
+
+    jstring jtext = (*env)->NewStringUTF(env, text ? text : "");
+    if (jtext == NULL) { (*env)->ExceptionClear(env); return; }
+
+    jdoubleArray result =
+        (jdoubleArray)(*env)->CallObjectMethod(env, ctx->measurer, ctx->measure, jtext, font_size);
+    (*env)->DeleteLocalRef(env, jtext);
+
+    // A throwing measurer must not abort layout — clear and fall back.
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        if (result != NULL) (*env)->DeleteLocalRef(env, result);
+        return;
+    }
+    if (result == NULL) return;
+
+    if ((*env)->GetArrayLength(env, result) >= 2) {
+        jdouble wh[2];
+        (*env)->GetDoubleArrayRegion(env, result, 0, 2, wh);
+        if (out_w) *out_w = wh[0];
+        if (out_h) *out_h = wh[1];
+    }
+    (*env)->DeleteLocalRef(env, result);
+}
+
+JNIEXPORT jstring JNICALL
+Java_ai_mermaidkit_MermaidNative_nativeSceneJsonMeasured(JNIEnv *env, jclass clazz,
+                                                         jstring source, jint prefersDark,
+                                                         jobject measurer) {
+    (void)clazz;
+    if (source == NULL || measurer == NULL) return NULL;
+
+    jclass mcls = (*env)->GetObjectClass(env, measurer);
+    jmethodID mid = (*env)->GetMethodID(env, mcls, "measure", "(Ljava/lang/String;D)[D");
+    (*env)->DeleteLocalRef(env, mcls);
+    if (mid == NULL) { (*env)->ExceptionClear(env); return NULL; } // no such method
+
+    const char *src = (*env)->GetStringUTFChars(env, source, NULL);
+    if (src == NULL) return NULL;
+
+    MeasureCtx ctx = { env, measurer, mid };
+    char *json = mmk_scene_json(src, prefersDark, measure_trampoline, &ctx);
+    (*env)->ReleaseStringUTFChars(env, source, src);
+
+    if (json == NULL) return NULL;
     jstring result = (*env)->NewStringUTF(env, json);
     mmk_free(json);
     return result;
