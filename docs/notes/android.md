@@ -259,15 +259,18 @@ through JNI as the C `MmkMeasure` callback, so native layout measures text with
 the same face that draws it (the issue-#62 lesson) — a C trampoline bridges each
 measure request into the Kotlin callback on the JNI thread, and a throwing
 measurer falls back rather than aborting layout. The **snap-in surface** is in:
-`MermaidView` (classic View, no Compose dep) and `MermaidDiagram` (Composable)
-each render a *source string* in one line — auto-sizing to width, light/dark from
-the theme, text measured with the drawing `Paint`, and the narration exposed as
-`contentDescription` from the first surface (both verified on the emulator).
-*Still open — each needs a C-ABI extension:* `MermaidTheme.fromMaterial()` color
-injection (the ABI takes only `prefers_dark` today — Phase 1b's `MermaidTheme`
-tokens across the bridge), and `onNodeClick(nodeId)` hit-testing (`SceneWire` is
-flattened primitives with no node identity — needs the ABI to also emit a
-node→rect hit-test map).
+`MermaidView` (classic View) and `MermaidDiagram` (Composable) each render a
+*source string* in one line — auto-sizing to width, text measured with the
+drawing `Paint`, and the narration exposed as `contentDescription` from the first
+surface. **Material theming is threaded**: the C ABI gained `mmk_scene_json_themed`
+taking a `ThemeWire` JSON (colors as `#RRGGBBAA` + `prefersDark`), so a caller
+paints with its own colors instead of a preset; `MermaidTheme.fromMaterial(colorScheme)`
+maps Material 3 roles → the diagram's slots, and `MermaidDiagram` defaults its
+theme to `MaterialTheme.colorScheme` — so a diagram matches the app's theme
+(light/dark included) with zero extra wiring (all verified on the emulator).
+*Still open — needs a C-ABI extension:* `onNodeClick(nodeId)` hit-testing
+(`SceneWire` is flattened primitives with no node identity — needs the ABI to
+also emit a node→rect hit-test map).
 - *Acceptance:* a sample app renders every fixture natively, light/dark, with
   a11y labels and tap callbacks. *(Renderer, on-device draw, and the native
   source→scene seam proven; the measure callback + snap-in surface remain.)*

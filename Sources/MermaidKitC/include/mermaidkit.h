@@ -59,6 +59,26 @@ char *mmk_scene_json(const char *source,
                      void *userdata);
 
 /*
+ * Like `mmk_scene_json`, but themed with explicit caller colors instead of a
+ * built-in light/dark preset. `theme_json` is a ThemeWire JSON object — colors
+ * as `#RRGGBBAA` strings (ink, accent, canvas, hairline, secondaryText,
+ * tertiaryText, a palette array) plus a `prefersDark` flag. The Android side
+ * builds it from a Material ColorScheme.
+ *
+ * theme_json NULL       : falls back to the light preset.
+ * theme_json malformed  : returns NULL (a caller error is visible, not silently
+ *                         mis-themed).
+ *
+ * Returns a malloc'd, NUL-terminated C string the caller owns (free via
+ * `mmk_free`), or NULL when `source` is NULL/unparseable or `theme_json` is
+ * present but invalid.
+ */
+char *mmk_scene_json_themed(const char *source,
+                            const char *theme_json,
+                            MmkMeasure measure,
+                            void *userdata);
+
+/*
  * Narrate a UTF-8 Mermaid `source` as an accessibility walkthrough — feeds
  * Android's `contentDescription`.
  *

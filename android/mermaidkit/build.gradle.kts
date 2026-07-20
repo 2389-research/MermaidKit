@@ -34,6 +34,9 @@ dependencies {
     implementation(composeBom)
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.ui:ui")
+    // material3 supplies ColorScheme for MermaidTheme.fromMaterial + MermaidDiagram's
+    // default theme. Only the Compose surface uses it.
+    implementation("androidx.compose.material3:material3")
 
     testImplementation(kotlin("test"))
 
