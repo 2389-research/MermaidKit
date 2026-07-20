@@ -128,9 +128,11 @@ final class MermaidKitCTests: XCTestCase {
             XCTAssertEqual(abiJSON, referenceJSON,
                            "ABI JSON must match SceneWire(RenderScene.from(...))")
 
-            // And the decoded size / element count match the reference.
-            XCTAssertEqual(decoded.size.w, Double(reference.size.width))
-            XCTAssertEqual(decoded.size.h, Double(reference.size.height))
+            // And the decoded size / element count match the reference. The wire
+            // quantizes coordinates to a 1/256 grid (SceneWire.q, the cross-platform
+            // byte-stability seam), so compare size within that tolerance.
+            XCTAssertEqual(decoded.size.w, Double(reference.size.width), accuracy: 1.0 / 256)
+            XCTAssertEqual(decoded.size.h, Double(reference.size.height), accuracy: 1.0 / 256)
             XCTAssertEqual(decoded.elements.count, reference.elements.count)
         }
     }
