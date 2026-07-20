@@ -24,7 +24,8 @@ Compose:
 MermaidDiagram(
     source = "flowchart LR\n  A[Start] --> B{Choice}\n  B -->|yes| C((Done))",
     modifier = Modifier.fillMaxWidth(),
-)   // sizes to width, follows the system theme, narration → contentDescription
+)   // sizes to width, uses the app's MaterialTheme colors (light/dark),
+    // narration → contentDescription. Override with `theme = MermaidTheme.fromMaterial(...)`.
 ```
 
 Classic View (no Compose dependency):
@@ -103,11 +104,17 @@ The **device measure seam** is wired: pass a `MermaidNative.Measurer` (use
 measurer = …)` and native layout measures text with the same face that draws it
 — a C trampoline bridges each measure request back into Kotlin on the JNI thread.
 
+## Theming
+
+`MermaidDiagram` defaults to the app's Material colors — `MermaidTheme.fromMaterial(MaterialTheme.colorScheme)`
+— so diagrams match the surrounding UI (light/dark included) automatically. Pass
+an explicit `theme` (Compose) or set `MermaidView.theme` (View) to override.
+Under the hood the theme crosses the C ABI as `ThemeWire` JSON (`#RRGGBBAA`
+colors + `prefersDark`) to `mmk_scene_json_themed`, which paints the scene with
+those colors instead of a built-in preset.
+
 ## Not yet here (next slices)
 
-- **`MermaidTheme.fromMaterial()`** — inject Material color tokens across the
-  bridge. Needs a C-ABI extension: `mmk_scene_json` takes only `prefers_dark`
-  today, so the scene's colors come from a built-in light/dark preset.
 - **`onNodeClick(nodeId)` hit-testing** — needs the ABI to emit a node→rect map
   alongside the scene; `SceneWire` is flattened primitives with no node identity.
 - **Distribution** — per-ABI `.so`s (arm64-v8a, armeabi-v7a, x86_64) bundled into

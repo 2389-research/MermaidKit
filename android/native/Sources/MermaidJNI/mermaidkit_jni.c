@@ -23,6 +23,8 @@ typedef void (*MmkMeasure)(const char *text, double font_size, void *userdata,
 
 extern char *mmk_scene_json(const char *source, int prefers_dark,
                             MmkMeasure measure, void *userdata);
+extern char *mmk_scene_json_themed(const char *source, const char *theme_json,
+                                   MmkMeasure measure, void *userdata);
 extern char *mmk_narrate(const char *source);
 extern void mmk_free(char *ptr);
 extern const char *mmk_version(void);
@@ -109,6 +111,49 @@ Java_ai_mermaidkit_MermaidNative_nativeSceneJsonMeasured(JNIEnv *env, jclass cla
     MeasureCtx ctx = { env, measurer, mid };
     char *json = mmk_scene_json(src, prefersDark, measure_trampoline, &ctx);
     (*env)->ReleaseStringUTFChars(env, source, src);
+
+    if (json == NULL) return NULL;
+    jstring result = (*env)->NewStringUTF(env, json);
+    mmk_free(json);
+    return result;
+}
+
+// Themed + measured: `themeJson` is a ThemeWire JSON string (or NULL for the
+// light preset), `measurer` may be NULL (coarse metric).
+JNIEXPORT jstring JNICALL
+Java_ai_mermaidkit_MermaidNative_nativeSceneJsonThemed(JNIEnv *env, jclass clazz,
+                                                       jstring source, jstring themeJson,
+                                                       jobject measurer) {
+    (void)clazz;
+    if (source == NULL) return NULL;
+
+    const char *src = (*env)->GetStringUTFChars(env, source, NULL);
+    if (src == NULL) return NULL;
+
+    const char *theme = NULL;
+    if (themeJson != NULL) {
+        theme = (*env)->GetStringUTFChars(env, themeJson, NULL);
+        if (theme == NULL) { (*env)->ReleaseStringUTFChars(env, source, src); return NULL; }
+    }
+
+    // Resolve the optional measure callback exactly as nativeSceneJsonMeasured.
+    MeasureCtx ctx;
+    MmkMeasure cb = NULL;
+    if (measurer != NULL) {
+        jclass mcls = (*env)->GetObjectClass(env, measurer);
+        jmethodID mid = (*env)->GetMethodID(env, mcls, "measure", "(Ljava/lang/String;D)[D");
+        (*env)->DeleteLocalRef(env, mcls);
+        if (mid != NULL) {
+            ctx.env = env; ctx.measurer = measurer; ctx.measure = mid;
+            cb = measure_trampoline;
+        } else {
+            (*env)->ExceptionClear(env); // no measure() → fall back to coarse metric
+        }
+    }
+
+    char *json = mmk_scene_json_themed(src, theme, cb, cb ? &ctx : NULL);
+    (*env)->ReleaseStringUTFChars(env, source, src);
+    if (theme != NULL) (*env)->ReleaseStringUTFChars(env, themeJson, theme);
 
     if (json == NULL) return NULL;
     jstring result = (*env)->NewStringUTF(env, json);

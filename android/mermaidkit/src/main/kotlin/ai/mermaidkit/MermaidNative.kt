@@ -37,6 +37,8 @@ object MermaidNative {
     private external fun nativeSceneJson(source: String, prefersDark: Int): String?
     private external fun nativeSceneJsonMeasured(
         source: String, prefersDark: Int, measurer: Measurer): String?
+    private external fun nativeSceneJsonThemed(
+        source: String, themeJson: String?, measurer: Measurer?): String?
     private external fun nativeNarrate(source: String): String?
     private external fun nativeVersion(): String
 
@@ -47,12 +49,23 @@ object MermaidNative {
         else nativeSceneJson(source, dark)
     }
 
+    /** The scene as wire JSON themed with [theme]'s colors, or null on failure. */
+    fun sceneJson(source: String, theme: MermaidTheme, measurer: Measurer? = null): String? =
+        nativeSceneJsonThemed(source, theme.toWireJson(), measurer)
+
     /**
      * Parse `source` natively into a [SceneWire], or null when it fails to parse.
      * Pass a [measurer] (e.g. [PaintMeasurer]) for device-faithful text metrics.
      */
     fun scene(source: String, prefersDark: Boolean = false, measurer: Measurer? = null): SceneWire? =
         sceneJson(source, prefersDark, measurer)?.let { SceneWire.parse(it) }
+
+    /**
+     * Parse `source` natively into a [SceneWire] painted with [theme]'s colors
+     * (e.g. `MermaidTheme.fromMaterial(...)`), or null when it fails to parse.
+     */
+    fun scene(source: String, theme: MermaidTheme, measurer: Measurer? = null): SceneWire? =
+        sceneJson(source, theme, measurer)?.let { SceneWire.parse(it) }
 
     /** An accessibility walkthrough of `source` for `contentDescription`, or null. */
     fun narrate(source: String): String? = nativeNarrate(source)

@@ -163,6 +163,47 @@ final class MermaidKitCTests: XCTestCase {
         XCTAssertLessThan(bg.red, 0.5)
     }
 
+    // MARK: - Explicit theme (mmk_scene_json_themed)
+
+    private func themedJSON(_ source: String, theme: String?) -> String? {
+        let call: (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>? = { src in
+            if let theme {
+                return theme.withCString { t in
+                    mmk_scene_json_themed(src, t, MermaidKitCTests.cMeasure, nil)
+                }
+            }
+            return mmk_scene_json_themed(src, nil, MermaidKitCTests.cMeasure, nil)
+        }
+        guard let ptr = source.withCString(call) else { return nil }
+        defer { mmk_free(ptr) }
+        return String(cString: ptr)
+    }
+
+    func testThemedCanvasUsesCallerColor() throws {
+        // A caller theme with a distinctive canvas must paint that background.
+        let theme = """
+        {"ink":"#101010FF","accent":"#FF0000FF","canvas":"#123456FF",
+         "hairline":"#0000001F","secondaryText":"#1010108C","tertiaryText":"#10101061",
+         "palette":["#FF0000FF"],"prefersDark":false}
+        """
+        let json = try XCTUnwrap(themedJSON(flowchart, theme: theme))
+        let scene = try JSONDecoder().decode(SceneWire.self, from: Data(json.utf8))
+        XCTAssertEqual(scene.background.uppercased(), "#123456FF",
+                       "themed scene must use the caller's canvas color")
+    }
+
+    func testThemedNilFallsBackToLightPreset() throws {
+        // nil theme == the light preset, i.e. equal to mmk_scene_json(prefersDark: 0).
+        let themed = try XCTUnwrap(themedJSON(flowchart, theme: nil))
+        let preset = try XCTUnwrap(sceneJSON(flowchart, prefersDark: 0))
+        XCTAssertEqual(themed, preset)
+    }
+
+    func testThemedInvalidJSONReturnsNil() {
+        XCTAssertNil(themedJSON(flowchart, theme: "{ not valid json"))
+        XCTAssertNil(themedJSON(flowchart, theme: #"{"ink":"bogus"}"#))
+    }
+
     // MARK: - Narration
 
     func testNarrateReturnsWalkthrough() throws {

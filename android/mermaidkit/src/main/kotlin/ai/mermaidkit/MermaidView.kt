@@ -41,8 +41,20 @@ class MermaidView @JvmOverloads constructor(
             reparse()
         }
 
-    /** Select the dark preset. Re-parses the scene. */
+    /** Select the dark preset. Ignored when [theme] is set. Re-parses the scene. */
     var prefersDark: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            reparse()
+        }
+
+    /**
+     * An explicit color theme (e.g. `MermaidTheme.fromMaterial(...)`). When set,
+     * it overrides [prefersDark]; when null, the built-in light/dark preset is
+     * used. Re-parses the scene.
+     */
+    var theme: MermaidTheme? = null
         set(value) {
             if (field == value) return
             field = value
@@ -51,7 +63,11 @@ class MermaidView @JvmOverloads constructor(
 
     private fun reparse() {
         val s = source
-        scene = if (s.isNullOrBlank()) null else MermaidNative.scene(s, prefersDark, measurer)
+        scene = when {
+            s.isNullOrBlank() -> null
+            theme != null -> MermaidNative.scene(s, theme!!, measurer)
+            else -> MermaidNative.scene(s, prefersDark, measurer)
+        }
         // Accessibility from the first surface (per the plan): the narration
         // walkthrough becomes the view's contentDescription.
         contentDescription = s?.takeIf { it.isNotBlank() }?.let { MermaidNative.narrate(it) }

@@ -110,6 +110,32 @@ class NativeBridgeTest {
     }
 
     @Test
+    fun customThemeColorsTheScene() {
+        // A theme with a distinctive canvas must paint that background — proof the
+        // ThemeWire JSON crossed the ABI and drove the Swift theme.
+        val canvas = Color.rgb(0x12, 0x34, 0x56)
+        val theme = MermaidTheme(
+            ink = Color.rgb(0x10, 0x10, 0x10), accent = Color.rgb(0xFF, 0x00, 0x00),
+            canvas = canvas, hairline = Color.argb(0x1F, 0, 0, 0),
+            secondaryText = Color.argb(0x8C, 0x10, 0x10, 0x10),
+            tertiaryText = Color.argb(0x61, 0x10, 0x10, 0x10),
+            palette = listOf(Color.rgb(0xFF, 0x00, 0x00)), prefersDark = false)
+
+        val scene = MermaidNative.scene(source, theme)
+        assertNotNull(scene)
+        assertEquals("scene background must be the theme's canvas",
+            canvas, SceneRenderer.parseColor(scene!!.background))
+
+        val bmp = Bitmap.createBitmap(
+            scene.size.w.toInt().coerceAtLeast(1),
+            scene.size.h.toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888)
+        SceneRenderer().draw(scene, Canvas(bmp))
+        // A corner is background (no node there) → the themed canvas color.
+        assertEquals(canvas, bmp.getPixel(bmp.width - 1, bmp.height - 1))
+    }
+
+    @Test
     fun throwingMeasurerFallsBackNotCrash() {
         // A measurer that throws must not abort native layout — the C trampoline
         // clears the exception and the run falls back to the coarse metric.

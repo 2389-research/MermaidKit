@@ -123,24 +123,19 @@ private func cString(_ string: String) -> UnsafeMutablePointer<CChar>? {
 
 // MARK: - C ABI
 
-/// Parse `source` (UTF-8), lower it to a `RenderScene` using `measure` (or the
-/// coarse fallback when nil), and return the scene as deterministic JSON.
-///
-/// - `prefersDark`: non-zero selects the dark preset theme, zero the light one.
-/// - Returns a malloc'd C string the caller owns (free via `mmk_free`), or `nil`
-///   when `source` is nil or does not parse. Never traps.
-@_cdecl("mmk_scene_json")
-public func mmk_scene_json(_ source: UnsafePointer<CChar>?,
-                           _ prefersDark: Int32,
-                           _ measure: MmkMeasure?,
-                           _ userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
+/// The shared body behind `mmk_scene_json` / `mmk_scene_json_themed`: parse,
+/// lower with `theme` + `measurer`, and encode the `SceneWire` JSON. Returns a
+/// malloc'd C string the caller owns, or nil on parse/encode failure.
+private func sceneJSON(source: UnsafePointer<CChar>?,
+                      theme: RenderTheme,
+                      measure: MmkMeasure?,
+                      userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
     guard let source else { return nil }
     let swiftSource = String(cString: source)
 
     guard let diagram = MermaidParser.parse(swiftSource) else { return nil }
 
     let measurer = makeMeasurer(measure, userdata)
-    let theme = defaultTheme(prefersDark: prefersDark != 0)
 
     guard let scene = RenderScene.from(diagram, theme: theme, measure: measurer) else {
         return nil
@@ -154,6 +149,51 @@ public func mmk_scene_json(_ source: UnsafePointer<CChar>?,
         return nil
     }
     return cString(json)
+}
+
+/// Parse `source` (UTF-8), lower it to a `RenderScene` using `measure` (or the
+/// coarse fallback when nil), and return the scene as deterministic JSON.
+///
+/// - `prefersDark`: non-zero selects the dark preset theme, zero the light one.
+/// - Returns a malloc'd C string the caller owns (free via `mmk_free`), or `nil`
+///   when `source` is nil or does not parse. Never traps.
+@_cdecl("mmk_scene_json")
+public func mmk_scene_json(_ source: UnsafePointer<CChar>?,
+                           _ prefersDark: Int32,
+                           _ measure: MmkMeasure?,
+                           _ userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
+    sceneJSON(source: source, theme: defaultTheme(prefersDark: prefersDark != 0),
+              measure: measure, userdata: userdata)
+}
+
+/// Like `mmk_scene_json`, but themed with explicit caller colors instead of a
+/// built-in preset. `theme_json` is a `ThemeWire` JSON object (colors as
+/// `#RRGGBBAA` strings + a `prefersDark` flag) — the Android side builds it from
+/// a Material `ColorScheme`.
+///
+/// - `theme_json` nil → falls back to the light preset (equivalent to
+///   `mmk_scene_json(..., 0, ...)`). Present but malformed (bad JSON or a bad
+///   color) → returns nil, so a caller error is visible rather than silently
+///   themed wrong.
+/// - Returns a malloc'd C string the caller owns (free via `mmk_free`), or `nil`
+///   when `source` is nil, `source` doesn't parse, or `theme_json` is invalid.
+@_cdecl("mmk_scene_json_themed")
+public func mmk_scene_json_themed(_ source: UnsafePointer<CChar>?,
+                                  _ themeJson: UnsafePointer<CChar>?,
+                                  _ measure: MmkMeasure?,
+                                  _ userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
+    let theme: RenderTheme
+    if let themeJson {
+        let json = String(cString: themeJson)
+        guard let wire = try? JSONDecoder().decode(ThemeWire.self, from: Data(json.utf8)),
+              let resolved = try? wire.renderTheme() else {
+            return nil // present-but-invalid theme is a caller error, not a silent fallback
+        }
+        theme = resolved
+    } else {
+        theme = defaultTheme(prefersDark: false)
+    }
+    return sceneJSON(source: source, theme: theme, measure: measure, userdata: userdata)
 }
 
 /// Narrate `source` as an accessibility walkthrough (threaded from the first
