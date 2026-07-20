@@ -149,6 +149,10 @@ jobs:
                 --checksum "c26ebfd4e32c0ca1beabcc45729b62042da57ee76d7d043f63f2235da90dc491" >/dev/null 2>&1
               bash /MermaidKit/android/native/build-jni.sh x86_64
             '
+          # The container runs as root; hand the .so's back to the runner user so
+          # the Gradle build (a different user) can read them.
+          sudo chown -R "$(id -u):$(id -g)" android/mermaidkit/src/main/jniLibs
+          chmod -R a+r android/mermaidkit/src/main/jniLibs
           ls -1 android/mermaidkit/src/main/jniLibs/x86_64 | wc -l
       - uses: actions/setup-java@v4
         with:
