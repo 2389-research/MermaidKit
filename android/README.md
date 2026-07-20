@@ -16,6 +16,30 @@ Because [`RenderScene`](../Sources/MermaidLayout/RenderScene.swift) flattens all
 theme), this module never needs to know what a "sequence diagram" is — it just
 paints primitives in painter's order, exactly like the SVG backend.
 
+## Rendering a diagram (the snap-in surface)
+
+Compose:
+
+```kotlin
+MermaidDiagram(
+    source = "flowchart LR\n  A[Start] --> B{Choice}\n  B -->|yes| C((Done))",
+    modifier = Modifier.fillMaxWidth(),
+)   // sizes to width, follows the system theme, narration → contentDescription
+```
+
+Classic View (no Compose dependency):
+
+```kotlin
+val view = MermaidView(context)
+view.source = "flowchart LR\n A[Start] --> B[End]"   // that's it — parses, sizes, draws
+```
+
+Both go source → native parse → `SceneWire` → `Canvas`, measure text with the
+drawing `Paint`, and set the diagram's accessibility narration as
+`contentDescription`. For lower-level control, `MermaidNative.scene(source,
+measurer = PaintMeasurer(paint))` returns a `SceneWire` you draw yourself with
+`SceneRenderer`.
+
 ![A flowchart rendered by SceneRenderer on an android-34 emulator](docs/on-device-render.png)
 
 *Above: a flowchart drawn by `SceneRenderer` through a real android-34 emulator's
@@ -37,6 +61,10 @@ the instrumented test (`connectedDebugAndroidTest`).*
 - `mermaidkit/src/main/kotlin/ai/mermaidkit/MermaidNative.kt` — the native bridge:
   `System.loadLibrary("mermaidkit")` + `external fun`s over the `mmk_*` C ABI.
   `MermaidNative.scene(source)` goes straight from a source string to a `SceneWire`.
+  `PaintMeasurer.kt` backs the measure seam with an Android `Paint`.
+- `mermaidkit/src/main/kotlin/ai/mermaidkit/MermaidView.kt` /
+  `MermaidDiagram.kt` — the snap-in surface: a classic `View` (no Compose dep) and
+  a `@Composable`, each rendering a source string in one line (see above).
 - `native/` — the JNI native side: `Sources/MermaidJNI/mermaidkit_jni.c` (the C
   shim) and its own `Package.swift`. `build-jni.sh` cross-compiles it with the
   Swift Android SDK into `libmermaidkit.so` (the shim + `MermaidKitC` linked in)
@@ -77,7 +105,10 @@ measurer = …)` and native layout measures text with the same face that draws i
 
 ## Not yet here (next slices)
 
-- **Compose / View wrappers, `MermaidTheme.fromMaterial()`, `contentDescription`
-  from the narration, `onNodeClick` hit-testing** — the snap-in surface.
+- **`MermaidTheme.fromMaterial()`** — inject Material color tokens across the
+  bridge. Needs a C-ABI extension: `mmk_scene_json` takes only `prefers_dark`
+  today, so the scene's colors come from a built-in light/dark preset.
+- **`onNodeClick(nodeId)` hit-testing** — needs the ABI to emit a node→rect map
+  alongside the scene; `SceneWire` is flattened primitives with no node identity.
 - **Distribution** — per-ABI `.so`s (arm64-v8a, armeabi-v7a, x86_64) bundled into
   a stripped Maven Central AAR.
