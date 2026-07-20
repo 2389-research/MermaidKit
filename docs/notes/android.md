@@ -233,28 +233,34 @@ Thin C ABI (`MermaidKitC`): `source + options + batched measure callback → sce
 lands (`mmk_scene_json`/`mmk_narrate`/`mmk_free`/`mmk_version`) and
 **cross-compiles cleanly to Android arm64 + x86_64** via the Swift Android SDK,
 with the `@_cdecl` symbols exported unmangled (`scripts/check-android-build.sh`,
-CI-gated). *Still open:* packaging per-ABI `.so`s (arm64-v8a, armeabi-v7a,
-x86_64) through the NDK and bundling them in the AAR.
+CI-gated). The **JNI `.so` is done + verified** (see Phase 2). *Still open:*
+building the arm64-v8a / armeabi-v7a ABIs (x86_64 is proven) and bundling all
+three in the AAR.
 - *Acceptance:* the C ABI builds for Android and returns a `SceneWire` for a
-  fixture. ✅ (cross-compile + symbol export proven; on-device `.so` load is
-  Phase 2's JNI slice.)
+  fixture. ✅ (cross-compile, symbol export, **and on-device `.so` load + call**
+  all proven.)
 
-### Phase 2 — Kotlin `SceneRenderer` + snap-in surface
+### Phase 2 — Kotlin `SceneRenderer` + JNI + snap-in surface
 `SceneRenderer` draws the scene with `Canvas`/`Paint`. **Done + verified:** the
 `android/` module — the `SceneWire` Kotlin model (plain `@Serializable`, parses
-the exact C-ABI JSON with zero custom serializers) and `SceneRenderer`
+the exact C-ABI JSON with zero custom serializers), `SceneRenderer`
 (rounded-rect/ellipse/polygon/path shapes, stroked+arrowed edges, centered/rotated
-text with backing chips) — **builds against Android SDK 34, its JVM unit tests
-pass, and its instrumented test renders a scene through a real device's Skia
-`Canvas` on an android-34 emulator** (CI: build + JVM tests on a native runner,
-instrumented render on a KVM emulator). *Still open:* the JNI seam wiring Kotlin
-→ `mmk_scene_json` → the `.so` (so the app passes a *source* + a
-`Paint.measureText` callback), plus `MermaidDiagram` Compose + `MermaidView`,
+text with backing chips), **and the JNI bridge** (`MermaidNative` →
+`libmermaidkit.so`, a C shim that statically links `MermaidKitC`; built by the
+standalone `android/native` Swift package via `build-jni.sh`, packaged with the
+Swift-runtime `.so` closure into `jniLibs`). Verified on an android-34 emulator:
+the module builds against SDK 34, JVM unit tests pass, and the instrumented tests
+**both render a scene through the device's Skia `Canvas` AND drive the full native
+seam — a Mermaid *source string* → JNI → the Swift `mmk_*` ABI → `SceneWire` →
+render** (CI: build + JVM tests on a native runner; jniLibs cross-compile +
+render + native seam on a KVM emulator). *Still open:* threading the device
+`Paint.measureText` callback through JNI (today native layout uses the coarse
+fallback metric), plus `MermaidDiagram` Compose + `MermaidView`,
 `MermaidTheme.fromMaterial()`, `contentDescription` from the narration, and
 `onNodeClick(nodeId)` hit-testing.
 - *Acceptance:* a sample app renders every fixture natively, light/dark, with
-  a11y labels and tap callbacks. *(Renderer + on-device draw proven; the
-  snap-in surface + JNI are the remaining slices.)*
+  a11y labels and tap callbacks. *(Renderer, on-device draw, and the native
+  source→scene seam proven; the measure callback + snap-in surface remain.)*
 
 ### Phase 3 — Distribution
 Maven Central `.aar` bundling the prebuilt `.so`; a one-Gradle-line sample app;

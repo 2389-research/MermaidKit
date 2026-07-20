@@ -1,13 +1,14 @@
 # MermaidKit for Android (Kotlin rendering half)
 
-The Kotlin side of the Android bridge described in
-[`docs/notes/android.md`](../docs/notes/android.md). It consumes the
-platform-free **`SceneWire`** scene the Swift core emits (`mmk_scene_json` in the
-`MermaidKitC` C ABI) and draws it with a real Android `Canvas`/`Paint`.
+The Android bridge described in [`docs/notes/android.md`](../docs/notes/android.md).
+An app hands over a Mermaid **source string**; `MermaidNative` parses it natively
+(JNI → the Swift `mmk_*` C ABI in `libmermaidkit.so`) into a platform-free
+**`SceneWire`** scene, and `SceneRenderer` draws it with a real Android
+`Canvas`/`Paint`.
 
 ```
-Swift core ─ mmk_scene_json ─▶ SceneWire JSON ─▶ SceneWire.parse ─▶ SceneRenderer.draw(canvas)
-   (C ABI, per-ABI .so)          (the contract)      (this module — @Serializable, no glue)
+source ─▶ MermaidNative ─(JNI)▶ mmk_scene_json ─▶ SceneWire JSON ─▶ SceneWire.parse ─▶ SceneRenderer.draw(canvas)
+ (app)     (this module)     (Swift core, libmermaidkit.so)          (the contract)     (@Serializable, no glue)
 ```
 
 Because [`RenderScene`](../Sources/MermaidLayout/RenderScene.swift) flattens all
@@ -33,28 +34,49 @@ the instrumented test (`connectedDebugAndroidTest`).*
   with the same `Paint` that draws it (the measure seam the C ABI callback pins).
 - `mermaidkit/src/test/…/SceneWireTest.kt` — JVM unit tests that parse golden
   JSON captured from the real pipeline (`src/test/resources/*.json`).
-- `mermaidkit/src/androidTest/…/RenderInstrumentedTest.kt` — the on-device proof:
-  draws a scene through the emulator's Skia `Canvas` and asserts real ink lands.
+- `mermaidkit/src/main/kotlin/ai/mermaidkit/MermaidNative.kt` — the native bridge:
+  `System.loadLibrary("mermaidkit")` + `external fun`s over the `mmk_*` C ABI.
+  `MermaidNative.scene(source)` goes straight from a source string to a `SceneWire`.
+- `native/` — the JNI native side: `Sources/MermaidJNI/mermaidkit_jni.c` (the C
+  shim) and its own `Package.swift`. `build-jni.sh` cross-compiles it with the
+  Swift Android SDK into `libmermaidkit.so` (the shim + `MermaidKitC` linked in)
+  plus the transitive Swift-runtime `.so` closure — the AAR's `jniLibs/<abi>/`.
+- `mermaidkit/src/androidTest/…/RenderInstrumentedTest.kt` — draws a scene through
+  the emulator's Skia `Canvas` and asserts real ink lands.
+- `mermaidkit/src/androidTest/…/NativeBridgeTest.kt` — the full seam on-device:
+  source string → JNI → Swift → `SceneWire` → render.
 
 ## Build & test
 
 ```bash
-# Library AAR + JVM unit tests + instrumented-test APK (no device needed):
+# 1. Cross-compile the native .so bundle into jniLibs (needs Docker; per ABI):
+docker run --rm -v "$PWD/..":/MermaidKit \
+  -v "$PWD/mermaidkit/src/main/jniLibs/x86_64":/out \
+  swift-android-6.2 bash /MermaidKit/android/native/build-jni.sh x86_64
+
+# 2. Library AAR + JVM unit tests + instrumented-test APK (no device needed):
 ./gradlew :mermaidkit:assembleDebug :mermaidkit:testDebugUnitTest :mermaidkit:assembleDebugAndroidTest
 
-# On-device render test (needs a running emulator / device, i.e. KVM):
+# 3. On-device tests — render + the native JNI seam (needs an emulator, i.e. KVM):
 ./gradlew :mermaidkit:connectedDebugAndroidTest
 ```
 
-CI runs the first line on a native x86_64 runner (AAPT2 ships x86_64 only) and
-the instrumented test on a KVM-accelerated android-34 emulator — see
+The `jniLibs` `.so`s are **build artifacts** (gitignored) — CI (and a release
+build) run step 1 to produce them. AAPT2 ships x86_64-only, so the Gradle build
+must run on a native x86_64 host, and the emulator needs KVM — see
 `.github/workflows/ci.yml`.
+
+> Native size: the Swift runtime + Foundation/ICU make one ABI's `jniLibs` ~88 MB
+> unstripped. Stripping and trimming the Foundation surface are follow-ups before
+> a Maven release.
 
 ## Not yet here (next slices)
 
-- **JNI + the `.so`.** This module renders a `SceneWire` you hand it; wiring
-  Kotlin → JNI → `mmk_scene_json` → the per-ABI `.so` (so the app passes a
-  Mermaid *source* string and a `Paint.measureText` callback) is the next step,
-  along with bundling the NDK-built `.so` into the AAR.
+- **The measure seam.** `MermaidNative` passes a null measure callback today, so
+  native layout uses a coarse glyph-box metric. Threading the device
+  `Paint.measureText` callback through JNI (so layout measures with the face that
+  draws) is next.
 - **Compose / View wrappers, `MermaidTheme.fromMaterial()`, `contentDescription`
   from the narration, `onNodeClick` hit-testing** — the snap-in surface.
+- **Distribution** — per-ABI `.so`s (arm64-v8a, armeabi-v7a, x86_64) bundled into
+  a stripped Maven Central AAR.

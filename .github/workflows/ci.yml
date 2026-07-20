@@ -117,13 +117,15 @@ jobs:
       - name: Build library + JVM unit tests + instrumented APK
         run: ./gradlew --no-daemon --console=plain :mermaidkit:assembleDebug :mermaidkit:testDebugUnitTest :mermaidkit:assembleDebugAndroidTest
 
-  # The on-device render proof: boot an android-34 emulator (KVM on the runner)
-  # and run the instrumented test — a wire scene drawn through the device's real
-  # Skia Canvas must land actual ink (fill, stroked edge, arrowhead, glyphs).
+  # The on-device proof: boot an android-34 emulator (KVM on the runner) and run
+  # the instrumented tests — the render test (a scene drawn through the device's
+  # real Skia Canvas lands ink) AND the native seam (NativeBridgeTest: a Mermaid
+  # source string → JNI → the Swift mmk_* ABI in libmermaidkit.so → SceneWire →
+  # render). The native tests need the cross-compiled jniLibs, built first.
   android-emulator:
-    name: android (emulator render)
+    name: android (emulator render + jni)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: android
@@ -131,6 +133,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # Cross-compile the JNI .so bundle (libmermaidkit.so + the Swift-runtime
+      # closure) into jniLibs/x86_64 via the pinned Swift Android SDK, matching
+      # scripts/check-android-build.sh. The emulator arch is x86_64.
+      - name: Cross-compile JNI native libs (x86_64)
+        working-directory: .
+        run: |
+          mkdir -p android/mermaidkit/src/main/jniLibs/x86_64
+          docker run --rm \
+            -v "$PWD":/MermaidKit \
+            -v "$PWD/android/mermaidkit/src/main/jniLibs/x86_64":/out \
+            swift:6.2.0 bash -c '
+              swift sdk install \
+                "https://github.com/finagolfin/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-24-0.1.artifactbundle.tar.gz" \
+                --checksum "c26ebfd4e32c0ca1beabcc45729b62042da57ee76d7d043f63f2235da90dc491" >/dev/null 2>&1
+              bash /MermaidKit/android/native/build-jni.sh x86_64
+            '
+          ls -1 android/mermaidkit/src/main/jniLibs/x86_64 | wc -l
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -142,7 +161,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: android-actions/setup-android@v3
-      - name: Instrumented render test on emulator
+      - name: Instrumented render + native-seam tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34

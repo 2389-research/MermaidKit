@@ -2,6 +2,9 @@
 build/
 .gradle/
 .kotlin/
+# Cross-compiled native libs — produced by android/native/build-jni.sh, not committed.
+mermaidkit/src/main/jniLibs/
+.build/
 local.properties
 *.iml
 .idea/
