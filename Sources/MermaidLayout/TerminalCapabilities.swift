@@ -3,6 +3,10 @@ import Foundation
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Android)
+import Android
+#elseif canImport(Bionic)
+import Bionic
 #endif
 
 // Terminal capability detection + the Kitty graphics transport. Pure bytes and
