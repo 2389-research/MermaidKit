@@ -19,6 +19,10 @@ import MermaidLayout
 import Glibc
 #elseif canImport(Darwin)
 import Darwin
+#elseif canImport(Android)
+import Android
+#elseif canImport(Bionic)
+import Bionic
 #endif
 
 // MARK: - Measurement callback

@@ -4,6 +4,10 @@ import MermaidLayout
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Android)
+import Android
+#elseif canImport(Bionic)
+import Bionic
 #endif
 #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
 import MermaidRender
