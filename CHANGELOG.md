@@ -8,9 +8,9 @@ narration for *every* supported source format — not just Mermaid — without e
 touching the parsers.
 
 - **Format-aware `MermaidRenderer` API.** A new `DiagramSourceFormat`
-  (`.mermaid`, `.dot`, `.dippin`, `.sqlDDL`, `.gitLog`) drives
-  `diagram(source:format:)` and format-aware `image` / `pngData` /
-  `attachmentString` / `altText(source:format:)`, plus diagram-based twins.
+  (`.mermaid`, `.dot`, `.dippin`, `.sqlDDL`, `.gitLog`) drives format-aware
+  `image` / `pngData` / `attachmentString` / `altText(source:format:)`, plus
+  diagram-based twins.
   DOT, Dippin, SQL DDL and git-log sources now render inline and narrate exactly
   like Mermaid. (#46, #47)
 - Non-Mermaid formats ride the **same NSCache path** as Mermaid — keyed by

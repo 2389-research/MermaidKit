@@ -16,13 +16,13 @@ render backend additionally links Silica — behind the `LinuxRaster` package tr
 Three ways in, from highest-level to lowest:
 
 - ``MermaidView`` — a SwiftUI view: give it Mermaid source, it renders.
-- ``MermaidRenderer/image(source:theme:)`` — one call, one native image.
+- ``MermaidRenderer/image(source:theme:spacing:)`` — one call, one native image.
 - ``MermaidRenderer/attachmentString(source:theme:)`` — the diagram as a
   single-attachment `NSAttributedString` for embedding in a text view.
 
 All rendering is synchronous (every built-in diagram type renders cold in
 under 25 ms on Apple silicon; see the repository README for per-type
-numbers) and cached per (source, appearance).
+numbers) and cached per (source, theme, spacing).
 
 ## Topics
 

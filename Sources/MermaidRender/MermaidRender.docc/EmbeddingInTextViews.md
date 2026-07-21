@@ -5,7 +5,7 @@ rendered ```` ```mermaid ```` block.
 
 ## The attachment API
 
-``MermaidRenderer/attachmentString(source:theme:)`` returns the rendered
+``MermaidRenderer/attachmentString(source:theme:spacing:)`` returns the rendered
 diagram as a **single-attachment** `NSAttributedString`: one U+FFFC
 character carrying an `NSTextAttachment` whose image is the diagram.
 
