@@ -48,6 +48,28 @@ final class LinuxRenderTests: XCTestCase {
         }
     }
 
+    /// Raw RGBA pixels come back from the Silica backend — the raw-raster path
+    /// for framebuffers / GPU upload / SDL on Linux and embedded (Raspberry Pi),
+    /// which have no display server and can't decode the PNG. Reads the Cairo
+    /// ARGB32 surface directly.
+    func testRgbaRasterOnLinux() throws {
+        let r = try XCTUnwrap(
+            MermaidRenderer.rgbaRaster(
+                source: "flowchart LR\n A[Start] --> B[End]", theme: theme,
+                targetWidth: 400, background: (255, 255, 255)),
+            "rgbaRaster returned nil on Linux")
+        XCTAssertGreaterThan(r.width, 0)
+        XCTAssertGreaterThan(r.height, 0)
+        XCTAssertEqual(r.pixels.count, r.width * r.height * 4)
+        // Some non-white ink lands (the diagram is drawn), and pixels are opaque.
+        var inked = 0
+        for i in stride(from: 0, to: r.pixels.count, by: 4) {
+            if r.pixels[i] != 255 || r.pixels[i + 1] != 255 || r.pixels[i + 2] != 255 { inked += 1 }
+            XCTAssertEqual(r.pixels[i + 3], 255) // opaque
+        }
+        XCTAssertGreaterThan(inked, 100, "expected drawn ink in the RGBA raster")
+    }
+
     /// PDF export works through Silica's Cairo PDF surface.
     func testPDFExport() throws {
         let data = try XCTUnwrap(
