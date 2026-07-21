@@ -264,3 +264,36 @@ jobs:
         env:
           MMK_NATIVE: "1"
         run: dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj -c Release --no-build --nologo
+
+  # Builds + runs the pi-canvas demo (tools/pi-canvas) on Linux — the infinite
+  # framebuffer canvas over the Silica raw raster, and the SDL2 backend headless
+  # (dummy video driver + RenderReadPixels). Gates the tool and the SDL path
+  # against bitrot; the raw raster itself is gated by LinuxRenderTests.
+  pi-canvas:
+    name: pi-canvas (linux + sdl)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.2
+    defaults:
+      run:
+        working-directory: tools/pi-canvas
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Cairo/FontConfig/SDL2
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libcairo2-dev libfontconfig1-dev libsdl2-dev pkg-config fonts-dejavu-core
+          fc-cache -f
+      - name: Framebuffer canvas → PNG (Silica raw raster)
+        run: |
+          swift run --traits LinuxRaster pi-canvas out
+          test -f out/frame-00.png || { echo "no PNG frame produced"; exit 1; }
+      - name: SDL2 backend, headless (dummy driver + readback)
+        env:
+          SDL_VIDEODRIVER: dummy
+        run: |
+          swift run --traits LinuxRaster,SDL pi-canvas --sdl sdlout
+          test -f sdlout/sdl-frame-00.png || { echo "no SDL frame produced"; exit 1; }
