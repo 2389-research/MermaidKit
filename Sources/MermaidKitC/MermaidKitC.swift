@@ -223,7 +223,7 @@ public func mmk_free(_ ptr: UnsafeMutablePointer<CChar>?) {
 // read thereafter (an immutable, program-lifetime C string), so the shared
 // mutable-state check doesn't apply.
 nonisolated(unsafe) private let versionCString: UnsafeMutablePointer<CChar>? =
-    strdup("MermaidKitC 2.0.0")
+    strdup("MermaidKitC 2.1.0")
 
 /// The MermaidKitC ABI version. Returns a pointer to a static string that the
 /// caller MUST NOT free (unlike the `mmk_scene_json` / `mmk_narrate` returns).
