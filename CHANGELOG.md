@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.2.0 — Any source format, inline and narrated
+
+Format-aware entry points, so a rich-text host (a live editor, a document view)
+gets the same sized, themed `NSAttributedString` attachment **and** accessibility
+narration for *every* supported source format — not just Mermaid — without ever
+touching the parsers.
+
+- **Format-aware `MermaidRenderer` API.** A new `DiagramSourceFormat`
+  (`.mermaid`, `.dot`, `.dippin`, `.sqlDDL`, `.gitLog`) drives
+  `diagram(source:format:)` and format-aware `image` / `pngData` /
+  `attachmentString` / `altText(source:format:)`, plus diagram-based twins.
+  DOT, Dippin, SQL DDL and git-log sources now render inline and narrate exactly
+  like Mermaid. (#46, #47)
+- Non-Mermaid formats ride the **same NSCache path** as Mermaid — keyed by
+  format tag + source so same-text DOT and Mermaid can't collide — so a live
+  editor doesn't re-parse and re-render on every keystroke.
+
+### Fixed
+
+- **Arrowheads over tinted group boxes** (C4, architecture, block) no longer show
+  a pale canvas-colored **wedge**. The head is now a single opaque triangle
+  rather than a translucent head painted over a canvas-colored shaft-eraser —
+  which removes both the seam the eraser prevented and the wedge it caused. Both
+  render paths (CoreGraphics + the platform-free `RenderScene`) change in lockstep
+  so the draw-vs-scene conformance ratchet still holds. (#23)
+
+### Docs
+
+- The architecture/pipeline diagrams in the platform notes and package READMEs
+  are now **Mermaid** (` ```mermaid ` — rendered natively by GitHub, and by
+  MermaidKit itself), replacing the ASCII-art code fences. MermaidKit now
+  dogfoods its own renderer in its docs. (#49)
+
 ## 2.1.0 — Flutter, and any bare surface
 
 A sixth native platform (**Flutter**) and the raw-raster primitive that drives
