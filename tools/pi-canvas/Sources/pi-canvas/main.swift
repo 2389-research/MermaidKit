@@ -11,7 +11,12 @@ import MermaidRender
 // On a real Pi you'd swap PNGFramebuffer for LinuxFramebuffer() and drive
 // viewportX/Y from evdev (touch/gamepad); nothing else changes.
 
-let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
+let args = CommandLine.arguments.dropFirst()
+let useSDL = args.contains("--sdl")
+let outDir = args.first(where: { !$0.hasPrefix("--") }) ?? "."
+// Data.write / SDL readback don't create intermediate dirs — make it so a bare
+// `pi-canvas out` works without the caller pre-creating it.
+try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
 // A wall of diagrams scattered across a large virtual canvas (~1700×1200 pt).
 let items: [Placed] = [
@@ -60,7 +65,21 @@ let canvas = InfiniteCanvas(
     canvasBG: (0xEC, 0xEE, 0xF2),  // light gray canvas
     cardBG: (0xFF, 0xFF, 0xFF))    // white cards
 
-let fb = PNGFramebuffer(width: 640, height: 480, directory: outDir)
+let fb: Framebuffer
+#if canImport(CSDL2)
+if useSDL {
+    guard let sdl = SDLFramebuffer(width: 640, height: 480, readbackDir: outDir) else {
+        FileHandle.standardError.write(Data("SDL init failed\n".utf8)); exit(1)
+    }
+    fb = sdl
+    print("presenting via SDL2 (headless: software renderer + RenderReadPixels → PNG)")
+} else {
+    fb = PNGFramebuffer(width: 640, height: 480, directory: outDir)
+}
+#else
+_ = useSDL
+fb = PNGFramebuffer(width: 640, height: 480, directory: outDir)
+#endif
 
 // A pan sequence across the canvas, then a zoom-in — each frame culls to what's
 // visible and blits only those cards.
