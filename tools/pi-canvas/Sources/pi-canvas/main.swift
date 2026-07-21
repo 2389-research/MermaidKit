@@ -14,6 +14,9 @@ import MermaidRender
 let args = CommandLine.arguments.dropFirst()
 let useSDL = args.contains("--sdl")
 let outDir = args.first(where: { !$0.hasPrefix("--") }) ?? "."
+// Data.write / SDL readback don't create intermediate dirs — make it so a bare
+// `pi-canvas out` works without the caller pre-creating it.
+try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
 // A wall of diagrams scattered across a large virtual canvas (~1700×1200 pt).
 let items: [Placed] = [
