@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.1.0 — Flutter, and any bare surface
+
+A sixth native platform (**Flutter**) and the raw-raster primitive that drives
+**any bare surface** — a Raspberry Pi framebuffer, an SDL2 window, a GPU texture.
+Additive; existing platforms and output are unchanged.
+
+- **Flutter** (`flutter/mermaidkit`) renders all 30 types with a Dart
+  `CustomPainter` on Flutter's Skia/Impeller canvas — a fidelity match for the
+  Android backend, and one plugin reaches iOS, Android, web, and desktop:
+  - A `SceneWire` Dart model (sealed classes + a `type` discriminator) and
+    `MermaidPainter` / `MermaidDiagram`.
+  - A **`dart:ffi` bridge** (`MermaidNative`) over `mmk_scene_json` in the Swift
+    core built as a shared library, so an app passes a Mermaid *source string*:
+    `MermaidNative.scene("flowchart LR\n A --> B")`. The Flutter analogue of
+    Android's JNI and .NET's P/Invoke — `dart:ffi` calls the `@_cdecl` C ABI
+    directly.
+  - Optional `fontFamily` for bundled/custom label fonts.
+- **Raw raster on Linux.** `MermaidRenderer.rgbaRaster` — previously Apple-only —
+  now returns raw RGBA pixels on Linux too, reading the Cairo (Silica) image
+  surface directly. This is the primitive every display-server-free surface needs
+  (a PNG isn't enough): framebuffers, SDL, GPU upload.
+- **`tools/pi-canvas`** — a demo/proof: an infinite, pannable canvas of diagrams
+  composited into a 640×480 framebuffer, over the raw raster with no display
+  server. A single `Framebuffer` seam with three backends — a PNG stand-in,
+  `/dev/fb0` (RGB565), and **SDL2** (streaming texture) — verified on the Pi's
+  aarch64 architecture with the Silica/Cairo raster.
+- A `MermaidKitCShared` dynamic product already existed (the Windows DLL); it now
+  also backs the Flutter `dart:ffi` bridge and any P/Invoke-style consumer.
+
 ## 2.0.0 — Native everywhere
 
 MermaidKit renders natively on **five platforms** — macOS/iOS, Linux, **Android**,

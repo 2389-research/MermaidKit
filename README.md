@@ -9,14 +9,18 @@ JavaScript, no WebView. Parse, lay out, and render **30 Mermaid diagram
 types**, drawn with CoreGraphics/CoreText on Apple platforms and with Silica
 (Cairo/FontConfig) on Linux.
 
-As of **v2.0.0, MermaidKit renders natively on five platforms** — macOS/iOS,
-Linux, **Android** (Kotlin + `Canvas`), **Windows/.NET** (SkiaSharp), and
-**WebAssembly** — from one Swift layout core. A platform-free scene contract
-(`SceneWire`) carries the fully-resolved diagram across the C ABI; each platform
-paints it with a thin native renderer, and the core's output is proven
-**byte-identical across all five** in CI. See
+**MermaidKit renders natively on six platforms** — macOS/iOS, Linux, **Android**
+(Kotlin `Canvas`), **Windows/.NET** (SkiaSharp), **WebAssembly**, and **Flutter**
+(Dart `CustomPainter`) — from one Swift layout core, plus **any bare surface** (a
+Raspberry Pi framebuffer, an SDL2/GPU window) via the platform-free raw raster. A
+scene contract (`SceneWire`) carries the fully-resolved diagram across the C ABI;
+each platform paints it with a thin native renderer, and the core's output is
+proven **byte-identical across the five it compiles to** (Android, Windows, WASM,
+Linux, macOS) in CI. On Android, Windows, and Flutter an app passes a Mermaid
+*source string* — via JNI, P/Invoke, and `dart:ffi` — and gets a drawn diagram,
+no Swift toolchain of its own. See
 [`docs/notes/cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md),
-[`android/`](android/), and [`windows/`](windows/).
+[`android/`](android/), [`windows/`](windows/), and [`flutter/`](flutter/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
@@ -61,7 +65,7 @@ sub-millisecond), and results are cached per (source, theme, spacing).
 |  | MermaidKit | mermaid.js + WKWebView | [BeautifulMermaid](https://github.com/lukilabs/beautiful-mermaid-swift) |
 |---|---|---|---|
 | Diagram types | **30** | all | 6 |
-| Native platforms | **macOS, iOS, Linux, Android, Windows, WASM** | anywhere a webview runs | Apple |
+| Native platforms | **macOS, iOS, Linux, Android, Windows, WASM, Flutter** (+ framebuffer/SDL) | anywhere a webview runs | Apple |
 | Runtime | Swift + CoreGraphics | JS engine + web process | Swift (elk-swift layout) |
 | Dependencies | **none** | mermaid.js bundle | elk-swift |
 | Rendering | sync, ~ms, cached | async round-trip | sync + async |
@@ -81,11 +85,11 @@ see [SVG export](#svg-export-and-the-renderscene-ir)).
 Every type, rendered by MermaidKit itself, one image per diagram (light and
 dark): **[docs/GALLERY.md](docs/GALLERY.md)**.
 
-## Native on five platforms
+## Native on six platforms (and any bare surface)
 
 One Swift layout core; a thin native renderer per platform. The parse → layout →
 `RenderScene` pipeline is platform-free, so it cross-compiles to every target and
-its output is **byte-identical across all five** (proven in CI —
+its output is **byte-identical across the five it compiles to** (proven in CI —
 [`cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md)). The
 fully-resolved scene crosses the C ABI as the language-neutral **`SceneWire`**
 JSON; each platform paints it.
@@ -96,7 +100,14 @@ JSON; each platform paints it.
 | Linux | Silica (Cairo/FontConfig) | in-process | `LinuxRaster` trait |
 | **Android** | Kotlin `Canvas` (Skia) | JNI → `.so` | `implementation("ai.2389:mermaidkit-android:…")` — [`android/`](android/) |
 | **Windows / .NET** | SkiaSharp | P/Invoke → `.dll` | `MermaidKit` NuGet — [`windows/`](windows/) |
+| **Flutter** | Dart `CustomPainter` (Skia) | `dart:ffi` → shared lib | [`flutter/`](flutter/) — iOS, Android, web, desktop from one plugin |
 | **WebAssembly** | SVG / Canvas2D | WASI | `swift build --swift-sdk …wasm` |
+
+Beyond those, the platform-free **raw raster** (`MermaidRenderer.rgbaRaster`, on
+Apple and Linux) drives **any bare surface** with no display server — a Raspberry
+Pi framebuffer (`/dev/fb0`), an SDL2 window, a GPU texture. See
+[`tools/pi-canvas`](tools/pi-canvas) for an infinite, pannable canvas composited
+into a framebuffer.
 
 On Android, the whole integration is one line — and it themes itself to the app:
 
@@ -104,11 +115,15 @@ On Android, the whole integration is one line — and it themes itself to the ap
 MermaidDiagram("flowchart LR\n A[Start] --> B[End]", Modifier.fillMaxWidth())
 ```
 
-On Windows/.NET, a source string in, a Skia diagram out:
+On Windows/.NET and Flutter, a source string in, a Skia diagram out:
 
 ```csharp
-var scene = MermaidNative.Scene("flowchart LR\n A[Start] --> B[End]");
+var scene = MermaidNative.Scene("flowchart LR\n A[Start] --> B[End]");  // .NET, via P/Invoke
 new SceneRenderer().Draw(scene, canvas);
+```
+```dart
+final scene = MermaidNative.scene("flowchart LR\n A[Start] --> B[End]"); // Flutter, via dart:ffi
+CustomPaint(painter: MermaidPainter(scene!));
 ```
 
 Both go **source string → native Swift core → `SceneWire` → native renderer**,
@@ -333,7 +348,7 @@ Two targets:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "2.0.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.1.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
@@ -433,12 +448,21 @@ backend over the scene IR now ships from there too:
 the CoreGraphics-free `SVGRenderer` (see
 [SVG export](#svg-export-and-the-renderscene-ir)).
 
-**Does it run on Android / Windows / the web?** Yes — natively, as of v2.0.0.
-The Swift layout core cross-compiles to each; a thin native renderer paints the
-shared `SceneWire` scene (Kotlin `Canvas` on Android, SkiaSharp on Windows/.NET,
-SVG or Canvas2D on WebAssembly). An app passes a Mermaid *source string* and gets
-a drawn diagram — no Swift toolchain of its own. See [`android/`](android/),
-[`windows/`](windows/), and the platform notes in `docs/notes/`.
+**Does it run on Android / Windows / Flutter / the web?** Yes — natively. The
+Swift layout core cross-compiles to each; a thin native renderer paints the shared
+`SceneWire` scene (Kotlin `Canvas` on Android, SkiaSharp on Windows/.NET, a Dart
+`CustomPainter` on Flutter, SVG or Canvas2D on WebAssembly). On Android, Windows,
+and Flutter an app passes a Mermaid *source string* — via JNI, P/Invoke, and
+`dart:ffi` — and gets a drawn diagram, no Swift toolchain of its own. See
+[`android/`](android/), [`windows/`](windows/), [`flutter/`](flutter/), and the
+platform notes in `docs/notes/`.
+
+**Can I render on a Raspberry Pi / SDL / a bare framebuffer?** Yes —
+`MermaidRenderer.rgbaRaster` (Apple and Linux) returns raw RGBA pixels with no
+display server, so you can blit to `/dev/fb0`, an SDL2 texture, or a GPU surface.
+[`tools/pi-canvas`](tools/pi-canvas) is an infinite, pannable canvas composited
+into a 640×480 framebuffer (with an SDL2 backend), verified on the Pi's aarch64
+architecture.
 
 **Is the output really the same on every platform?** The scene is: the core's
 `SceneWire`/SVG output is byte-identical across macOS, Linux, Android, WASM, and
