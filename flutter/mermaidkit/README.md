@@ -39,7 +39,9 @@ flutter test
 > Text in a headless `flutter test` renders as boxes — the test environment ships
 > no real font (the standard Flutter "tofu"), same as a headless Skia build. Shapes,
 > strokes, and arrowheads render exactly; a real Flutter app (with system fonts)
-> renders labels too.
+> renders labels too. Pass `fontFamily:` to `MermaidDiagram`/`MermaidPainter` to
+> use a bundled/custom font (and to render text in the font-less test — see the
+> `MMK_FONT` path in `scene_render_test.dart`).
 
 ## Not yet here (next slice)
 

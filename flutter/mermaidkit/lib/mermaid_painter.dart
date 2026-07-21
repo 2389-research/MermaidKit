@@ -20,7 +20,14 @@ Color parseSceneColor(String hex) {
 
 class MermaidPainter extends CustomPainter {
   final SceneWire scene;
-  const MermaidPainter(this.scene);
+
+  /// Optional font family for diagram labels (a bundled/custom font). When null,
+  /// the platform default is used — which in a headless `flutter test` is the
+  /// placeholder font that draws each glyph as a filled box, so pass a real
+  /// family to render actual text off-device.
+  final String? fontFamily;
+
+  const MermaidPainter(this.scene, {this.fontFamily});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -133,6 +140,7 @@ class MermaidPainter extends CustomPainter {
         style: TextStyle(
           color: parseSceneColor(text.color),
           fontSize: text.fontSize,
+          fontFamily: fontFamily,
           fontWeight: switch (text.weight) {
             'medium' => FontWeight.w500,
             'semibold' => FontWeight.w600,
@@ -167,5 +175,6 @@ class MermaidPainter extends CustomPainter {
     ..strokeWidth = s.width;
 
   @override
-  bool shouldRepaint(covariant MermaidPainter oldDelegate) => oldDelegate.scene != scene;
+  bool shouldRepaint(covariant MermaidPainter oldDelegate) =>
+      oldDelegate.scene != scene || oldDelegate.fontFamily != fontFamily;
 }

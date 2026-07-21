@@ -58,12 +58,21 @@ void main() {
     final dir = Platform.environment['MMK_CAPTURE_DIR'];
     if (dir == null) return;
     final scene = _loadFlowchart();
+    // Optionally load a real font (MMK_FONT=path/to.ttf) and render labels with
+    // it — proving the headless "black box" glyphs are just the font-less test
+    // font, not a layout bug.
+    final fontPath = Platform.environment['MMK_FONT'];
+    String? family;
+    if (fontPath != null) {
+      await ui.loadFontFromList(File(fontPath).readAsBytesSync(), fontFamily: 'MmkFont');
+      family = 'MmkFont';
+    }
     const scale = 3.0;
     final w = (scene.size.w * scale).ceil();
     final h = (scene.size.h * scale).ceil();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder)..scale(scale);
-    MermaidPainter(scene).paint(canvas, Size(scene.size.w, scene.size.h));
+    MermaidPainter(scene, fontFamily: family).paint(canvas, Size(scene.size.w, scene.size.h));
     final image = await recorder.endRecording().toImage(w, h);
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
     File('$dir/flutter-flowchart.png').writeAsBytesSync(png!.buffer.asUint8List());
