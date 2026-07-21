@@ -285,7 +285,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            libcairo2-dev libfontconfig1-dev libsdl2-dev pkg-config fonts-dejavu-core
+            libcairo2-dev libfontconfig1-dev libsdl2-dev pkg-config fonts-dejavu-core fontconfig
           fc-cache -f
       - name: Framebuffer canvas → PNG (Silica raw raster)
         run: |
