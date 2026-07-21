@@ -1,7 +1,7 @@
 # MermaidKit — design context pack
 
 You are designing a brochure site (GitHub Pages) for MermaidKit. Everything
-in this pack was verified against the code at v0.8.0 on 2026-07-08. Cite
+in this pack was verified against the code at v2.2.0 on 2026-07-21. Cite
 facts as written; do not embellish, round up, or invent. Where a claim
 feels thin, use fewer claims — the diagrams do the impressing.
 
@@ -14,7 +14,7 @@ view, image / attributed-string / vector-PDF output, VoiceOver
 descriptions for every diagram, themed with a single value. MIT license.
 
 - Repo: https://github.com/2389-research/MermaidKit
-- Latest release: v0.8.0
+- Latest release: v2.2.0
 - Site target: https://2389-research.github.io/MermaidKit/ — a static
   `index.html` placed in the repo's `docs/` folder (GitHub Pages serves
   `docs/` from `main`; reference images relatively as `images/...`)
@@ -88,7 +88,7 @@ surface (all verified names):
 
 Install:
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "0.8.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.2.0")
 ```
 
 ### 3. Built to meet people where they are
@@ -157,7 +157,7 @@ subgraph boxes and `@{ shape }` shape library; HTML in labels beyond
 `<br/>`; FontAwesome icons; click/animation interactivity; mermaid.js
 theming directives (theming is `DiagramTheme`'s job).
 
-## Numbers the site may cite (all verified 2026-07-08)
+## Numbers the site may cite (all verified 2026-07-21)
 
 - **30** diagram types. **Zero** dependencies. Zero JavaScript, no
   WebView.
@@ -184,11 +184,11 @@ Each exists in light and dark; serve both via `<picture>` with
 dark variants).
 
 **Hero** — MermaidKit's own render pipeline as a sankey (~2200px wide):
-- https://raw.githubusercontent.com/2389-research/MermaidKit/v0.8.0/docs/images/hero-light.png
-- https://raw.githubusercontent.com/2389-research/MermaidKit/v0.8.0/docs/images/hero-dark.png
+- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.2.0/docs/images/hero-light.png
+- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.2.0/docs/images/hero-dark.png
 
 **Per-type gallery** (30 × 2, max 2000px wide). Pattern:
-`https://raw.githubusercontent.com/2389-research/MermaidKit/v0.8.0/docs/images/types/<name>.png`
+`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.2.0/docs/images/types/<name>.png`
 
 | name | the self-portrait shows |
 |---|---|
@@ -256,7 +256,7 @@ let pdf = MermaidRenderer.pdfData(source: source, theme: theme)
 
 Install:
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "0.8.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.2.0")
 ```
 
 ## Voice (non-negotiable)
@@ -291,5 +291,3 @@ Single page, static HTML/CSS, fast on a phone, light/dark aware. The
 diagrams are colorful; keep the chrome quiet around them. **No analytics
 or trackers** — the library's privacy story is "no network" and the site
 must live up to it. Don't claim full mermaid.js syntax parity.
-(Linux rendering *is* real as of v0.11.0 — MermaidRender draws via Silica/Cairo
-there; this brief otherwise reflects the v0.8.0 snapshot noted above.)
