@@ -319,3 +319,53 @@ jobs:
         run: |
           flutter pub get
           flutter test
+
+  # The Flutter dart:ffi seam (source string → the native mmk_* ABI → SceneWire).
+  # Split in two: a Swift job builds MermaidKitCShared.so + the Swift runtime and
+  # uploads it; the Flutter job downloads it and runs the ffi test against it
+  # (MMK_NATIVE=1 requires the native path, so a broken lib fails rather than skips).
+  flutter-ffi-lib:
+    name: flutter ffi (build native lib)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build MermaidKitCShared.so + bundle the Swift runtime
+        run: |
+          swift build -c release --product MermaidKitCShared
+          mkdir -p ffilibs
+          cp "$(find .build -name libMermaidKitCShared.so | head -1)" ffilibs/
+          cp /usr/lib/swift/linux/*.so ffilibs/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mermaidkit-ffi-libs
+          path: ffilibs/
+
+  flutter-ffi:
+    name: flutter ffi (source → scene)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: flutter-ffi-lib
+    container: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/download-artifact@v4
+        with:
+          name: mermaidkit-ffi-libs
+          path: ffilibs
+      - name: FFI seam — source string → native mmk_* → SceneWire
+        working-directory: flutter/mermaidkit
+        env:
+          MMK_NATIVE: "1"
+        run: |
+          libdir="$GITHUB_WORKSPACE/ffilibs"
+          flutter pub get
+          LD_LIBRARY_PATH="$libdir" MMK_LIB="$libdir/libMermaidKitCShared.so" \
+            flutter test test/ffi_test.dart
