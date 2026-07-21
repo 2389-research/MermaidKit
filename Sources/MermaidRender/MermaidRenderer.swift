@@ -10,6 +10,9 @@ import UniformTypeIdentifiers
 import CoreGraphics
 import CoreText
 import UIKit
+#elseif canImport(SilicaCairo)
+import SilicaCairo
+import Cairo
 #endif
 import MermaidLayout
 
@@ -151,6 +154,9 @@ public enum MermaidRenderer {
         #if canImport(AppKit) || canImport(UIKit)
         guard let img = image(source: source, theme: theme, spacing: spacing) else { return nil }
         return raster(from: img, targetWidth: targetWidth, background: background)
+        #elseif canImport(SilicaCairo)
+        guard let img = DiagramRenderer.renderImage(source: source, theme: theme, spacing: spacing) else { return nil }
+        return silicaRaster(from: img)
         #else
         return nil
         #endif
@@ -166,10 +172,48 @@ public enum MermaidRenderer {
         #if canImport(AppKit) || canImport(UIKit)
         guard let img = image(diagram: diagram, theme: theme, spacing: spacing) else { return nil }
         return raster(from: img, targetWidth: targetWidth, background: background)
+        #elseif canImport(SilicaCairo)
+        guard let img = DiagramRenderer.renderImage(diagram: diagram, title: nil,
+                                                    theme: theme, spacing: spacing) else { return nil }
+        return silicaRaster(from: img)
         #else
         return nil
         #endif
     }
+
+    #if canImport(SilicaCairo) && !canImport(AppKit) && !canImport(UIKit)
+    /// Extract raw RGBA pixels from a Silica (Cairo) render — the Linux/embedded
+    /// raw-raster path (framebuffers, SDL, GPU upload) that has no display server
+    /// and can't decode the PNG. Silica's `CGImage.data` is 8-bit premultiplied
+    /// RGBA, rows top-to-bottom, tightly packed — exactly the buffer such a
+    /// consumer wants. Returned at the natural render size (unlike the Apple path,
+    /// which scales to `targetWidth`).
+    private static func silicaRaster(from img: PlatformImage)
+        -> (pixels: [UInt8], width: Int, height: Int)? {
+        guard let surface = img.surface as? Cairo.Surface.Image, surface.format == .argb32 else { return nil }
+        surface.flush()
+        let w = surface.width, h = surface.height, stride = surface.stride
+        guard w > 0, h > 0 else { return nil }
+        var out = [UInt8](repeating: 0, count: w * h * 4)
+        let done: Bool? = surface.withUnsafeMutableBytes { (src: UnsafeMutablePointer<UInt8>) -> Bool in
+            for y in 0..<h {
+                let s = src + y * stride
+                var d = y * w * 4
+                for x in 0..<w {
+                    // Cairo ARGB32 is native-endian; on little-endian (aarch64/x86,
+                    // incl. the Pi) the bytes are B,G,R,A. Emit straight RGBA.
+                    out[d] = s[x * 4 + 2]      // R
+                    out[d + 1] = s[x * 4 + 1]  // G
+                    out[d + 2] = s[x * 4]      // B
+                    out[d + 3] = s[x * 4 + 3]  // A
+                    d += 4
+                }
+            }
+            return true
+        }
+        return done == true ? (out, w, h) : nil
+    }
+    #endif
 
     /// Upper bound (pixels) on a raster's width and derived height — a cap in
     /// the spirit of `MermaidParser.maxTextSize`/`maxEdges` that keeps a hostile
