@@ -12,7 +12,7 @@ flowchart LR
     native -->|"JNI"| core["mmk_scene_json<br/>(Swift core · libmermaidkit.so)"]
     core --> wire["SceneWire JSON<br/>(the contract)"]
     wire --> parse["SceneWire.parse<br/>(@Serializable, no glue)"]
-    parse --> draw["SceneRenderer.draw(canvas)"]
+    parse --> draw["SceneRenderer.draw(scene, canvas)"]
 ```
 
 ## Installation

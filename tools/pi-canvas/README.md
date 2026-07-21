@@ -2,7 +2,8 @@
 
 A proof that MermaidKit can drive an **infinite, pannable canvas of Mermaid
 diagrams composited into a fixed framebuffer** — e.g. `/dev/fb0` on a Raspberry
-Pi, no X11/Wayland/desktop — over the existing headless raster. No core changes.
+Pi, no X11/Wayland/desktop — over the headless raster. The only core addition
+was a Linux `rgbaRaster` primitive (see "The gap it closed").
 
 ```
 swift run pi-canvas <out-dir>                        # macOS: CoreGraphics raster → PNG
@@ -30,7 +31,7 @@ swift run --traits LinuxRaster,SDL pi-canvas --sdl <dir>   # present via SDL2 (n
     renderer, `SDL_RenderReadPixels` → PNG).
 - The demo pans across a wall of diagrams, then zooms in.
 
-Panning over already-rendered cards is pure memcpy — smooth at 60fps on a Pi 5;
+Panning over already-rendered cards is pure memcpy — smooth, since
 only the *first* sight of a new diagram costs a render.
 
 ## What's proven, and where
