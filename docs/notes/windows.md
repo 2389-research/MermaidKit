@@ -18,9 +18,13 @@ everywhere, with `windows-latest` as the authoritative CI target.
 
 ## Architecture — the same seam as Android
 
-```
-source ─▶ MermaidNative ─(P/Invoke)▶ mmk_scene_json ─▶ SceneWire JSON ─▶ SceneWire.Parse ─▶ SceneRenderer.Draw(SKCanvas)
- (app)     (.NET)               (Swift core, mermaidkit.dll)             (records)          (Skia)
+```mermaid
+flowchart LR
+    src["source<br/>(app)"] --> native["MermaidNative<br/>(.NET)"]
+    native -->|"P/Invoke"| core["mmk_scene_json<br/>(Swift core · mermaidkit.dll)"]
+    core --> wire["SceneWire JSON<br/>(records)"]
+    wire --> parse["SceneWire.Parse"]
+    parse --> draw["SceneRenderer.Draw(SKCanvas)<br/>(Skia)"]
 ```
 
 The Swift core cross-compiles to Windows (proven — the conformance harness builds

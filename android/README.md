@@ -6,9 +6,13 @@ An app hands over a Mermaid **source string**; `MermaidNative` parses it nativel
 **`SceneWire`** scene, and `SceneRenderer` draws it with a real Android
 `Canvas`/`Paint`.
 
-```
-source ─▶ MermaidNative ─(JNI)▶ mmk_scene_json ─▶ SceneWire JSON ─▶ SceneWire.parse ─▶ SceneRenderer.draw(canvas)
- (app)     (this module)     (Swift core, libmermaidkit.so)          (the contract)     (@Serializable, no glue)
+```mermaid
+flowchart LR
+    src["source<br/>(app)"] --> native["MermaidNative<br/>(this module)"]
+    native -->|"JNI"| core["mmk_scene_json<br/>(Swift core · libmermaidkit.so)"]
+    core --> wire["SceneWire JSON<br/>(the contract)"]
+    wire --> parse["SceneWire.parse<br/>(@Serializable, no glue)"]
+    parse --> draw["SceneRenderer.draw(canvas)"]
 ```
 
 ## Installation
