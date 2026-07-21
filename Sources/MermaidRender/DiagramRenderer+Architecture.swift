@@ -43,10 +43,9 @@ extension DiagramRenderer {
             strokePolyline(edge.points, in: context)
             context.restoreGState()
             if edge.arrow, edge.points.count >= 2 {
-                drawArrowhead(at: edge.points[edge.points.count - 1],
-                              from: edge.points[edge.points.count - 2],
-                              color: theme.ink.withAlphaComponent(0.55),
-                              canvas: theme.canvas, in: context)
+                drawFilledArrowhead(at: edge.points[edge.points.count - 1],
+                                    from: edge.points[edge.points.count - 2],
+                                    color: theme.ink, in: context)
             }
         }
 

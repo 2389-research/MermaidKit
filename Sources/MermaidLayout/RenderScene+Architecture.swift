@@ -55,7 +55,7 @@ extension RenderScene {
             if edge.arrow, edge.points.count >= 2 {
                 elements += filledArrowheadElements(
                     at: edge.points[edge.points.count - 1], from: edge.points[edge.points.count - 2],
-                    color: theme.ink.withAlpha(0.55), canvas: theme.canvas)
+                    color: theme.ink)
             }
         }
 

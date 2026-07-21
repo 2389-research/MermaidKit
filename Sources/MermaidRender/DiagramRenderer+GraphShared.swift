@@ -105,6 +105,33 @@ extension DiagramRenderer {
         context.restoreGState()
     }
 
+    /// A filled arrowhead for the box families (C4 / architecture / block) whose
+    /// heads sit over tinted group containers. Unlike `drawArrowhead`, it paints
+    /// ONE opaque triangle (`color` forced to full alpha) with no `theme.canvas`
+    /// seam-eraser — an opaque triangle needs none, and the eraser read as a wedge
+    /// wherever the head crossed a group tint (canvas ≠ tint). See issue #23.
+    static func drawFilledArrowhead(
+        at tip: CGPoint, from origin: CGPoint, color: PlatformColor, in context: CGContext
+    ) {
+        let angle = atan2(tip.y - origin.y, tip.x - origin.x)
+        let length: CGFloat = 8.5
+        let spread: CGFloat = 0.40
+        let path = CGMutablePath()
+        path.move(to: tip)
+        path.addLine(to: CGPoint(x: tip.x - length * cos(angle - spread), y: tip.y - length * sin(angle - spread)))
+        path.addLine(to: CGPoint(x: tip.x - length * cos(angle + spread), y: tip.y - length * sin(angle + spread)))
+        path.closeSubpath()
+
+        // Force full alpha on the colour, not the CGColor: Silica's CGColor (Linux)
+        // has no `copy(alpha:)`, whereas `PlatformColor.withAlphaComponent` exists on
+        // every backend this file compiles for.
+        context.saveGState()
+        context.setFillColor(resolvedCGColor(color.withAlphaComponent(1)))
+        context.addPath(path)
+        context.fillPath()
+        context.restoreGState()
+    }
+
     /// Thin bounding rects along a polyline's segments — used as soft obstacles
     /// so an edge label avoids sitting on *another* edge's line (which, for an
     /// antiparallel pair, pushes each label onto the correct outer side).

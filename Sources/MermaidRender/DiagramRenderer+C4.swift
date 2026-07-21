@@ -31,8 +31,8 @@ extension DiagramRenderer {
             for p in pts.dropFirst() { context.addLine(to: p) }
             context.strokePath()
             context.restoreGState()
-            drawArrowhead(at: pts[pts.count - 1], from: pts[pts.count - 2],
-                          color: theme.ink.withAlphaComponent(0.6), canvas: theme.canvas, in: context)
+            drawFilledArrowhead(at: pts[pts.count - 1], from: pts[pts.count - 2],
+                                color: theme.ink, in: context)
         }
 
         // Boxes.

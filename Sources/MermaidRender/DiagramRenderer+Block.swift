@@ -59,9 +59,7 @@ extension DiagramRenderer {
 
             let tip = edge.points[edge.points.count - 1]
             let from = edge.points[edge.points.count - 2]
-            drawArrowhead(at: tip, from: from,
-                          color: theme.ink.withAlphaComponent(0.7),
-                          canvas: theme.canvas, in: context)
+            drawFilledArrowhead(at: tip, from: from, color: theme.ink, in: context)
         }
 
         // Edge labels last so their canvas pad sits over the shafts.
