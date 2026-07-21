@@ -14,12 +14,12 @@ Feature groups are labeled **G1–G12** and referenced by shorthand throughout.
 | Key | Value |
 | :--- | :--- |
 | Name | MermaidKit |
-| Definition | A native Swift library that parses, lays out, and renders [Mermaid](https://mermaid.js.org) diagrams. The diagram source is the input; the library produces typed models, pure geometry (a scene IR), and drawn images and PDF — on Apple platforms via CoreGraphics/CoreText, on Linux via Silica (Cairo/FontConfig). No JavaScript, no WebView, no Mermaid.js. |
-| Status | **1.4** — stable public API (the 1.0 entry points are frozen; model/layout field changes are semver-major). Latest tag `v1.4.0`. Since 1.0, all additive: alternate front-ends (Graphviz DOT, Dippin, SQL DDL, and a `git log` → gitgraph front-end) and DOT export (**G10**), a platform-free `RenderScene` render IR with standalone SVG export for all 30 types (**G12**), a terminal renderer (**G11**), diagram narration (**G6**), and two new flowchart node shapes (**G2**). Rendering ships on Apple platforms and on Linux (behind the `LinuxRaster` package trait, so no-trait consumers keep a Silica-free graph); `MermaidLayout` is platform-free. |
+| Definition | A native Swift library that parses, lays out, and renders [Mermaid](https://mermaid.js.org) diagrams. The diagram source is the input; the library produces typed models, pure geometry (a scene IR), and drawn images and PDF — natively on Apple (CoreGraphics/CoreText), Linux (Silica/Cairo), Android (Kotlin `Canvas`/Skia), Windows/.NET (SkiaSharp), WebAssembly, and Flutter (Dart), from one platform-free layout core. No JavaScript, no WebView, no Mermaid.js. |
+| Status | **2.2** — stable public API (the 1.0 entry points are frozen; model/layout field changes are semver-major). Latest tag `v2.2.0`. Since 1.0, all additive: alternate front-ends (Graphviz DOT, Dippin, SQL DDL, and a `git log` → gitgraph front-end) and DOT export (**G10**), a platform-free `RenderScene` render IR with standalone SVG export for all 30 types (**G12**), a terminal renderer (**G11**), diagram narration (**G6**), two new flowchart node shapes (**G2**), format-aware attachment/narration entry points, and — over the platform-free `RenderScene`/`SceneWire` contract — native renderers on Android (Kotlin `Canvas`), Windows/.NET (SkiaSharp), WebAssembly, and Flutter, plus a bare-surface RGBA raster. Apple rendering is dependency-free; Linux/Silica is behind the `LinuxRaster` package trait (so no-trait consumers keep a Silica-free graph); `MermaidLayout` is platform-free. |
 | Repository | github.com/2389-research/MermaidKit |
-| Platforms | Rendering: macOS 14+, iOS 17+, visionOS 1+ (CoreGraphics/CoreText); Linux (Silica/Cairo). Geometry (`MermaidLayout`): platform-free — builds and tests on any swift-corelibs-foundation target. |
+| Platforms | Rendering: Apple — macOS 14+, iOS 17+, visionOS 1+ (CoreGraphics/CoreText); Linux (Silica/Cairo); Android (Kotlin `Canvas`/Skia via JNI); Windows/.NET (SkiaSharp); WebAssembly; Flutter (Dart `CustomPainter`); plus a bare-surface RGBA raster (framebuffer/SDL). Geometry (`MermaidLayout`): platform-free — builds and tests on any swift-corelibs-foundation target. |
 | Language / runtime | Swift 6 (`swift-tools-version: 6.2`, strict concurrency; the Silica backend's transitive graph sets a Swift 6.2 / Xcode 26 floor). Drawing via CoreGraphics/CoreText on Apple, Silica/Cairo on Linux. Zero JavaScript at runtime; local-only. |
-| Rendering | Native geometry pipeline: parse → layout → common scene IR → draw. Both backends share the layout and per-type draw code; only the platform surface (CoreGraphics vs Silica) differs. No web view, no headless browser, no Mermaid.js. |
+| Rendering | Native geometry pipeline: parse → layout → common scene IR → draw. The layout core and scene IR are platform-free; each platform supplies only the draw surface (CoreGraphics, Silica/Cairo, Android/Skia `Canvas`, SkiaSharp, Flutter `Canvas`, or SVG/Canvas2D). No web view, no headless browser, no Mermaid.js. |
 | Dependencies | Zero third-party packages on Apple. On Linux the render backend adds Silica (Cairo/FontConfig); `MermaidLayout` depends on nothing. |
 | Coverage | **30 distinct diagram types** (`MermaidDiagram` enum, 30-branch parser dispatch, 30-row README matrix, 30 fixtures). |
 | Verification | 374 package tests on macOS, 0 failures (3 intentionally env-gated skips). On Linux, 356 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` suite plus Silica render smoke tests (all 30 fixtures render). |
@@ -109,8 +109,10 @@ design in `SceneGeometryAndLinting.md`.
 
 Drawing of the scene with one theme value re-skinning every type — CoreGraphics/
 CoreText on Apple (macOS 14+, iOS 17+, visionOS 1+), Silica (Cairo/FontConfig)
-on Linux. The `MermaidRender` target; both backends share the layout and
-per-type draw code, so a diagram type reaches every platform at once.
+on Linux — the `MermaidRender` target. Both share the layout and per-type
+draw code, so a new diagram type reaches every Apple/Linux surface at once; the
+platform-free `RenderScene` (**G12**) carries the same scene to the Android,
+Windows/.NET, WebAssembly, and Flutter renderers.
 
 | Feature | Specific |
 | :--- | :--- |
@@ -144,7 +146,7 @@ and linting, with text measurement injected. DocC: `HeadlessLayout.md`.
 | Injected measurement | Layout refuses to know about fonts: a `DiagramTextMeasurer` closure is the sole text-metrics seam, so the same measurer feeds layout, lowering, linting, and drawing — geometry sees exactly what the renderer paints. |
 | Public seams | `MermaidParser.parse`, `DiagramLayoutEngine.layout(_:measure:spacing:)`, `DiagramScene.lower`, `DiagramLayoutLinter.lint`/`.delta`, `MermaidAltText.describe` — each usable without any renderer. |
 | Interop by construction | Because the input is Mermaid text and the output is a typed model + inspectable scene IR + lint report, any tool that emits Mermaid drives MermaidKit, and any tool can reason over the geometry programmatically. |
-| Compilation-target research | `docs/notes/ir-compilation-targets.md` explores lowering the same IR to targets beyond NSImage/UIImage. The Linux/Silica backend (`docs/notes/linux-rendering-via-silica.md`) was the first realized instance; the platform-free `RenderScene` IR + SVG backend (**G12**) is the second, and the planned Android (Kotlin Canvas) renderer (`docs/notes/android.md`) reuses the same seam. |
+| Compilation-target research | `docs/notes/ir-compilation-targets.md` explores lowering the same IR to targets beyond NSImage/UIImage. The Linux/Silica backend (`docs/notes/linux-rendering-via-silica.md`) was the first realized instance; the platform-free `RenderScene` IR + SVG backend (**G12**) is the second; the Android (Kotlin `Canvas`), Windows/.NET (SkiaSharp), WebAssembly, and Flutter renderers reuse the same seam. |
 
 ### G8 — Fidelity & determinism guarantees
 
@@ -207,7 +209,7 @@ A platform-free render pipeline: every diagram lowers to `RenderScene` — a
 `RenderScene.swift`, `RenderScene+*.swift`, `SVGRenderer.swift` (all in
 `MermaidLayout`); `MermaidRenderer+SVG.swift` in `MermaidRender`. This is the
 second realized instance of the compilation-target seam (**G7**) and the
-foundation for the planned plugin contract and Android renderer.
+foundation for the planned plugin contract and for the shipped Android, Windows/.NET, WebAssembly, and Flutter renderers.
 
 | Feature | Specific |
 | :--- | :--- |
@@ -215,7 +217,7 @@ foundation for the planned plugin contract and Android renderer.
 | Every type lowers | `RenderScene.from(_:theme:measure:spacing:)` is an exhaustive switch over all 30 diagram families (`RenderScene+Dispatch.swift`), so it never returns nil — one `from(_:theme:measure:)` per family runs that type's `DiagramLayoutEngine.layout` and hands the placed layout to the scene lowering. |
 | SVG export | `SVGRenderer.svg(_ scene:)` renders a `RenderScene` to a standalone SVG document string, entirely within the platform-free `MermaidLayout` target (no CoreGraphics). `MermaidRenderer.svg(source:theme:spacing:)` is the end-to-end convenience (parse → scene → SVG); `MermaidRenderer.renderScene(source:theme:spacing:)` exposes the scene itself. |
 | Determinism-gated | The cross-process determinism gate (**G8**) diffs the `RenderScene`/SVG signature alongside the raster signature across two fresh processes in CI, so a hash-order leak into the vector output fails the build. |
-| Honest scope | Today the IR drives SVG. A Kotlin Canvas / Android renderer over the same `Codable` scene is planned, not shipped — see `docs/notes/android.md`. |
+| Honest scope | The same `Codable` scene drives SVG plus the native Android (Kotlin `Canvas`), Windows/.NET (SkiaSharp), WebAssembly, and Flutter renderers — see `docs/notes/android.md` and `docs/notes/windows.md`. |
 
 ---
 

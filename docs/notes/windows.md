@@ -21,7 +21,7 @@ everywhere, with `windows-latest` as the authoritative CI target.
 ```mermaid
 flowchart LR
     src["source<br/>(app)"] --> native["MermaidNative<br/>(.NET)"]
-    native -->|"P/Invoke"| core["mmk_scene_json<br/>(Swift core · mermaidkit.dll)"]
+    native -->|"P/Invoke"| core["mmk_scene_json<br/>(Swift core · MermaidKitCShared.dll)"]
     core --> wire["SceneWire JSON<br/>(records)"]
     wire --> parse["SceneWire.Parse"]
     parse --> draw["SceneRenderer.Draw(SKCanvas)<br/>(Skia)"]
@@ -39,10 +39,15 @@ same `SceneWire` JSON contract; a C# `SceneRenderer` over SkiaSharp paints it.
   `SceneRenderer` (SkiaSharp) — builds and its xUnit tests pass, parsing the exact
   JSON the core emits and rendering real ink. Verified on Linux SkiaSharp locally
   and on `windows-latest` in CI (where system fonts render text too).
-- **Still open:** the P/Invoke bridge (`MermaidNative` → the Swift-built Windows
-  DLL, so an app passes a *source string* + a measure callback) — mirroring
-  Android's JNI seam; then Material-style theming across the ABI and a WinUI/WPF
-  control; then a NuGet package bundling the DLL for each Windows arch.
+- **Done + verified:** the **P/Invoke bridge** — `MermaidNative` binds
+  `[DllImport("MermaidKitCShared")]` to `mmk_scene_json` / `mmk_narrate` /
+  `mmk_version` / `mmk_free`, so an app passes a Mermaid *source string* and gets a
+  `SceneWire` scene back. `PInvokeTests` drives it end-to-end; CI builds and runs it
+  on `windows-latest` against the native library.
+- **Still open:** threading a **device-font measure callback** through P/Invoke (the
+  first slice passes none, so native layout uses a coarse glyph-box metric); then
+  Material-style theming across the ABI and a WinUI/WPF control; then a NuGet package
+  bundling the DLL for each Windows arch.
 
 Related: [`android.md`](android.md) (the same arc, Kotlin/JNI side) and
 [`cross-platform-conformance.md`](cross-platform-conformance.md).

@@ -138,7 +138,7 @@ contract (#14) reads, and its bytes are **determinism-gated across processes**
 
 - **Compose-first + classic View**, mirroring the Apple `MermaidView`:
   ```kotlin
-  MermaidDiagram(source = mmd, theme = MermaidTheme.fromMaterial(), modifier = Modifier.fillMaxWidth())
+  MermaidDiagram(source = mmd, theme = MermaidTheme.fromMaterial(MaterialTheme.colorScheme), modifier = Modifier.fillMaxWidth())
   ```
 - **One Gradle line**, nothing else:
   ```kotlin
