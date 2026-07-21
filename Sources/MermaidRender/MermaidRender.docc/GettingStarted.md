@@ -53,7 +53,8 @@ MermaidView(source, theme: DiagramTheme(prefersDark: true), spacing: .compact)
 ```swift
 let image = MermaidRenderer.image(
     source: source,
-    theme: DiagramTheme(prefersDark: view.effectiveAppearance.isDark)
+    theme: DiagramTheme(prefersDark:
+        view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
 )
 imageView.image = image   // NSImage on macOS, UIImage elsewhere
 ```

@@ -59,7 +59,7 @@ Hand your geometry to the linter:
 
 ```swift
 extension DiagramScene {
-    static func from(_ layout: VennLayout) -> DiagramScene { … }
+    static func from(_ layout: VennLayout, measure: DiagramTextMeasurer) -> DiagramScene { … }
 }
 ```
 

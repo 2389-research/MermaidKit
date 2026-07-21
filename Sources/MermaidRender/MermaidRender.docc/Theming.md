@@ -30,6 +30,15 @@ tuned to stay distinct on both appearances).
 ## A brand theme
 
 ```swift
+extension NSColor {
+    // NSColor has no hex initializer; this convenience keeps the example concise.
+    convenience init(hex: UInt32) {
+        self.init(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+                  green: CGFloat((hex >> 8) & 0xFF) / 255,
+                  blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+    }
+}
+
 extension DiagramTheme {
     static func brand(dark: Bool) -> DiagramTheme {
         DiagramTheme(
