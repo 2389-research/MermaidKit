@@ -55,7 +55,7 @@ extension RenderScene {
                 points: edge.points, stroke: Stroke(color: shaftColor, width: 1.5))))
             elements += filledArrowheadElements(
                 at: edge.points[edge.points.count - 1], from: edge.points[edge.points.count - 2],
-                color: theme.ink.withAlpha(0.7), canvas: theme.canvas)
+                color: theme.ink)
         }
 
         // 3. Edge labels last so their canvas chip sits over the shafts.

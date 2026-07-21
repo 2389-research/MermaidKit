@@ -6,14 +6,14 @@ import CoreGraphics
 extension RenderScene {
 
     /// A filled arrowhead at `tip`, oriented along the final segment from
-    /// `origin` — the platform-free twin of `DiagramRenderer.drawArrowhead`
-    /// (MermaidRender/DiagramRenderer+GraphShared.swift). Two coincident
-    /// triangles: a canvas-colored one erases the shaft beneath, then the
-    /// (often translucent) arrow color paints on top so the shaft's alpha
-    /// doesn't add a darker seam down the middle. Shared by the box families
-    /// whose arrowhead color differs from the shaft (C4, architecture, block).
+    /// `origin` — the platform-free twin of `DiagramRenderer.drawFilledArrowhead`
+    /// (MermaidRender/DiagramRenderer+GraphShared.swift). ONE opaque triangle in
+    /// `color`: an opaque head needs no seam-eraser, and the earlier canvas-colored
+    /// eraser triangle read as a wedge wherever the head crossed a group tint
+    /// (canvas ≠ tint). See issue #23. Used by the box families (C4, architecture,
+    /// block); callers pass an opaque `color`.
     static func filledArrowheadElements(
-        at tip: CGPoint, from origin: CGPoint, color: DiagramColor, canvas: DiagramColor
+        at tip: CGPoint, from origin: CGPoint, color: DiagramColor
     ) -> [Element] {
         let angle = atan2(tip.y - origin.y, tip.x - origin.x)
         let length: CGFloat = 8.5, spread: CGFloat = 0.40
@@ -22,10 +22,7 @@ extension RenderScene {
             CGPoint(x: tip.x - length * cos(angle - spread), y: tip.y - length * sin(angle - spread)),
             CGPoint(x: tip.x - length * cos(angle + spread), y: tip.y - length * sin(angle + spread)),
         ]
-        return [
-            .shape(Shape(path: .polygon(tri), fill: canvas, stroke: nil)),
-            .shape(Shape(path: .polygon(tri), fill: color, stroke: nil)),
-        ]
+        return [.shape(Shape(path: .polygon(tri), fill: color.withAlpha(1), stroke: nil))]
     }
 
     /// Lowers a `C4Layout` into a fully-resolved `RenderScene` — the
@@ -56,8 +53,7 @@ extension RenderScene {
             elements.append(.polyline(Polyline(
                 points: pts, stroke: Stroke(color: theme.ink.withAlpha(0.5), width: 1))))
             elements += filledArrowheadElements(
-                at: pts[pts.count - 1], from: pts[pts.count - 2],
-                color: theme.ink.withAlpha(0.6), canvas: theme.canvas)
+                at: pts[pts.count - 1], from: pts[pts.count - 2], color: theme.ink)
         }
 
         // 3. Element boxes: tinted rounded rects (external = dashed border +
