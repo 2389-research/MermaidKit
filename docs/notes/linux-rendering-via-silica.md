@@ -15,7 +15,8 @@ through `CGContext`, the port is mostly a **thin adapter** that gives Silica's
 `CGContext` the exact Apple method names you already call, plus a small
 platform layer (`PlatformColor`/`Font`/`Image`) and a **text path** that trades
 CoreText for Silica's glyph API. MermaidKit renders all 30 diagram types on
-Linux, sharing 100% of the layout and per-type draw code. Output is faithful to
+Linux (opt-in via the `LinuxRaster` package trait), sharing 100% of the layout
+and per-type draw code. Output is faithful to
 macOS — same geometry, same drawing — not pixel-identical: the system font
 differs (DejaVu via FontConfig vs SF), so glyphs and text-driven node sizes
 shift slightly. The only genuinely different subsystem is text.

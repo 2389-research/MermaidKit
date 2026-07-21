@@ -10,7 +10,8 @@ produced by `MermaidLayout` and renders it with CoreGraphics/CoreText on
 macOS, iOS, iPadOS, and visionOS, and with Silica (Cairo/FontConfig) on Linux —
 the same layout and per-type draw code backs both. There is no JavaScript and
 no WebView; on Apple the only dependency is `MermaidLayout`, and on Linux the
-render backend additionally links Silica.
+render backend additionally links Silica — behind the `LinuxRaster` package trait
+(off by default), so no-trait consumers resolve a Silica-free graph everywhere.
 
 Three ways in, from highest-level to lowest:
 

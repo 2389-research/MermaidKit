@@ -4,7 +4,7 @@
 > - **Part A is obsolete** — all 7 "missing" types now ship end-to-end (6 fully; EventModeling partial). See the Part A banner.
 > - **Largely FIXED:** flowchart (8/13), sequenceDiagram (12 gaps + the alias bug), packet-beta (→ 0 gaps), radar-beta (3/4), treemap-beta (2/3), gantt phantom-task hazard + duration units, and the cross-cutting front-matter fence.
 > - **Still accurate:** classDiagram, stateDiagram-v2, erDiagram (untouched by the honesty pass), plus mindmap, block/kanban/architecture/sankey/pie/quadrant/requirement and several beta feature-gaps.
-> - **Line numbers predate the per-type split** — the monolithic `MermaidParser.swift` parsers cited below (flowchart/sequence/class/state/er) now live in per-type `MermaidParser+<Type>.swift` files. Cited line numbers are historical.
+> - **Parser locations** — the big-five parsers cited below (flowchart/sequence/class/state/er) still live in the monolithic `MermaidParser.swift`; only the newer diagram types have per-type `MermaidParser+<Type>.swift` files. Cited `MermaidParser.swift` line numbers may have drifted since this audit.
 >
 > Individual sections carry a bold **Reconciled 2026-07-15:** note; resolved worst-gaps are struck through and tagged **[FIXED]/[PARTIAL]/[remains]**.
 
