@@ -98,6 +98,38 @@ final class FormatAwareEntryTests: XCTestCase {
         }
     }
 
+    #if canImport(AppKit)
+    /// The core of #46: the attachment's image carries the SAME narration as
+    /// `altText(source:format:)` — accessibility parity with Mermaid, for every
+    /// front-end. (AppKit sets `accessibilityDescription` off the main thread;
+    /// UIKit's `accessibilityLabel` is @MainActor, so this is the AppKit lock.)
+    func testAttachmentCarriesNarration() throws {
+        for (format, src) in allFormats {
+            let expected = try XCTUnwrap(MermaidRenderer.altText(source: src, format: format))
+            let attr = try XCTUnwrap(MermaidRenderer.attachmentString(source: src, format: format, theme: theme))
+            let attachment = attr.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment
+            let image = try XCTUnwrap(attachment?.image)
+            XCTAssertEqual(image.accessibilityDescription, expected,
+                           "\(format): attachment narration must match altText")
+        }
+    }
+    #endif
+
+    /// A repeat render of the same non-Mermaid source is consistent (the format-
+    /// aware path is cached like the Mermaid path — a hit must return the same
+    /// picture, not a stale or divergent one).
+    func testRepeatRenderIsConsistent() throws {
+        let a = try XCTUnwrap(MermaidRenderer.attachmentString(source: dot, format: .dot, theme: theme))
+        let b = try XCTUnwrap(MermaidRenderer.attachmentString(source: dot, format: .dot, theme: theme))
+        let ia = (a.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment)?.image
+        let ib = (b.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment)?.image
+        XCTAssertEqual(ia?.size, ib?.size)
+        // Same text under a different format is dispatched to a different parser
+        // (format is part of the cache key, not just the source): DOT text is not
+        // valid Mermaid, so `.mermaid` returns nil while `.dot` rendered fine.
+        XCTAssertNil(MermaidRenderer.attachmentString(source: dot, format: .mermaid, theme: theme))
+    }
+
     /// The already-parsed diagram overload (parse it yourself).
     func testAttachmentFromDiagram() throws {
         let chart = try XCTUnwrap(DOTParser.parse(dot))

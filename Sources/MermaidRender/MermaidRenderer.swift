@@ -155,8 +155,18 @@ public enum MermaidRenderer {
     public static func image(source: String, format: DiagramSourceFormat, theme: DiagramTheme,
                              spacing: DiagramSpacing = .regular) -> PlatformImage? {
         if format == .mermaid { return image(source: source, theme: theme, spacing: spacing) }
+        #if canImport(AppKit) || canImport(UIKit)
+        // Route through the cached attachment (like `image(source:)`) so a repeat
+        // render of the same non-Mermaid source is a cache hit, not a re-parse.
+        guard let attr = attachmentString(source: source, format: format, theme: theme, spacing: spacing),
+              attr.length > 0,
+              let attachment = attr.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment
+        else { return nil }
+        return attachment.image
+        #else
         guard let diagram = diagram(source: source, format: format) else { return nil }
         return image(diagram: diagram, theme: theme, spacing: spacing)
+        #endif
     }
 
     /// PNG bytes for a source in the given `format`.
@@ -191,8 +201,11 @@ public enum MermaidRenderer {
                                         theme: DiagramTheme,
                                         spacing: DiagramSpacing = .regular) -> NSAttributedString? {
         if format == .mermaid { return attachmentString(source: source, theme: theme, spacing: spacing) }
-        guard let diagram = diagram(source: source, format: format) else { return nil }
-        return DiagramRenderer.attachmentString(diagram: diagram, title: nil, theme: theme, spacing: spacing)
+        // Cached, keyed on (format-tagged source, theme, spacing) — the parse only
+        // fires on a miss, so repeat renders (live editor) don't re-parse.
+        return DiagramRenderer.attachmentString(
+            source: source, formatTag: format.rawValue, theme: theme, spacing: spacing,
+            parse: { diagram(source: source, format: format) })
     }
 
     /// The attachment string for an already-parsed diagram (parse it yourself),
