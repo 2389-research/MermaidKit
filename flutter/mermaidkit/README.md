@@ -39,13 +39,28 @@ flutter test
 > Text in a headless `flutter test` renders as boxes — the test environment ships
 > no real font (the standard Flutter "tofu"), same as a headless Skia build. Shapes,
 > strokes, and arrowheads render exactly; a real Flutter app (with system fonts)
-> renders labels too.
+> renders labels too. Pass `fontFamily:` to `MermaidDiagram`/`MermaidPainter` to
+> use a bundled/custom font (and to render text in the font-less test — see the
+> `MMK_FONT` path in `scene_render_test.dart`).
+
+## The native bridge (dart:ffi)
+
+`MermaidNative` (`lib/mermaid_native.dart`) is the Flutter analogue of Android's
+JNI and .NET's P/Invoke — `dart:ffi` calls the same `@_cdecl` C ABI directly, so a
+Flutter app hands over a Mermaid **source string** and gets a scene:
+
+```dart
+final scene = MermaidNative.scene("flowchart LR\n A[Start] --> B[End]");
+// → CustomPaint(painter: MermaidPainter(scene!))
+```
+
+It loads `MermaidKitCShared` (the Swift core built as a shared library —
+`swift build --product MermaidKitCShared`; an app bundles the `.so`/`.dylib`/`.dll`
+next to its binary, or points at one via the `MMK_LIB` env var). `test/ffi_test.dart`
+drives the full seam — source → native → `SceneWire` — verified in CI (a Swift job
+builds the lib, the Flutter job tests against it).
 
 ## Not yet here (next slice)
 
-- **The `dart:ffi` bridge** — `MermaidNative` over `mmk_scene_json` in the Swift
-  core built as a shared library, so an app passes a Mermaid *source string*
-  (`MermaidNative.scene("flowchart LR\n A --> B")`) rather than a pre-lowered
-  scene. The Flutter analogue of the Android JNI and .NET P/Invoke bridges — `dart:ffi`
-  calls the same `@_cdecl` C ABI directly.
-- Then a `MermaidDiagram.source(...)` convenience + theming across the ABI.
+- A `MermaidDiagram.source(...)` convenience wrapping `MermaidNative.scene`, and
+  theming across the ABI (`mmk_scene_json_themed`, already on the Swift side).

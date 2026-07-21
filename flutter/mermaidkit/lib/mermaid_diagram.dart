@@ -14,14 +14,19 @@ import 'scene_wire.dart';
 /// .NET renderers landed before their bridges.)
 class MermaidDiagram extends StatelessWidget {
   final SceneWire scene;
-  const MermaidDiagram(this.scene, {super.key});
+
+  /// Optional font family for labels (a bundled/custom font); null uses the
+  /// platform default.
+  final String? fontFamily;
+
+  const MermaidDiagram(this.scene, {super.key, this.fontFamily});
 
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: scene.size.h > 0 ? scene.size.w / scene.size.h : 1.0,
       child: CustomPaint(
-        painter: MermaidPainter(scene),
+        painter: MermaidPainter(scene, fontFamily: fontFamily),
         size: Size.infinite,
       ),
     );
