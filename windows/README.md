@@ -40,11 +40,17 @@ dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj
 CI runs this on `windows-latest` (the authoritative target — system fonts render
 text there; the headless Linux Skia build draws shapes/strokes but no glyphs).
 
+## Shipped
+
+- **The P/Invoke bridge** — `MermaidNative` binds `[DllImport("MermaidKitCShared")]`
+  to `mmk_scene_json` (+ `mmk_narrate` / `mmk_version` / `mmk_free`), so an app passes
+  a Mermaid *source string* and gets a `SceneWire` back. `PInvokeTests` covers it and
+  CI runs it on `windows-latest` — mirroring Android's JNI seam.
+
 ## Not yet here (next slices)
 
-- **The P/Invoke bridge** — this library renders a `SceneWire` you hand it; wiring
-  `MermaidNative` → `[DllImport]` → `mmk_scene_json` in a Swift-built Windows DLL
-  (so the app passes a Mermaid *source string* + a measure callback) is the next
-  step, mirroring Android's JNI seam.
+- **Device-font measure callback** — the first P/Invoke slice passes none, so native
+  layout uses a coarse glyph-box metric; threading a measure callback through the ABI
+  lets layout measure with the face that draws.
 - **Theming + a WinUI/WPF control** — `MermaidTheme.FromWindows(...)` across the
   ABI (like `MermaidTheme.fromMaterial` on Android) and an idiomatic control.

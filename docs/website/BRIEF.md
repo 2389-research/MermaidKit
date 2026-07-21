@@ -110,9 +110,10 @@ Install:
 - **Honest support matrix.** The README states plainly what parses, what
   is ignored, and what's a known gap worth filing. The site should keep
   that plainness — it's part of the identity.
-- Platforms: macOS 14+, iOS 17+, visionOS 1+ (Swift 6 language mode,
-  Xcode 16+ to build). Lower platform floors and an SVG backend are the
-  top of the public roadmap.
+- Platforms: renders natively on Apple (macOS 14+, iOS 17+, visionOS 1+),
+  Linux, Android, Windows/.NET, WebAssembly, and Flutter, from one Swift
+  layout core (Swift 6 language mode, Xcode 16+ to build). Lower Apple OS
+  floors are the top of the public roadmap.
 
 ## Feature space (complete, verified)
 
@@ -266,9 +267,9 @@ Install:
   other tools or renderers, no benchmark claims against anything else —
   the table is MermaidKit-only cold-render times.
 - State limitations plainly, near the claims they qualify: core syntax
-  per type (not a syntax-complete port), Apple platforms only today
-  (SVG backend is the most-wanted contribution), output is
-  native-looking rather than a pixel-clone.
+  per type (not a syntax-complete port), output is native-looking rather
+  than a pixel-clone. (Rendering is native on Apple, Linux, Android,
+  Windows/.NET, WebAssembly, and Flutter — no longer Apple-only.)
 - Any performance claim must match the numbers section exactly.
 
 ## Suggested shape (starting point, not a mandate)
@@ -283,12 +284,12 @@ Install:
 4. **One line to a diagram** — the DX pillar: snippet, theme, spacing,
    PDF, alt-text, diagnose.
 5. **Built to adapt** — graceful degradation, parser honesty,
-   accessibility, the roadmap invitations (SVG backend, lower floors).
+   accessibility, the roadmap invitations (lower Apple OS floors).
 6. **Footer** — GitHub, latest release, MIT.
 
 Single page, static HTML/CSS, fast on a phone, light/dark aware. The
 diagrams are colorful; keep the chrome quiet around them. **No analytics
 or trackers** — the library's privacy story is "no network" and the site
-must live up to it. Don't claim SVG output or full mermaid.js syntax parity.
+must live up to it. Don't claim full mermaid.js syntax parity.
 (Linux rendering *is* real as of v0.11.0 — MermaidRender draws via Silica/Cairo
 there; this brief otherwise reflects the v0.8.0 snapshot noted above.)

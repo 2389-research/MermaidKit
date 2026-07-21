@@ -70,7 +70,4 @@ becoming a semver trap:
 ## Most-wanted
 
 - Syntax-coverage gaps in existing types (bring the diagram that broke).
-- An SVG backend over `DiagramScene` / the layout structs — resolution-
-  independent vector output (the Silica/Cairo backend already covers native
-  Linux rendering; SVG is the remaining portable-output gap).
 - Lower OS floors, with CI to prove them.
