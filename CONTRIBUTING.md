@@ -15,7 +15,7 @@ layout linter.
 
 ## Ground rules
 
-- `swift test` and `swift test --package-path MermaidKit` must stay green.
+- `swift test` must stay green (the package is the repo root — there is no `MermaidKit/` subpackage).
 - **Layout changes are judged by geometry.** Every type's dense fixture in
   `Fixtures/diagrams/` must lint clean (`LayoutLintTests`); iterate on one
   type with `MERMAIDKIT_LINT_TYPE=<type> swift test --filter testLintSingleType`.

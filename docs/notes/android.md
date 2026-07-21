@@ -239,14 +239,14 @@ scene contract (#14).
 Thin C ABI (`MermaidKitC`): `source + options + batched measure callback → scene
 (SceneWire JSON) + narration/alt-text`. **Done + verified:** the `mmk_*` ABI
 lands (`mmk_scene_json`/`mmk_narrate`/`mmk_free`/`mmk_version`) and
-**cross-compiles cleanly to Android arm64 + x86_64** via the Swift Android SDK,
-with the `@_cdecl` symbols exported unmangled (`scripts/check-android-build.sh`,
-CI-gated). The **JNI `.so` is done + verified** (see Phase 2). *Still open:*
-building the arm64-v8a / armeabi-v7a ABIs (x86_64 is proven) and bundling all
-three in the AAR.
+**cross-compiles cleanly to Android** via the Swift Android SDK — arm64 gated by
+`scripts/check-android-build.sh` (a Bionic-libc buildability check that builds
+`MermaidKitC` for `aarch64-linux-android`), x86_64 by the emulator job's JNI
+cross-compile. The **JNI `.so` is done + verified** (see Phase 2), and the
+release-AAR job builds and bundles **all three ABIs** (arm64-v8a, armeabi-v7a,
+x86_64), asserting each `jni/<abi>/libmermaidkit.so` is present.
 - *Acceptance:* the C ABI builds for Android and returns a `SceneWire` for a
-  fixture. ✅ (cross-compile, symbol export, **and on-device `.so` load + call**
-  all proven.)
+  fixture. ✅ (cross-compile **and on-device `.so` load + call** all proven.)
 
 ### Phase 2 — Kotlin `SceneRenderer` + JNI + snap-in surface
 `SceneRenderer` draws the scene with `Canvas`/`Paint`. **Done + verified:** the

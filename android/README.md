@@ -31,11 +31,15 @@ native libs are cross-compiled in Docker, so Docker + a native x86_64 host are
 needed to build it — see `android/native/`):
 
 ```bash
-# from android/ — build all three ABIs, then assemble + publish the AAR:
+# from android/ — build all three ABIs, then assemble + publish the AAR. The
+# container is swift:6.2.0 with the finagolfin Swift Android SDK installed (the
+# same recipe CI and scripts/check-android-build.sh use):
+BUNDLE=https://github.com/finagolfin/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-24-0.1.artifactbundle.tar.gz
 for abi in arm64-v8a armeabi-v7a x86_64; do
   docker run --rm -v "$PWD/..":/MermaidKit \
     -v "$PWD/mermaidkit/src/main/jniLibs/$abi":/out \
-    swift-android-6.2 bash /MermaidKit/android/native/build-jni.sh "$abi"
+    swift:6.2.0 bash -c "swift sdk install '$BUNDLE' >/dev/null 2>&1 && \
+      bash /MermaidKit/android/native/build-jni.sh $abi"
 done
 ./gradlew :mermaidkit:publishReleasePublicationToMavenLocal   # → mavenLocal()
 ```
@@ -112,10 +116,13 @@ the instrumented test (`connectedDebugAndroidTest`).*
 ## Build & test
 
 ```bash
-# 1. Cross-compile the native .so bundle into jniLibs (needs Docker; per ABI):
+# 1. Cross-compile the native .so bundle into jniLibs (needs Docker; per ABI).
+#    Container = swift:6.2.0 + the finagolfin Swift Android SDK (as in CI):
+BUNDLE=https://github.com/finagolfin/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-24-0.1.artifactbundle.tar.gz
 docker run --rm -v "$PWD/..":/MermaidKit \
   -v "$PWD/mermaidkit/src/main/jniLibs/x86_64":/out \
-  swift-android-6.2 bash /MermaidKit/android/native/build-jni.sh x86_64
+  swift:6.2.0 bash -c "swift sdk install '$BUNDLE' >/dev/null 2>&1 && \
+    bash /MermaidKit/android/native/build-jni.sh x86_64"
 
 # 2. Library AAR + JVM unit tests + instrumented-test APK (no device needed):
 ./gradlew :mermaidkit:assembleDebug :mermaidkit:testDebugUnitTest :mermaidkit:assembleDebugAndroidTest
