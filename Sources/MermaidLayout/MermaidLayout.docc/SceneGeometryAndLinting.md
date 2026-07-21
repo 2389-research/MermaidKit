@@ -45,7 +45,10 @@ geometry tests.
 | `edge-cuts-label` | error | A foreign edge slices through a bare label |
 | `label-on-fixture` | error | An edge label sits on a bend, a crossing, another label, a box, or an arrowhead tip (flowchart/state) |
 | `label-crowds-edge` | error | An edge label's run leaves under 10pt of connector on a side (flowchart/state) |
+| `edge-endpoint-detached` | error | An edge has no polyline, is a zero-length stub, or an endpoint sits detached from every node |
+| `edges-doubled` | error | Two edges run doubled along a shared line (overlapping connectors) |
 | `labels-overlap` / `label-over-node` | warning | Colliding text |
+| `edge-under-label` | warning | An edge passes under a backed (chip) label |
 | `edge-crossings` | warning | Crossing count beyond a budget |
 
 ```swift

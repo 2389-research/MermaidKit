@@ -133,9 +133,10 @@ Two things stand out:
 2. **Architecture is the one layout-bound type** (9.15 ms layout vs 5.5 ms
    draw). Its placement is iterative (grid/edge-constraint solving in
    `DiagramLayoutArchitecture.swift`) rather than a single pass. Flowchart,
-   sankey, and state are the next heaviest layouts (~3 ms) — flowchart's layered
-   layout (network-simplex ranking + crossing reduction) is the only one that is
-   **super-linear in edge count**, which is why `maxEdges` (500) caps it at parse.
+   sankey, and state are the next heaviest layouts (~3 ms) — the layered layout
+   shared by flowchart and swimlane (network-simplex ranking + crossing reduction)
+   is **super-linear in edge count**, which is why the parse-level `maxEdges` (500)
+   cap bounds it.
 
 ### The fixed-overhead floor
 
@@ -238,9 +239,9 @@ The honest framing. Two columns: what can't be cheaper, and what was slack.
   proportional to nodes/edges/labels. Inherent.
 - **The first typeset of each unique label** must build a `CTLine`. The memo
   below removes the *redundant* typesets, not the first one.
-- **Flowchart's layered layout is super-linear in edge count** (network-simplex
-  ranking + crossing reduction). Capped at parse by `maxEdges` = 500, not
-  optimized away.
+- **The layered layout is super-linear in edge count** (network-simplex ranking +
+  crossing reduction) — flowchart and swimlane share it. Capped at parse by the
+  shared `maxEdges` = 500, not optimized away.
 - **Measurement variance** — tens of percent run-to-run. Not a cost, but a floor
   on how precisely any of this can be quoted.
 

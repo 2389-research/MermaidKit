@@ -296,8 +296,9 @@ of it in CI. Numeric input is sanitized at the parser boundary
 `mermaidkit-term` is a CLI that renders any Mermaid, DOT, or Dippin source
 straight to the terminal — no display server, no window. It picks the best tier
 the terminal will answer to: **Kitty graphics** (a real inline image) →
-**half-block truecolor** (1×2 color pixels) → **colored box-drawing** → **plain
-ASCII**, with OSC 11 background detection and capability probing to choose. It
+**half-block truecolor** (1×2 color pixels) → **colored box-drawing** →
+**monochrome Unicode box-drawing**, with OSC 11 background detection and
+capability probing to choose. It
 lives in `MermaidLayout`, so it's platform-free and runs headless on Linux/CI.
 
 ```

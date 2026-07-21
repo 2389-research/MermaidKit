@@ -6,7 +6,7 @@ copy the nearest neighbor.
 
 ## The five files
 
-Suppose you're adding `venn` (a hypothetical `venn-beta` dialect).
+We'll use `venn` as the worked example — it's a real, shipped type, so you can read the finished five files alongside this walkthrough.
 
 ### 1. Model — `MermaidModels.swift`
 
