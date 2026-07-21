@@ -116,6 +116,107 @@ public enum MermaidRenderer {
         return encodePNG(img)
     }
 
+    // MARK: - Format-aware entry points (Mermaid, DOT, Dippin, SQL DDL, git log)
+
+    /// The input syntax for the format-aware entry points. Each parses through the
+    /// matching front-end into the shared diagram IR, so DOT, Dippin, SQL `CREATE
+    /// TABLE`, and `git log` sources get the SAME rendering, text attachment, and
+    /// accessibility narration as Mermaid — without a consumer touching the
+    /// parsers or hand-building attachments.
+    public enum DiagramSourceFormat: String, Sendable, Hashable, CaseIterable {
+        /// Mermaid — the default; identical to the `source:`-only methods.
+        case mermaid
+        /// Graphviz DOT (`DOTParser`) → flowchart.
+        case dot
+        /// Dippin `.dip` (`DippinParser`) → flowchart.
+        case dippin
+        /// SQL DDL / `CREATE TABLE` dump (`SQLDDLParser`) → entity-relationship.
+        case sqlDDL
+        /// Raw `git log` output (`GitLogParser`) → gitgraph.
+        case gitLog
+    }
+
+    /// Parse `source` in `format` into the shared ``MermaidDiagram`` IR, or nil
+    /// when it doesn't parse. The non-Mermaid front-ends carry no front-matter.
+    private static func diagram(source: String, format: DiagramSourceFormat) -> MermaidDiagram? {
+        switch format {
+        case .mermaid: return MermaidParser.parse(source)
+        case .dot:     return DOTParser.parse(source).map(MermaidDiagram.flowchart)
+        case .dippin:  return DippinParser.parse(source).map(MermaidDiagram.flowchart)
+        case .sqlDDL:  return SQLDDLParser.parse(source).map(MermaidDiagram.er)
+        case .gitLog:  return GitLogParser.parse(source).map(MermaidDiagram.gitGraph)
+        }
+    }
+
+    /// Renders a source in the given `format` to a native image. `.mermaid` is
+    /// exactly `image(source:theme:spacing:)` (cached, front-matter caption); the
+    /// other formats parse through their front-end and share the same layout/draw
+    /// pipeline. Nil when the source doesn't parse.
+    public static func image(source: String, format: DiagramSourceFormat, theme: DiagramTheme,
+                             spacing: DiagramSpacing = .regular) -> PlatformImage? {
+        if format == .mermaid { return image(source: source, theme: theme, spacing: spacing) }
+        #if canImport(AppKit) || canImport(UIKit)
+        // Route through the cached attachment (like `image(source:)`) so a repeat
+        // render of the same non-Mermaid source is a cache hit, not a re-parse.
+        guard let attr = attachmentString(source: source, format: format, theme: theme, spacing: spacing),
+              attr.length > 0,
+              let attachment = attr.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment
+        else { return nil }
+        return attachment.image
+        #else
+        guard let diagram = diagram(source: source, format: format) else { return nil }
+        return image(diagram: diagram, theme: theme, spacing: spacing)
+        #endif
+    }
+
+    /// PNG bytes for a source in the given `format`.
+    public static func pngData(source: String, format: DiagramSourceFormat, theme: DiagramTheme,
+                               spacing: DiagramSpacing = .regular) -> Data? {
+        guard let img = image(source: source, format: format, theme: theme, spacing: spacing) else { return nil }
+        return encodePNG(img)
+    }
+
+    /// A VoiceOver-ready description for a source in the given `format` — the
+    /// format-aware twin of ``altText(source:)``. Nil when the source doesn't parse.
+    public static func altText(source: String, format: DiagramSourceFormat) -> String? {
+        if format == .mermaid { return altText(source: source) }
+        guard let diagram = diagram(source: source, format: format) else { return nil }
+        return MermaidAltText.describe(diagram)
+    }
+
+    /// A VoiceOver-ready description for an already-parsed diagram (from any
+    /// front-end); parse it yourself and pass it here.
+    public static func altText(diagram: MermaidDiagram) -> String {
+        MermaidAltText.describe(diagram)
+    }
+
+    #if canImport(AppKit) || canImport(UIKit)
+    /// The diagram as a single-attachment attributed string for a source in the
+    /// given `format` — the format-aware twin of
+    /// ``attachmentString(source:theme:spacing:)``. Unblocks embedding DOT,
+    /// Dippin, SQL DDL, and `git log` blocks with the SAME sized, themed,
+    /// accessible attachment that Mermaid gets, keeping all parser/render logic
+    /// inside the engine. Apple platforms only; nil when the source doesn't parse.
+    public static func attachmentString(source: String, format: DiagramSourceFormat,
+                                        theme: DiagramTheme,
+                                        spacing: DiagramSpacing = .regular) -> NSAttributedString? {
+        if format == .mermaid { return attachmentString(source: source, theme: theme, spacing: spacing) }
+        // Cached, keyed on (format-tagged source, theme, spacing) — the parse only
+        // fires on a miss, so repeat renders (live editor) don't re-parse.
+        return DiagramRenderer.attachmentString(
+            source: source, formatTag: format.rawValue, theme: theme, spacing: spacing,
+            parse: { diagram(source: source, format: format) })
+    }
+
+    /// The attachment string for an already-parsed diagram (parse it yourself),
+    /// with an optional `title` caption. Apple platforms only.
+    public static func attachmentString(diagram: MermaidDiagram, title: String? = nil,
+                                        theme: DiagramTheme,
+                                        spacing: DiagramSpacing = .regular) -> NSAttributedString? {
+        DiagramRenderer.attachmentString(diagram: diagram, title: title, theme: theme, spacing: spacing)
+    }
+    #endif
+
     private static func encodePNG(_ img: PlatformImage) -> Data? {
         #if canImport(AppKit)
         var rect = CGRect(origin: .zero, size: img.size)

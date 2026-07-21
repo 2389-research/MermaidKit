@@ -456,6 +456,41 @@ enum DiagramRenderer {
         attachment.bounds = CGRect(origin: .zero, size: image.size)
         return NSAttributedString(attachment: attachment)
     }
+
+    /// The attachment string for an already-parsed diagram (a non-Mermaid
+    /// front-end), with an optional `title` caption — the format-aware attachment
+    /// path. Uncached (no source string to key on); reuses `image(for:)` and the
+    /// exact same accessible-attachment wrapping as the Mermaid `source` path, so
+    /// DOT/Dippin/SQL/git-log embeds get identical sizing, theming, and narration.
+    static func attachmentString(diagram: MermaidDiagram, title: String?, theme: DiagramTheme,
+                                 spacing: DiagramSpacing = .regular) -> NSAttributedString? {
+        guard let image = image(for: diagram, title: title, theme: theme, spacing: spacing) else { return nil }
+        return attributedString(for: Entry(image: image, altText: MermaidAltText.describe(diagram)))
+    }
+
+    /// Cached format-aware attachment. Keyed on the source TAGGED by format (so a
+    /// DOT and a Mermaid source with the same text can't collide) plus theme and
+    /// spacing — the same cache the Mermaid `source:` path uses, so a live editor
+    /// re-rendering a DOT/Dippin block on every SwiftUI body pass pays the
+    /// parse+render once. `parse` is evaluated only on a cache miss.
+    static func attachmentString(source: String, formatTag: String, theme: DiagramTheme,
+                                 spacing: DiagramSpacing,
+                                 parse: () -> MermaidDiagram?) -> NSAttributedString? {
+        let key = RenderKey(source: "\(formatTag)\u{1}\(source)",
+                            theme: theme.fingerprint, spacing: spacing.fingerprint)
+        if let cached = cache.object(forKey: key) { return attributedString(for: cached) }
+        guard let diagram = parse(),
+              let image = image(for: diagram, title: nil, theme: theme, spacing: spacing) else { return nil }
+        let entry = Entry(image: image, altText: MermaidAltText.describe(diagram))
+        #if canImport(AppKit)
+        let scale: CGFloat = 2
+        #else
+        let scale = image.scale
+        #endif
+        let pixels = Int(image.size.width * scale * image.size.height * scale)
+        cache.setObject(entry, forKey: key, cost: pixels * 4)
+        return attributedString(for: entry)
+    }
     #endif
 
     // MARK: - Pie

@@ -164,7 +164,12 @@ Mermaid text:
   `mermaidkit-term --format gitlog` renders it straight to the terminal.
 
 Each hands its parsed diagram straight to `MermaidRenderer.pngData(diagram:)` /
-`image(diagram:)`.
+`image(diagram:)`. Or skip the parser entirely: the **format-aware** entry points
+take `(source, format)` and dispatch to the right front-end, so a DOT or Dippin
+block gets the same image, sized/themed text attachment, and accessibility
+narration that Mermaid does — `MermaidRenderer.attachmentString(source:format:theme:)`,
+`altText(source:format:)`, `image(source:format:theme:)`, with
+`format: .mermaid | .dot | .dippin | .sqlDDL | .gitLog`.
 
 ## Supported diagram types — honestly
 
@@ -412,6 +417,12 @@ that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
   `GitLogParser.parse(_:)` — the non-Mermaid front-ends (Graphviz DOT, Dippin,
   SQL DDL, and `git log` output → gitgraph) into the same IR;
   `DOTExporter.export(_:)` is the inverse (Flowchart → DOT).
+- `MermaidRenderer.attachmentString(source:format:theme:)` /
+  `altText(source:format:)` / `image(source:format:theme:)` — **format-aware**
+  entry points that dispatch on `DiagramSourceFormat` (`.mermaid`/`.dot`/`.dippin`/
+  `.sqlDDL`/`.gitLog`), so a non-Mermaid block gets the same attachment, narration,
+  and image without the consumer touching a parser (`.mermaid` = the source-only
+  methods). Diagram-based `attachmentString(diagram:)` / `altText(diagram:)` too.
 - `MermaidRenderer.altText(source:)` — a VoiceOver-ready description of
   the diagram's content, and `MermaidAltText.narrate(source:)` a step-by-step
   walkthrough (see Accessibility above).
