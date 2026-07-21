@@ -5,8 +5,9 @@ diagrams composited into a fixed framebuffer** — e.g. `/dev/fb0` on a Raspberr
 Pi, no X11/Wayland/desktop — over the existing headless raster. No core changes.
 
 ```
-swift run pi-canvas <out-dir>                    # macOS: CoreGraphics raster
-swift run --traits LinuxRaster pi-canvas <dir>   # Linux/Pi: Silica/Cairo raster
+swift run pi-canvas <out-dir>                        # macOS: CoreGraphics raster → PNG
+swift run --traits LinuxRaster pi-canvas <dir>       # Linux/Pi: Silica/Cairo raster → PNG
+swift run --traits LinuxRaster,SDL pi-canvas --sdl <dir>   # present via SDL2 (needs libsdl2-dev)
 ```
 
 ## What it shows
@@ -15,9 +16,16 @@ swift run --traits LinuxRaster pi-canvas <dir>   # Linux/Pi: Silica/Cairo raster
   space. Each is rendered once to an RGBA raster (cached; zoom re-rasterizes for
   crispness rather than scaling a bitmap). Each frame culls to the viewport and
   blits only the visible cards.
-- **`Framebuffer`** — the presentation seam. `PNGFramebuffer` (the testable
-  stand-in) writes each frame as a PNG; `LinuxFramebuffer` (`#if os(Linux)`)
-  `mmap`s `/dev/fb0` and blits, packing RGB565 at 16bpp or BGRA at 32bpp.
+- **`Framebuffer`** — the presentation seam, three interchangeable backends:
+  - `PNGFramebuffer` — the testable stand-in; writes each frame as a PNG.
+  - `LinuxFramebuffer` (`#if os(Linux)`) — `mmap`s `/dev/fb0` and blits, packing
+    RGB565 at 16bpp or BGRA at 32bpp (the bare Pi surface).
+  - `SDLFramebuffer` (`SDL` trait) — uploads each composite as an SDL2 streaming
+    texture and presents it (the game/GPU/embedded surface: desktops, Steam Deck,
+    the Pi via KMS/DRM). SDL has no vector/text drawing of its own, so it presents
+    the raw raster — which is why this only became possible once MermaidKit grew a
+    Linux raw raster. Verified headless (`SDL_VIDEODRIVER=dummy`, software
+    renderer, `SDL_RenderReadPixels` → PNG).
 - The demo pans across a wall of diagrams, then zooms in.
 
 Panning over already-rendered cards is pure memcpy — smooth at 60fps on a Pi 5;
