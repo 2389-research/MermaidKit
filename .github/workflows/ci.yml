@@ -297,3 +297,25 @@ jobs:
         run: |
           swift run --traits LinuxRaster,SDL pi-canvas --sdl sdlout
           test -f sdlout/sdl-frame-00.png || { echo "no SDL frame produced"; exit 1; }
+
+  # The Flutter/Dart renderer half (flutter/mermaidkit): the SceneWire sealed-class
+  # model + MermaidPainter (CustomPainter) that draws the platform-free scene the
+  # core emits, on Flutter's Skia/Impeller Canvas. Headless `flutter test`.
+  flutter:
+    name: flutter (dart renderer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ghcr.io/cirruslabs/flutter:stable
+    defaults:
+      run:
+        working-directory: flutter/mermaidkit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Resolve deps + test
+        run: |
+          flutter pub get
+          flutter test
