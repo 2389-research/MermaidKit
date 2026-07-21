@@ -38,10 +38,18 @@ resolution, wrong fonts, no Material theming. So the naive "easy" paths are out.
 **Swift does the intellectual work and returns a complete scene; Kotlin draws it
 natively.**
 
-    Swift core (.so, built once via NDK)              Kotlin/Compose (the .aar devs consume)
-    ─────────────────────────────────────           ────────────────────────────────────────
-    parse → IR → layout → lint → RenderScene  ─JSON─▶  SceneRenderer draws with Canvas/Paint
-            ▲ measurement callback ◀───────────────    (Skia: native quality, real fonts, DPI-correct)
+```mermaid
+flowchart LR
+    subgraph swift ["Swift core — .so, built once via NDK"]
+        direction LR
+        parse["parse"] --> ir["IR"] --> layout["layout"] --> lint["lint"] --> scene["RenderScene"]
+    end
+    subgraph kotlin ["Kotlin/Compose — the .aar devs consume"]
+        renderer["SceneRenderer draws with Canvas/Paint<br/>Skia: native quality, real fonts, DPI-correct"]
+    end
+    scene -->|"JSON"| renderer
+    renderer -.->|"measurement callback"| layout
+```
 
 - The Swift side is the already-platform-free layer (parse, layout, lint). It
   never touches pixels on Android — it emits a **complete `RenderScene`**.

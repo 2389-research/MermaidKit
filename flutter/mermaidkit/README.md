@@ -9,9 +9,11 @@ The leverage: **one plugin reaches all of Flutter's targets** — iOS, Android, 
 Windows, macOS, Linux — from a single Dart integration, because Flutter draws its
 own UI rather than using native widgets (exactly MermaidKit's model).
 
-```
-Swift core ─ mmk_scene_json ─▶ SceneWire JSON ─▶ SceneWire.parse ─▶ MermaidPainter (CustomPainter)
-   (C ABI, via dart:ffi)          (the contract)     (sealed classes)      (Skia/Impeller Canvas)
+```mermaid
+flowchart LR
+    core["Swift core<br/>(C ABI, via dart:ffi)"] -->|"mmk_scene_json"| wire["SceneWire JSON<br/>(the contract)"]
+    wire --> parse["SceneWire.parse<br/>(sealed classes)"]
+    parse --> painter["MermaidPainter · CustomPainter<br/>(Skia/Impeller Canvas)"]
 ```
 
 ## Layout

@@ -6,9 +6,11 @@ It consumes the platform-free **`SceneWire`** scene the Swift core emits
 the Android `Canvas` uses, so Windows output is a fidelity match for Android (no
 SVG fallback).
 
-```
-Swift core ─ mmk_scene_json ─▶ SceneWire JSON ─▶ SceneWire.Parse ─▶ SceneRenderer.Draw(SKCanvas)
-   (C ABI / DLL)                  (the contract)     (records, no glue)      (Skia)
+```mermaid
+flowchart LR
+    core["Swift core<br/>(C ABI / DLL)"] -->|"mmk_scene_json"| wire["SceneWire JSON<br/>(the contract)"]
+    wire --> parse["SceneWire.Parse<br/>(records, no glue)"]
+    parse --> draw["SceneRenderer.Draw(SKCanvas)<br/>(Skia)"]
 ```
 
 Because [`RenderScene`](../Sources/MermaidLayout/RenderScene.swift) flattens all

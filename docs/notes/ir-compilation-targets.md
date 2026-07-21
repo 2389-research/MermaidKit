@@ -7,11 +7,12 @@ Design memo · 2026-07-08 · based on reading the working clone at
 
 Pipeline today:
 
-```
-source ──MermaidParser.parse──▶ MermaidDiagram (23 typed models)
-        ──DiagramLayoutEngine.layout(_, measure:)──▶ per-type layout structs
-             ├──▶ DiagramRenderer.draw(layout, theme:, in: CGContext)   [Apple-only paint]
-             └──▶ DiagramScene.from(layout)                             [platform-free lint IR]
+```mermaid
+flowchart LR
+    src["source"] -->|"MermaidParser.parse"| models["MermaidDiagram<br/>(23 typed models)"]
+    models -->|"DiagramLayoutEngine.layout(_, measure:)"| structs["per-type layout structs"]
+    structs --> draw["DiagramRenderer.draw(layout, theme:, in: CGContext)<br/>[Apple-only paint]"]
+    structs --> scene["DiagramScene.from(layout)<br/>[platform-free lint IR]"]
 ```
 
 - `DiagramScene` (Sources/MermaidLayout/DiagramScene.swift:12–94) is three
