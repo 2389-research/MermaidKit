@@ -14,7 +14,7 @@ swift run --traits LinuxRaster,SDL pi-canvas --sdl <dir>   # present via SDL2 (n
 ## What it shows
 
 - **`InfiniteCanvas`** — diagrams placed at positions in an unbounded virtual
-  space. Each is rendered once to an RGBA raster (cached). On the Apple/CoreGraphics
+  space. Each is rendered once per zoom level to an RGBA raster (cached). On the Apple/CoreGraphics
   path, zooming re-rasterizes for crispness rather than scaling a bitmap; on the
   Linux/Silica path `silicaRaster` returns the natural render size and ignores the
   zoom-scaled width, so zoomed cards are repositioned but not re-rasterized larger.

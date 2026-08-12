@@ -465,7 +465,11 @@ enum DiagramRenderer {
     static func attachmentString(diagram: MermaidDiagram, title: String?, theme: DiagramTheme,
                                  spacing: DiagramSpacing = .regular) -> NSAttributedString? {
         guard let image = image(for: diagram, title: title, theme: theme, spacing: spacing) else { return nil }
-        return attributedString(for: Entry(image: image, altText: MermaidAltText.describe(diagram)))
+        // Fold the visible caption into the narration so assistive-tech users get
+        // the same context sighted users read above the diagram.
+        let narration = MermaidAltText.describe(diagram)
+        let alt = (title?.isEmpty == false) ? "\(title!). \(narration)" : narration
+        return attributedString(for: Entry(image: image, altText: alt))
     }
 
     /// Cached format-aware attachment. Keyed on the source TAGGED by format (so a

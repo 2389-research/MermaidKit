@@ -112,7 +112,7 @@ Install:
   that plainness — it's part of the identity.
 - Platforms: renders natively on Apple (macOS 14+, iOS 17+, visionOS 1+),
   Linux, Android, Windows/.NET, WebAssembly, and Flutter, from one Swift
-  layout core (Swift 6 language mode, Xcode 16+ to build). Lower Apple OS
+  layout core (Swift 6 language mode; Xcode 26 / Swift 6.2 to build). Lower Apple OS
   floors are the top of the public roadmap.
 
 ## Feature space (complete, verified)

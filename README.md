@@ -168,8 +168,8 @@ Each hands its parsed diagram straight to `MermaidRenderer.pngData(diagram:)` /
 take `(source, format)` and dispatch to the right front-end, so a DOT or Dippin
 block gets the same image, sized/themed text attachment, and accessibility
 narration that Mermaid does — `MermaidRenderer.attachmentString(source:format:theme:)`,
-`altText(source:format:)`, `image(source:format:theme:)`, with
-`format: .mermaid | .dot | .dippin | .sqlDDL | .gitLog`.
+`altText(source:format:)`, `image(source:format:theme:)`, `pngData(source:format:theme:)`,
+with `format: .mermaid | .dot | .dippin | .sqlDDL | .gitLog`.
 
 ## Supported diagram types — honestly
 
@@ -419,7 +419,8 @@ that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
   SQL DDL, and `git log` output → gitgraph) into the same IR;
   `DOTExporter.export(_:)` is the inverse (Flowchart → DOT).
 - `MermaidRenderer.attachmentString(source:format:theme:)` /
-  `altText(source:format:)` / `image(source:format:theme:)` — **format-aware**
+  `altText(source:format:)` / `image(source:format:theme:)` /
+  `pngData(source:format:theme:)` — **format-aware**
   entry points that dispatch on `DiagramSourceFormat` (`.mermaid`/`.dot`/`.dippin`/
   `.sqlDDL`/`.gitLog`), so a non-Mermaid block gets the same attachment, narration,
   and image without the consumer touching a parser (`.mermaid` = the source-only
