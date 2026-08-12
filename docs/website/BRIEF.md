@@ -7,11 +7,13 @@ feels thin, use fewer claims — the diagrams do the impressing.
 
 ## What MermaidKit is
 
-MermaidKit renders [Mermaid](https://mermaid.js.org) diagrams natively on
-Apple platforms — pure Swift and CoreGraphics. No JavaScript, no WebView,
-zero dependencies. All **30 mermaid diagram types**, a one-line SwiftUI
-view, image / attributed-string / vector-PDF output, VoiceOver
-descriptions for every diagram, themed with a single value. MIT license.
+MermaidKit renders [Mermaid](https://mermaid.js.org) diagrams natively —
+pure Swift and CoreGraphics on Apple, with Android, Windows/.NET,
+WebAssembly, and Flutter renderers over the same platform-free layout core.
+No JavaScript, no WebView, zero dependencies. All **30 mermaid diagram
+types**, a one-line SwiftUI view, image / attributed-string / vector-PDF /
+SVG output, VoiceOver descriptions for every diagram, themed with a single
+value. MIT license.
 
 - Repo: https://github.com/2389-research/MermaidKit
 - Latest release: v2.2.0
