@@ -27,13 +27,19 @@ public struct DiagramSpacing: Hashable, Sendable {
     public var layerGap: CGFloat?
     /// Absolute canvas margin, overriding `scale`.
     public var margin: CGFloat?
+    /// When set (points), snaps the laid-out geometry of box-family diagrams onto
+    /// a grid of this pitch (see ``GridQuantizer``). Opt-in and off by default;
+    /// 4 is the natural unit. Ignored by families a grid doesn't apply to.
+    public var gridSnap: CGFloat?
 
     public init(scale: CGFloat = 1, nodeGap: CGFloat? = nil,
-                layerGap: CGFloat? = nil, margin: CGFloat? = nil) {
+                layerGap: CGFloat? = nil, margin: CGFloat? = nil,
+                gridSnap: CGFloat? = nil) {
         self.scale = max(scale, 0.4)   // below this, labels physically collide
         self.nodeGap = nodeGap
         self.layerGap = layerGap
         self.margin = margin
+        self.gridSnap = gridSnap.map { max($0, 0) }
     }
 
     /// The tuned defaults every fixture and benchmark runs at.
@@ -46,7 +52,7 @@ public struct DiagramSpacing: Hashable, Sendable {
     /// A stable digest for render-cache keys.
     public var fingerprint: String {
         func f(_ v: CGFloat?) -> String { v.map { String(format: "%.1f", $0) } ?? "-" }
-        return "s\(String(format: "%.2f", scale))|\(f(nodeGap))|\(f(layerGap))|\(f(margin))"
+        return "s\(String(format: "%.2f", scale))|\(f(nodeGap))|\(f(layerGap))|\(f(margin))|g\(f(gridSnap))"
     }
 
     // Engines resolve their tuned base values through these.

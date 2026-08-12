@@ -53,10 +53,15 @@ extension DiagramLayoutEngine {
         // Subgraphs route through the recursive cluster wrapper, which lays
         // out each group's interior as its own sub-chart and places it as a
         // sized box in the parent — so this core never has to know about them.
-        if chart.subgraphs.isEmpty {
-            return layoutFlat(chart, measure: measure, spacing: spacing)
+        let raw = chart.subgraphs.isEmpty
+            ? layoutFlat(chart, measure: measure, spacing: spacing)
+            : layoutClustered(chart, measure: measure, spacing: spacing)
+        // Opt-in grid snap, applied at the single dispatch both render paths and
+        // the lint IR call — so all three see identical snapped geometry.
+        if let unit = spacing.gridSnap, unit > 0 {
+            return GridQuantizer.quantize(raw, unit: unit)
         }
-        return layoutClustered(chart, measure: measure, spacing: spacing)
+        return raw
     }
 
     static func layoutFlat(_ chart: Flowchart, measure: DiagramTextMeasurer,
