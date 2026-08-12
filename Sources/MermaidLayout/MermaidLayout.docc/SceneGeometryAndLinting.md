@@ -61,6 +61,25 @@ and asserts zero errors — so a layout regression fails CI as a named
 geometric fact ("edge #3 passes through node "DiagramScene" (165pt inside)"),
 not as a pixel diff.
 
+## Grid alignment (metric)
+
+Separate from the pass/fail checks above, ``DiagramLayoutLinter/gridAlignment(_:unit:)``
+*measures* how well a box-family layout's node coordinates sit on a pixel grid
+(default 4px) — it moves nothing. It returns `nil` for families a grid doesn't
+apply to (radial/temporal types like `pie`, `radar`, `timeline`); for the box
+families (`flowchart`, `block`, `c4`, `architecture`, `er`, `class`, `state`) it
+reports the fraction of coordinates on the grid, and `report(_:)` appends a
+`grid:` line for them. It is deliberately **not** a `LayoutViolation`: today's
+layouts sit well below full alignment, so a warning would fire on every diagram.
+Instead a test tracks a per-type floor the layout can only ratchet up — the
+baseline for a future grid-snapping layout pass.
+
+```swift
+if let ga = DiagramLayoutLinter.gridAlignment(scene) {
+    print(ga.summary)   // e.g. "22% of node coords on the 4px grid (0/24 boxes fully aligned)"
+}
+```
+
 ## Diffing layouts
 
 ``DiagramScene`` supports structural diffing: what moved, what rerouted,
