@@ -72,7 +72,10 @@ reports the fraction of coordinates on the grid, and `report(_:)` appends a
 `grid:` line for them. It is deliberately **not** a `LayoutViolation`: today's
 layouts sit well below full alignment, so a warning would fire on every diagram.
 Instead a test tracks a per-type floor the layout can only ratchet up — the
-baseline for a future grid-snapping layout pass.
+baseline the grid-snapping pass is verified against. That pass, ``GridQuantizer``,
+is opt-in via ``DiagramSpacing/gridSnap`` (flowchart today): it snaps node boxes
+onto the grid and re-anchors edges, and because it runs inside the shared layout
+dispatch, both render paths and this lint IR see identical snapped geometry.
 
 ```swift
 if let ga = DiagramLayoutLinter.gridAlignment(scene) {
