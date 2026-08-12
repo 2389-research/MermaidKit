@@ -530,15 +530,17 @@ public enum DiagramLayoutLinter {
         return out.filter { seen.insert($0.severity.rawValue + $0.kind + $0.detail).inserted }
     }
 
-    /// A one-line-per-violation report, or a clean bill.
+    /// A one-line-per-violation report, or a clean bill. Box-family diagrams also
+    /// get a non-gating grid-alignment line (see `gridAlignment`).
     public static func report(_ scene: DiagramScene) -> String {
         let v = lint(scene)
         let header = "\(scene.name): \(scene.nodes.count) nodes, \(scene.edges.count) edges, \(scene.labels.count) labels"
-        guard !v.isEmpty else { return "\(header)\n  ✓ clean" }
+        let grid = gridAlignment(scene).map { "\n  grid: \($0.summary)" } ?? ""
+        guard !v.isEmpty else { return "\(header)\n  ✓ clean" + grid }
         let errors = v.filter { $0.severity == .error }.count
         let warns = v.filter { $0.severity == .warning }.count
         let lines = v.map { "  \($0.severity == .error ? "✗" : "⚠") [\($0.kind)] \($0.detail)" }
-        return "\(header)  (\(errors) errors, \(warns) warnings)\n" + lines.joined(separator: "\n")
+        return "\(header)  (\(errors) errors, \(warns) warnings)\n" + lines.joined(separator: "\n") + grid
     }
 
     // MARK: - Geometry
