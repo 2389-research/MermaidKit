@@ -166,11 +166,11 @@ Named properties with dedicated tests, run on every CI build.
 
 | Feature | Specific |
 | :--- | :--- |
-| Test suite | 407 package tests, 0 failures (3 intentionally env-gated skips: doc-image generation, single-type lint, and the cross-process determinism-signature dump). 353 layout tests, 42 render tests, 12 MermaidKitC tests. |
+| Test suite | 422 package tests, 0 failures (3 intentionally env-gated skips: doc-image generation, single-type lint, and the cross-process determinism-signature dump). 367 layout tests, 43 render tests, 12 MermaidKitC tests. |
 | Cross-platform | 400 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` suite plus the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
 | Dependency policy | The Silica/Cairo Linux render backend is behind the `LinuxRaster` package trait (default OFF). A `from:`-pinned consumer resolves a Silica-free graph on every platform — no unstable branch dependency, no Cairo/PureSwift stack fetched on Apple. Linux users opt in with `traits: ["LinuxRaster"]`. |
 | CI | `test` (macOS): `swift build` + `swift test` on Xcode 26, plus a compile-only iOS-Simulator guard (a UIKit branch with no test host that must always compile). `linux`: installs Cairo/FontConfig, then `swift build --traits LinuxRaster` + `swift test --traits LinuxRaster`, and a `swift build --target MermaidLayout` proving the default Silica-free graph builds. |
-| Parser honesty | `ParserHonestyTests` (41 tests) pins that syntax once silently dropped or mangled now parses faithfully; `AdversarialInputTests` (11) that hostile input never crashes. |
+| Parser honesty | `ParserHonestyTests` (46 tests) pins that syntax once silently dropped or mangled now parses faithfully; `AdversarialInputTests` (11) that hostile input never crashes. |
 | Benchmarks | `RenderBenchmarks` is a correctness smoke: every fixture must parse, render, and rasterize (it forces the deferred CoreGraphics draw). It makes **no wall-clock assertion** — timing gates flake under CI load, so performance never gates a merge. The per-type millisecond table is opt-in (`BENCH_TABLE=1 swift test --filter RenderBenchmarks`) and lives in `docs/notes/performance.md`. |
 | Documentation | DocC catalogs for both targets (8 articles) plus `README.md`, `docs/GALLERY.md`, and preserved design memos in `docs/notes/`. |
 
