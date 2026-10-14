@@ -516,6 +516,7 @@ public enum MermaidParser {
         }
         guard !trimmed.isEmpty else { return nil }
 
+        /// A character an id is made of; `-` and `.` only join two of these.
         func isWord(_ c: Character) -> Bool { c.isLetter || c.isNumber || c == "_" }
         var id = ""
         var index = trimmed.startIndex
@@ -536,6 +537,8 @@ public enum MermaidParser {
         guard !id.isEmpty else { return nil }
         let rest = String(trimmed[index...])
 
+        /// The label between `open` and `close` when they wrap the rest of the
+        /// token, quotes and padding trimmed; nil for another shape.
         func stripped(_ open: String, _ close: String) -> String? {
             guard rest.hasPrefix(open), rest.hasSuffix(close),
                   rest.count >= open.count + close.count else { return nil }

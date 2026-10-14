@@ -44,6 +44,8 @@ final class AdversarialInputTests: XCTestCase {
         }
     }
 
+    /// Nonsense bodies (and half-written node syntax) under real headers: the
+    /// pipeline returns, whatever it makes of them.
     func testGarbageBodies() {
         let garbage = [
             "{{{{{{{{", "))))((((", "-->", "--> --> -->", ":::::",
