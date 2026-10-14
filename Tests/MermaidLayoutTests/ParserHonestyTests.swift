@@ -147,6 +147,15 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(Set(c.nodes.dropFirst().map(\.shape)), [.rectangle])
     }
 
+    /// `>…]` closes a bracket it never opened; inside an `&` fan that once
+    /// drove the splitter's depth negative, so the next `&` was swallowed
+    /// into the flag's label and its endpoint dropped.
+    func testFlagShapeInsideAFan() throws {
+        let c = try flow("a --> odd>Flag] & lean[/Input/]\nodd>Flag] & b --> c")
+        XCTAssertEqual(c.edges.count, 4)
+        XCTAssertEqual(Set(c.nodes.map(\.label)), ["a", "Flag", "Input", "b", "c"])
+    }
+
     // MARK: flowchart subgraphs
 
     /// Deterministic fake measurer for the layout-geometry assertions below.

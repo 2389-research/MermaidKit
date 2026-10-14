@@ -423,7 +423,8 @@ public enum MermaidParser {
     }
 
     /// Splits an endpoint list on `&` at bracket depth 0 only, so labels
-    /// like `A[Tom & Jerry]` stay intact.
+    /// like `A[Tom & Jerry]` stay intact. Depth floors at 0: the asymmetric
+    /// `id>Flag]` closes a bracket it never opened.
     private static func splitEndpoints(_ text: String) -> [Substring] {
         var parts: [Substring] = []
         var depth = 0
@@ -431,7 +432,7 @@ public enum MermaidParser {
         for i in text.indices {
             switch text[i] {
             case "[", "(", "{": depth += 1
-            case "]", ")", "}": depth -= 1
+            case "]", ")", "}": depth = max(0, depth - 1)
             case "&" where depth == 0:
                 parts.append(text[start..<i])
                 start = text.index(after: i)
