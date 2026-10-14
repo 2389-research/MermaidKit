@@ -103,6 +103,45 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.edges.count, 1, "edge id must not kill the line")
     }
 
+    func testIdsWithDashesAndDots() throws {
+        // The line used to vanish whole: `api-gateway` stopped at `api`.
+        let c = try flow("api-gateway[API gateway] --> auth.service[Auth] --> db[(Postgres)]")
+        XCTAssertEqual(c.nodes.map(\.id), ["api-gateway", "auth.service", "db"])
+        XCTAssertEqual(c.nodes.first?.label, "API gateway")
+        XCTAssertEqual(c.edges.count, 2)
+    }
+
+    func testHexagonAndSubroutine() throws {
+        // `{{Redis}}` was a diamond labelled "{Redis}"; `[[Worker]]` a
+        // rectangle labelled "[Worker]".
+        let c = try flow("cache{{Redis}} --> sub[[Worker]]")
+        XCTAssertEqual(c.nodes.first { $0.id == "cache" }?.shape, .hexagon)
+        XCTAssertEqual(c.nodes.first { $0.id == "cache" }?.label, "Redis")
+        XCTAssertEqual(c.nodes.first { $0.id == "sub" }?.shape, .subroutine)
+        XCTAssertEqual(c.nodes.first { $0.id == "sub" }?.label, "Worker")
+    }
+
+    func testShapeDataSyntax() throws {
+        // The `@{…}` endpoint used to drop the whole edge line.
+        let c = try flow("A[Start] --> B@{ shape: diam, label: \"Decide, then go\" }\nC@{ shape: cyl }\nD@{ label: \"Plain\" }")
+        let b = c.nodes.first { $0.id == "B" }
+        XCTAssertEqual(b?.shape, .diamond)
+        XCTAssertEqual(b?.label, "Decide, then go", "a quoted comma isn't a field separator")
+        XCTAssertEqual(c.edges.count, 1)
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.shape, .cylinder)
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "C", "no label: the id")
+        XCTAssertEqual(c.nodes.first { $0.id == "D" }?.shape, .rectangle)
+        XCTAssertEqual(c.nodes.first { $0.id == "D" }?.label, "Plain")
+    }
+
+    func testShapesWithoutAModelCaseKeepTheirLabels() throws {
+        let c = try flow("a(((Done))) --> b>Flag] --> c[/In/] --> d[\\Out\\] --> e[/Wide\\] --> f[\\Narrow/]")
+        XCTAssertEqual(c.edges.count, 5)
+        XCTAssertEqual(c.nodes.map(\.label), ["Done", "Flag", "In", "Out", "Wide", "Narrow"])
+        XCTAssertEqual(c.nodes.first?.shape, .circle)
+        XCTAssertEqual(Set(c.nodes.dropFirst().map(\.shape)), [.rectangle])
+    }
+
     // MARK: flowchart subgraphs
 
     /// Deterministic fake measurer for the layout-geometry assertions below.

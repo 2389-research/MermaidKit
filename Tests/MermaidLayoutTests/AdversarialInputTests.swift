@@ -49,6 +49,11 @@ final class AdversarialInputTests: XCTestCase {
             "{{{{{{{{", "))))((((", "-->", "--> --> -->", ":::::",
             "\u{0}\u{1}\u{2}", "🧜‍♀️🧜‍♀️🧜‍♀️", "＜＞〔〕", "علامة تجريبية",
             "a\u{202E}b", String(repeating: "|", count: 500),
+            // Node-token syntax: shape data, doubled and slanted brackets, ids
+            // that are all separators.
+            "A@{", "A@{}", "A@{ shape: }", "A@{ shape: diam, label: \"unterminated }",
+            "A@{ , , : , }", "A{{", "A}}", "A[[x]", "A[/", "A[/x\\", "A>", "-.-.", "a-.-.b",
+            "a--b.c--d", "a.-b", ".a --> -b",
         ]
         for header in ["flowchart TD", "sequenceDiagram", "erDiagram", "gantt",
                        "sankey-beta", "xychart-beta", "gitGraph", "mindmap"] {

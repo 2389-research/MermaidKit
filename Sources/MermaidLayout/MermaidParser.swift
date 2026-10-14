@@ -501,7 +501,12 @@ public enum MermaidParser {
     }
 
     /// Parses `id`, `id[Label]`, `id(Label)`, `id([Label])`, `id{Label}`,
-    /// `id((Label))`.
+    /// `id((Label))`, `id[(Label)]`, `id[[Label]]`, `id{{Label}}`, and the
+    /// `id@{ shape: …, label: … }` shape-data form. Ids may contain `-` and `.`
+    /// between word characters (`api-gateway`, `auth.service`), as in mermaid.
+    /// Shapes the model has no case for degrade to the nearest one with the
+    /// label intact: `(((double circle)))` to a circle, the slanted
+    /// `[/…/]`/`[\…\]`/`[/…\]`/`[\…/]` and the asymmetric `>…]` to rectangles.
     static func parseNodeToken(_ token: Substring) -> Flowchart.Node? {
         var trimmed = token.trimmingCharacters(in: .whitespaces)
         // `:::className` binds a style class — styling we ignore; without
@@ -511,12 +516,22 @@ public enum MermaidParser {
         }
         guard !trimmed.isEmpty else { return nil }
 
+        func isWord(_ c: Character) -> Bool { c.isLetter || c.isNumber || c == "_" }
         var id = ""
         var index = trimmed.startIndex
-        while index < trimmed.endIndex,
-              trimmed[index].isLetter || trimmed[index].isNumber || trimmed[index] == "_" {
-            id.append(trimmed[index])
-            index = trimmed.index(after: index)
+        while index < trimmed.endIndex {
+            let c = trimmed[index]
+            let next = trimmed.index(after: index)
+            if isWord(c) {
+                id.append(c)
+            } else if (c == "-" || c == "."), !id.isEmpty, next < trimmed.endIndex, isWord(trimmed[next]) {
+                // `api-gateway`, `auth.service`: a separator between word
+                // characters. Edge connectors are split off before this runs.
+                id.append(c)
+            } else {
+                break
+            }
+            index = next
         }
         guard !id.isEmpty else { return nil }
         let rest = String(trimmed[index...])
@@ -532,26 +547,74 @@ public enum MermaidParser {
         if rest.isEmpty {
             return Flowchart.Node(id: id, label: id, shape: .rectangle)
         }
-        if let label = stripped("((", "))") {
-            return Flowchart.Node(id: id, label: label, shape: .circle)
+        if rest.hasPrefix("@{"), rest.hasSuffix("}") {
+            return shapeDataNode(id: id, body: rest.dropFirst(2).dropLast())
         }
-        if let label = stripped("([", "])") {
-            return Flowchart.Node(id: id, label: label, shape: .stadium)
-        }
-        if let label = stripped("[(", ")]") {
-            return Flowchart.Node(id: id, label: label, shape: .cylinder)
-        }
-        if let label = stripped("[", "]") {
-            return Flowchart.Node(id: id, label: label, shape: .rectangle)
-        }
-        if let label = stripped("(", ")") {
-            return Flowchart.Node(id: id, label: label, shape: .rounded)
-        }
-        if let label = stripped("{", "}") {
-            return Flowchart.Node(id: id, label: label, shape: .diamond)
+        // Longest delimiters first, so `{{` isn't read as `{` with a brace in
+        // the label.
+        let shapes: [(open: String, close: String, shape: Flowchart.NodeShape)] = [
+            ("(((", ")))", .circle), ("((", "))", .circle), ("([", "])", .stadium),
+            ("[(", ")]", .cylinder), ("[[", "]]", .subroutine), ("{{", "}}", .hexagon),
+            ("[/", "/]", .rectangle), ("[\\", "\\]", .rectangle),
+            ("[/", "\\]", .rectangle), ("[\\", "/]", .rectangle),
+            ("[", "]", .rectangle), ("(", ")", .rounded), ("{", "}", .diamond),
+            (">", "]", .rectangle),
+        ]
+        for (open, close, shape) in shapes {
+            if let label = stripped(open, close) {
+                return Flowchart.Node(id: id, label: label, shape: shape)
+            }
         }
         return nil
     }
+
+    /// `id@{ shape: diam, label: "Decide" }` — mermaid's newer shape syntax.
+    /// Named shapes map onto the model's; ones it has no case for (and an
+    /// unknown name) are rectangles. Without a `label`, the id is the label.
+    private static func shapeDataNode(id: String, body: Substring) -> Flowchart.Node {
+        var fields: [String] = []
+        var current = ""
+        var quoted = false
+        for c in body {
+            if c == "\"" { quoted.toggle() }
+            if c == ",", !quoted {
+                fields.append(current)
+                current = ""
+            } else {
+                current.append(c)
+            }
+        }
+        fields.append(current)
+        var label = id
+        var shape = Flowchart.NodeShape.rectangle
+        for field in fields {
+            guard let colon = field.firstIndex(of: ":") else { continue }
+            let key = field[..<colon].trimmingCharacters(in: .whitespaces)
+            let value = field[field.index(after: colon)...]
+                .trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            switch key {
+            case "label" where !value.isEmpty: label = value
+            case "shape": shape = shapeNames[value.lowercased()] ?? .rectangle
+            default: break
+            }
+        }
+        return Flowchart.Node(id: id, label: label, shape: shape)
+    }
+
+    /// Mermaid's shape names (and aliases) that have a model case.
+    private static let shapeNames: [String: Flowchart.NodeShape] = [
+        "rect": .rectangle, "rectangle": .rectangle, "proc": .rectangle, "process": .rectangle,
+        "rounded": .rounded, "event": .rounded,
+        "stadium": .stadium, "pill": .stadium, "terminal": .stadium,
+        "diam": .diamond, "diamond": .diamond, "decision": .diamond, "question": .diamond,
+        "circle": .circle, "circ": .circle, "dbl-circ": .circle, "double-circle": .circle,
+        "cyl": .cylinder, "cylinder": .cylinder, "database": .cylinder, "db": .cylinder,
+        "hex": .hexagon, "hexagon": .hexagon, "prepare": .hexagon,
+        "subproc": .subroutine, "subprocess": .subroutine, "subroutine": .subroutine,
+        "fr-rect": .subroutine, "framed-rectangle": .subroutine,
+    ]
+
 
     // MARK: State
 
