@@ -103,6 +103,59 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.edges.count, 1, "edge id must not kill the line")
     }
 
+    /// Ids with `-` and `.` between word characters. The whole line used to
+    /// vanish: `api-gateway` stopped at `api`, failing the endpoint.
+    func testIdsWithDashesAndDots() throws {
+        let c = try flow("api-gateway[API gateway] --> auth.service[Auth] --> db[(Postgres)]")
+        XCTAssertEqual(c.nodes.map(\.id), ["api-gateway", "auth.service", "db"])
+        XCTAssertEqual(c.nodes.first?.label, "API gateway")
+        XCTAssertEqual(c.edges.count, 2)
+    }
+
+    /// `{{…}}` and `[[…]]`. `{{Redis}}` was a diamond labelled "{Redis}", and
+    /// `[[Worker]]` a rectangle labelled "[Worker]".
+    func testHexagonAndSubroutine() throws {
+        let c = try flow("cache{{Redis}} --> sub[[Worker]]")
+        XCTAssertEqual(c.nodes.first { $0.id == "cache" }?.shape, .hexagon)
+        XCTAssertEqual(c.nodes.first { $0.id == "cache" }?.label, "Redis")
+        XCTAssertEqual(c.nodes.first { $0.id == "sub" }?.shape, .subroutine)
+        XCTAssertEqual(c.nodes.first { $0.id == "sub" }?.label, "Worker")
+    }
+
+    /// Mermaid's `id@{ shape: …, label: … }` form. The `@{…}` endpoint used to
+    /// drop the whole edge line.
+    func testShapeDataSyntax() throws {
+        let c = try flow("A[Start] --> B@{ shape: diam, label: \"Decide, then go\" }\nC@{ shape: cyl }\nD@{ label: \"Plain\" }")
+        let b = c.nodes.first { $0.id == "B" }
+        XCTAssertEqual(b?.shape, .diamond)
+        XCTAssertEqual(b?.label, "Decide, then go", "a quoted comma isn't a field separator")
+        XCTAssertEqual(c.edges.count, 1)
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.shape, .cylinder)
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "C", "no label: the id")
+        XCTAssertEqual(c.nodes.first { $0.id == "D" }?.shape, .rectangle)
+        XCTAssertEqual(c.nodes.first { $0.id == "D" }?.label, "Plain")
+    }
+
+    /// Double circles, the slanted shapes and the asymmetric flag have no model
+    /// case: they degrade to the nearest one with the label intact, not the
+    /// delimiters.
+    func testShapesWithoutAModelCaseKeepTheirLabels() throws {
+        let c = try flow("a(((Done))) --> b>Flag] --> c[/In/] --> d[\\Out\\] --> e[/Wide\\] --> f[\\Narrow/]")
+        XCTAssertEqual(c.edges.count, 5)
+        XCTAssertEqual(c.nodes.map(\.label), ["Done", "Flag", "In", "Out", "Wide", "Narrow"])
+        XCTAssertEqual(c.nodes.first?.shape, .circle)
+        XCTAssertEqual(Set(c.nodes.dropFirst().map(\.shape)), [.rectangle])
+    }
+
+    /// `>…]` closes a bracket it never opened; inside an `&` fan that once
+    /// drove the splitter's depth negative, so the next `&` was swallowed
+    /// into the flag's label and its endpoint dropped.
+    func testFlagShapeInsideAFan() throws {
+        let c = try flow("a --> odd>Flag] & lean[/Input/]\nodd>Flag] & b --> c")
+        XCTAssertEqual(c.edges.count, 4)
+        XCTAssertEqual(Set(c.nodes.map(\.label)), ["a", "Flag", "Input", "b", "c"])
+    }
+
     // MARK: flowchart subgraphs
 
     /// Deterministic fake measurer for the layout-geometry assertions below.
