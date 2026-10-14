@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.3.0 — Flowcharts as agents write them, on a grid
+
+The flowchart forms coding agents actually emit in chat now parse instead of
+silently dropping the line, and box layouts get a grid: a metric that measures
+alignment and an opt-in quantizer that snaps flowcharts onto it. Additive; the
+default output only changes where a diagram used to render wrong.
+
+- **Flowchart syntax coverage.** Ids with `-` and `.` between word characters
+  (`api-gateway`, `auth.service`); `{{hexagon}}` and `[[subroutine]]` (which
+  previously matched the single-bracket forms and drew a diamond labelled
+  `{Redis}`); and mermaid's `id@{ shape: …, label: … }` shape data, with its
+  named shapes and aliases (`diam`/`decision`, `cyl`/`database`,
+  `hex`/`prepare`, `subproc`/`fr-rect`, …) mapped onto the existing cases.
+  Shapes without a model case keep their label instead of their delimiters:
+  `(((…)))` draws as a circle, and the slanted `[/…/]` family and the
+  asymmetric `>…]` as rectangles. Before, any of these failed its endpoint,
+  which dropped the whole edge line. Thanks to @hipstersmoothie. (#65)
+- **Grid-alignment metric.** `DiagramLayoutLinter.gridAlignment(_:unit:)`
+  reports how many of a box-family diagram's coordinates sit on a pixel grid
+  (default 4px; `nil` for pie/radar/timeline/sequence), and `report(_:)` adds a
+  non-gating `grid:` line. `GridAlignmentTests` holds a per-type floor the
+  layout may only ratchet up. (#62)
+- **`GridQuantizer`: opt-in grid snapping for flowcharts.**
+  `DiagramSpacing(gridSnap: 4)` snaps nodes, containers and edge waypoints onto
+  the grid inside `DiagramLayoutEngine.layout`, so CoreGraphics, `RenderScene`
+  and the linter all see the same geometry. Boxes only ever grow, edge
+  endpoints are re-anchored to the snapped borders, and `gridSnap` is part of
+  the spacing fingerprint so snapped and unsnapped renders never share a cache
+  entry. Off by default. (#63)
+
+### Fixed
+
+- **Docs gallery flowchart** now draws the fixture as written: the
+  `diagnose: did you mean…` step as a subroutine and `Scene IR` without its
+  slashes, both of which the old parser misread. (#65)
+- **Android CI** runs again: `setup-android` v3's default install included the
+  SDK's removed `tools` package, which failed all three Android jobs. (#66)
+
+### Docs
+
+- A full accuracy pass over the README, platform notes and DocC reference:
+  shipped-platform, SVG and P/Invoke claims; version pins and test counts;
+  build recipes and source paths; non-compiling examples and symbol links;
+  diagram labels and the linter table. (#57–#61, #64)
+
 ## 2.2.0 — Any source format, inline and narrated
 
 Format-aware entry points, so a rich-text host (a live editor, a document view)

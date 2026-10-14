@@ -193,8 +193,9 @@ mermaid.js, and the failure mode is deliberate:
   (`A --> B --> C`), `&` fan-out, inline `-- text -->` labels,
   bidirectional `<-->`, min-length links, `--o`/`--x` heads, edge IDs,
   `:::class` tolerance, nested `subgraph` group boxes (with inner
-  `direction` and edges that target a group id), the hexagon `{{ }}` and
-  subroutine `[[ ]]` node shapes; the full everyday
+  `direction` and edges that target a group id), ids with `-` and `.`
+  (`api-gateway`, `auth.service`), the hexagon `{{ }}` and subroutine
+  `[[ ]]` node shapes, and `@{ shape: …, label: … }` shape data; the full everyday
   sequence set — combined
   fragments (`loop`/`alt`+`else`/`opt`/`par`/`critical`/`break`, nested)
   with `rect` bands, activation bars (`->>+`/`->>-`, `activate`), `box`
@@ -205,7 +206,8 @@ mermaid.js, and the failure mode is deliberate:
   positional values; packet `+N` relative widths; treemap `:::class`;
   gitGraph `cherry-pick`; class generics `~T~`; ER attribute keys; state
   composites, forks, choices. Some still doesn't (flowchart
-  `@{ shape }`). If your diagram parses but drops
+  parallelogram, trapezoid and asymmetric shapes draw as rectangles, with
+  their labels intact). If your diagram parses but drops
   something you wrote, that's a gap: please
   [open an issue](#reporting-a-diagram-that-renders-wrong) with the source.
 
@@ -354,7 +356,7 @@ Two targets:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "2.2.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.3.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
