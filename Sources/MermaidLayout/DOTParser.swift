@@ -463,14 +463,17 @@ private final class DOTParserImpl {
         let dashed = style.contains("dashed") || style.contains("dotted")
         let dir = (attrs["dir"] ?? (directed ? "forward" : "none")).lowercased()
         // All four DOT directions: `back` points at the tail, `both` at both.
-        let hasArrow: Bool
-        let backArrow: Bool
+        var hasArrow: Bool
+        var backArrow: Bool
         switch dir {
         case "none": hasArrow = false; backArrow = false
         case "back": hasArrow = false; backArrow = true
         case "both": hasArrow = true;  backArrow = true
         default:     hasArrow = true;  backArrow = false   // forward / unknown
         }
+        // `arrowhead=none` / `arrowtail=none` suppress that end's mark.
+        if attrs["arrowhead"]?.lowercased() == "none" { hasArrow = false }
+        if attrs["arrowtail"]?.lowercased() == "none" { backArrow = false }
         // A dot-family arrowhead (`dot`, `odot`, `invdot`, `dotnormal`, …; the
         // arrowtail for a back-only edge) is a circle head. The model has one
         // head kind per edge, so a `dir=both` edge takes its arrowhead's.

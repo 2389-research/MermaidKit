@@ -131,6 +131,20 @@ final class DOTParserTests: XCTestCase {
                        [.circle, .circle, .circle, .circle, .arrow, .arrow, .circle])
     }
 
+    /// `arrowhead=none` / `arrowtail=none` suppress the mark at that end, as
+    /// in Graphviz, whatever `dir` asked for.
+    func testNoneArrowStylesSuppressTheirEnd() {
+        let chart = parse("""
+            digraph {
+              A -> B [arrowhead=none]; C -> D [dir=back, arrowtail=none]
+              E -> F [dir=both, arrowhead=none]; G -> H [dir=both, arrowtail=none]
+              I -> J [arrowtail=none]
+            }
+            """)
+        XCTAssertEqual(chart.edges.map { "\($0.hasArrow) \($0.backArrow)" },
+                       ["false false", "false false", "false true", "true false", "true false"])
+    }
+
     func testLabelLineBreaks() {
         let chart = parse(#"digraph { A [label="one\ntwo\lthree"] }"#)
         XCTAssertEqual(chart.nodes.first?.label, "one\ntwo\nthree")
