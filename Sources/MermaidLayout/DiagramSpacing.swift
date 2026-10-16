@@ -27,9 +27,9 @@ public struct DiagramSpacing: Hashable, Sendable {
     public var layerGap: CGFloat?
     /// Absolute canvas margin, overriding `scale`.
     public var margin: CGFloat?
-    /// When set (points), snaps the laid-out geometry of box-family diagrams onto
-    /// a grid of this pitch (see ``GridQuantizer``). Opt-in and off by default;
-    /// 4 is the natural unit. Ignored by families a grid doesn't apply to.
+    /// When set (points), snaps a flowchart's laid-out geometry onto a grid of
+    /// this pitch (the internal `GridQuantizer`). Opt-in and off by default; 4 is
+    /// the natural unit. Other diagram types ignore it today.
     public var gridSnap: CGFloat?
 
     public init(scale: CGFloat = 1, nodeGap: CGFloat? = nil,

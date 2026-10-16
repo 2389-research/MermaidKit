@@ -28,13 +28,23 @@ primitives in painter's order, exactly like the Android and SVG backends.
   rects / ellipses / polygons / arbitrary paths, stroked + arrowed edge
   polylines, and centered/rotated text with backing chips. Colors are
   `#RRGGBBAA`; text is measured with the same `SKPaint` that draws it.
-- `MermaidKit.Tests/` — xUnit tests: the golden JSON the core emits parses via
-  the converters and renders real ink on a Skia canvas.
+- `MermaidKit/MermaidNative.cs` — the P/Invoke bridge (`[DllImport("MermaidKitCShared")]`
+  over `mmk_scene_json` / `mmk_narrate` / `mmk_version` / `mmk_free`).
+- `MermaidKit.Tests/` — xUnit tests: `SceneRendererTests` (the golden JSON the
+  core emits parses via the converters and renders real ink on a Skia canvas) and
+  `PInvokeTests` (source → native → scene; soft-skip without the DLL unless
+  `MMK_NATIVE=1`).
 
 ## Build & test
 
 ```bash
 dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj
+
+# The P/Invoke seam too (on Windows): build the DLL, stage it, require it
+swift build -c release --product MermaidKitCShared
+dotnet build windows/MermaidKit.Tests/MermaidKit.Tests.csproj -c Release
+cp "$(find .build -name MermaidKitCShared.dll | head -1)" windows/MermaidKit.Tests/bin/Release/net8.0/
+MMK_NATIVE=1 dotnet test windows/MermaidKit.Tests/MermaidKit.Tests.csproj -c Release --no-build
 ```
 
 CI runs this on `windows-latest` (the authoritative target — system fonts render

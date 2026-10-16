@@ -41,6 +41,22 @@ lintable, and consumable by backends other than CoreGraphics.
 - ``DiagramLayoutLinter``
 - ``LayoutViolation``
 
+### Other front-ends and exports
+
+- ``DOTParser``
+- ``DOTExporter``
+- ``ASCIIRenderer``
+
+### Render IR
+
+- ``RenderScene``
+- ``SceneWire``
+
+### Accessibility
+
+- ``MermaidAltText``
+- ``DiagramMetadata``
+
 ### Extending
 
 - <doc:AddingADiagramType>

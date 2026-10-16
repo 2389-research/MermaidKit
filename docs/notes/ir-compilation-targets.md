@@ -3,6 +3,8 @@
 Design memo · 2026-07-08 · based on reading the working clone at
 `scratchpad/mermaidkit-ios` (MermaidLayout + MermaidRender as published).
 
+> **Update (v2.4.0, 2026-10-16):** a historical memo; the code is the record of what shipped. Stage 0 shipped as `MermaidRenderer.pdfData(source:theme:spacing:)`. SVG shipped as `MermaidRenderer.svg(source:theme:spacing:)`, over a platform-free, `Codable` paint IR — `RenderScene`, lowered per diagram type and guarded by the draw-vs-scene conformance ratchet — rather than the `DiagramCanvas`/`DrawList` seam proposed here (which, like `MermaidSVG`, was never built). Alt text shipped as `MermaidAltText` over the parsed models. Despite §3 and §5, a DOT exporter (`DOTExporter`) and a flowchart-scoped terminal renderer (`mermaidkit-term`) also shipped. Counts below (23 types, 8 flowchart shapes) are July 2026 figures; there are now 30 types and 14 flowchart shapes.
+
 ## 0. What actually exists (verified)
 
 Pipeline today:

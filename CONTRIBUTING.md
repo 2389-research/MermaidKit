@@ -2,7 +2,8 @@
 
 ## The lay of the land
 
-One diagram type = three small, independent pieces:
+One diagram type = a model plus three small, independent pieces (usually one
+file each; older or grouped types share files, so copy the nearest neighbor):
 
 - `Sources/MermaidLayout/MermaidParser+<Type>.swift` — text → model
 - `Sources/MermaidLayout/DiagramLayout<Type>.swift` — model → geometry
@@ -10,8 +11,10 @@ One diagram type = three small, independent pieces:
 - `Sources/MermaidRender/DiagramRenderer+<Type>.swift` — geometry → drawing
   (one `CGContext` seam: CoreGraphics on Apple, Silica/Cairo on Linux)
 
-Plus a lowering (`DiagramScene+<Type>.swift`) that hands the geometry to the
-layout linter.
+Plus two lowerings: `DiagramScene+<Type>.swift` hands the geometry to the layout
+linter, and `RenderScene+<Type>.swift` lowers it to the platform-free render IR
+behind SVG export, `SceneWire`, and the Android/Windows/WebAssembly/Flutter
+renderers. The DocC article *Adding a Diagram Type* walks through all of it.
 
 ## Ground rules
 
@@ -64,8 +67,14 @@ becoming a semver trap:
   `DiagramLayoutEngine.layout`, `DiagramScene.lower`, `DiagramLayoutLinter`,
   `MermaidRenderer`, `MermaidView`, `DiagramTheme`) are stable — and always
   have been.
-- **As of 1.0, model/layout field changes are semver-major.** Before 1.0 they
-  could reshape to follow the diagrams' needs; that window is closed.
+- **As of 1.0, removing or changing existing model/layout fields is
+  semver-major.** Before 1.0 they could reshape to follow the diagrams' needs;
+  that window is closed. Additive changes ship in minor releases: new fields
+  with defaults, and new cases on model enums such as `Flowchart.NodeShape`
+  (1.2.0, 2.4.0). A new case breaks an exhaustive `switch` outside the package,
+  so the release notes call it out; consumers switching over model enums should
+  keep an `@unknown default:` branch, which turns a new case into a compiler
+  warning instead of a build error.
 
 ## Most-wanted
 

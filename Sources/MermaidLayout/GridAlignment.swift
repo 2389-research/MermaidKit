@@ -47,7 +47,7 @@ extension DiagramLayoutLinter {
         /// ratchet tracks — small layout improvements register here.
         public var coordFraction: Double { coordsTotal == 0 ? 1 : Double(coordsOnGrid) / Double(coordsTotal) }
 
-        /// One-line human summary, e.g. `42% of node coords on the 4px grid (5/12 boxes)`.
+        /// One-line human summary, e.g. `42% of node coords on the 4px grid (5/12 boxes fully aligned)`.
         public var summary: String {
             let pct = Int((coordFraction * 100).rounded())
             return "\(pct)% of node coords on the \(Int(unit))px grid (\(nodesOnGrid)/\(nodes) boxes fully aligned)"

@@ -16,7 +16,8 @@ Raspberry Pi framebuffer, an SDL2/GPU window) via the platform-free raw raster. 
 scene contract (`SceneWire`) carries the fully-resolved diagram across the C ABI;
 each platform paints it with a thin native renderer, and the core's output is
 proven **byte-identical across the five it compiles to** (Android, Windows, WASM,
-Linux, macOS) in CI. On Android, Windows, and Flutter an app passes a Mermaid
+Linux, macOS): CI gates macOS, Linux, WASM and Windows on every PR and push to
+`main`, and Android was verified on an emulator. On Android, Windows, and Flutter an app passes a Mermaid
 *source string* — via JNI, P/Invoke, and `dart:ffi` — and gets a drawn diagram,
 no Swift toolchain of its own. See
 [`docs/notes/cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md),
@@ -26,6 +27,13 @@ no Swift toolchain of its own. See
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
   <img alt="MermaidKit's own render pipeline as a sankey diagram, rendered by MermaidKit" src="docs/images/hero-light.png">
 </picture>
+
+Add the package with SwiftPM, then depend on the `MermaidRender` product (or
+`MermaidLayout` alone for headless parsing and layout):
+
+```swift
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.4.0")
+```
 
 ```swift
 import MermaidRender
@@ -72,7 +80,7 @@ sub-millisecond), and results are cached per (source, theme, spacing).
 | Output | `NSImage`/`UIImage`, PDF, SVG, `NSAttributedString`, SwiftUI | HTML/SVG in webview | image, SVG, ASCII |
 | Layout engine | network-simplex layering, label-space reservation, fixed-side ports | dagre / ELK | elk-swift |
 | Layout verification | **geometric linter in CI** + stability tests | — | — |
-| Density control | `DiagramSpacing` presets | config | — |
+| Density control | `DiagramSpacing` presets + opt-in grid snap (`gridSnap:`) | config | — |
 | Syntax coverage | core syntax per type (see matrix) | reference | core syntax, 6 types |
 
 If you need iOS 15 or pixel-parity with mermaid.js, those other rows are good
@@ -89,7 +97,8 @@ dark): **[docs/GALLERY.md](docs/GALLERY.md)**.
 
 One Swift layout core; a thin native renderer per platform. The parse → layout →
 `RenderScene` pipeline is platform-free, so it cross-compiles to every target and
-its output is **byte-identical across the five it compiles to** (proven in CI —
+its output is **byte-identical across the five it compiles to** (CI gates macOS,
+Linux, WASM and Windows; Android was verified on an emulator —
 [`cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md)). The
 fully-resolved scene crosses the C ABI as the language-neutral **`SceneWire`**
 JSON; each platform paints it.
@@ -98,10 +107,10 @@ JSON; each platform paints it.
 |---|---|---|---|
 | macOS / iOS / visionOS | CoreGraphics / CoreText | in-process | `import MermaidRender` |
 | Linux | Silica (Cairo/FontConfig) | in-process | `LinuxRaster` trait |
-| **Android** | Kotlin `Canvas` (Skia) | JNI → `.so` | `implementation("ai.2389:mermaidkit-android:…")` — [`android/`](android/) |
-| **Windows / .NET** | SkiaSharp | P/Invoke → `.dll` | `MermaidKit` NuGet — [`windows/`](windows/) |
-| **Flutter** | Dart `CustomPainter` (Skia) | `dart:ffi` → shared lib | [`flutter/`](flutter/) — iOS, Android, web, desktop from one plugin |
-| **WebAssembly** | SVG / Canvas2D | WASI | `swift build --swift-sdk …wasm` |
+| **Android** | Kotlin `Canvas` (Skia) | JNI → `.so` | `implementation("ai.2389:mermaidkit-android:…")` via `mavenLocal()` until it's on Maven Central — [`android/`](android/) |
+| **Windows / .NET** | SkiaSharp | P/Invoke → `.dll` | `MermaidKit` .NET library (NuGet package planned) — [`windows/`](windows/) |
+| **Flutter** | Dart `CustomPainter` (Skia) | `dart:ffi` → shared lib | [`flutter/`](flutter/) — the painter runs on every Flutter target; the `dart:ffi` bridge on native ones |
+| **WebAssembly** | SVG / `SceneWire` | WASI | `swift build --swift-sdk …wasm` |
 
 Beyond those, the platform-free **raw raster** (`MermaidRenderer.rgbaRaster`, on
 Apple and Linux) drives **any bare surface** with no display server — a Raspberry
@@ -135,16 +144,19 @@ Material theming (`MermaidTheme.fromMaterial`), device-font measurement, and
 
 Mermaid is the primary input, but it isn't the only one. Four more front-ends
 parse into the same IR (`Flowchart` / `ERDiagram` / `GitGraph`) and render
-through the same layout and every backend — CoreGraphics/CoreText on Apple,
-Silica/Cairo on Linux, and the terminal — with no re-serialization back to
-Mermaid text:
+through the same layout and the raster backends — CoreGraphics/CoreText on Apple,
+Silica/Cairo on Linux — and, for DOT/Dippin flowcharts and git log, the terminal,
+with no re-serialization back to Mermaid text:
 
 - **Graphviz DOT** — `DOTParser.parse(_:)` turns a `.dot` source into a
   `Flowchart`, handling subgraphs/clusters, attribute defaults, `dir=back`, and
   shape mapping. The inverse ships too: `DOTExporter.export(_:)` emits a
   `Flowchart` back as DOT, so MermaidKit doubles as a **Mermaid ⇄ DOT
-  converter** — flat charts round-trip exactly, clustered charts round-trip
-  structurally.
+  converter** — flat charts round-trip exactly except for what DOT can't express
+  (`subroutine`, `asymmetric` and `parallelogramAlt` come back as their nearest DOT
+  shape, a `--x` cross head as an arrow); clustered charts round-trip
+  structurally. Thick (`style=bold`), invisible (`style=invis`), circle heads
+  (`arrowhead=dot`) and link length (`minlen`) carry both ways.
 - **Dippin** (`.dip`) — `DippinParser.parse(_:)` maps Dippin's eight node kinds
   (agent, tool, human, conditional, parallel, fan_in, subgraph, manager_loop)
   to flowchart shapes and collapses simple `when` equalities to concise edge
@@ -163,8 +175,8 @@ Mermaid text:
   ancestry so a feature branch's interior commits share the tip's lane.
   `mermaidkit-term --format gitlog` renders it straight to the terminal.
 
-Each hands its parsed diagram straight to `MermaidRenderer.pngData(diagram:)` /
-`image(diagram:)`. Or skip the parser entirely: the **format-aware** entry points
+Each hands its parsed diagram straight to `MermaidRenderer.pngData(diagram:theme:)` /
+`image(diagram:theme:)`. Or skip the parser entirely: the **format-aware** entry points
 take `(source, format)` and dispatch to the right front-end, so a DOT or Dippin
 block gets the same image, sized/themed text attachment, and accessibility
 narration that Mermaid does — `MermaidRenderer.attachmentString(source:format:theme:)`,
@@ -206,15 +218,18 @@ mermaid.js, and the failure mode is deliberate:
   heads for every token (`-x`, `-)`, `<<->>`), autonumber badges; gantt
   directive lines (never phantom bars) and `y/M/s` durations; radar
   positional values; packet `+N` relative widths; treemap `:::class`;
-  gitGraph `cherry-pick`; class generics `~T~`; ER attribute keys; state
+  gitGraph `cherry-pick`; class generics `~T~` (parsed; drawn as written, not as
+  `<T>`); ER attribute keys; state
   composites, forks, choices. Some still doesn't (mermaid's newer named
   flowchart shapes, like `@{ shape: doc }`, draw as rectangles, with their
   labels intact). If your diagram parses but drops
   something you wrote, that's a gap: please
   [open an issue](#reporting-a-diagram-that-renders-wrong) with the source.
 
-Not supported anywhere: HTML in labels other than `<br/>` line breaks
-(sequence messages and notes honor `<br/>`; other tags render as text),
+Not supported anywhere: HTML in labels other than `<br/>` line breaks (the
+CoreGraphics/Silica raster backends honor `<br/>` in every label; the
+SVG/`SceneWire` path honors it in sequence messages and notes only; other tags
+render as text),
 FontAwesome icons, click callbacks, animations, and mermaid.js theming
 directives (theming is `DiagramTheme`'s job).
 
@@ -297,13 +312,15 @@ of it in CI. Numeric input is sanitized at the parser boundary
 
 ## Terminal rendering (experimental)
 
-`mermaidkit-term` is a CLI that renders any Mermaid, DOT, or Dippin source
-straight to the terminal — no display server, no window. It picks the best tier
-the terminal will answer to: **Kitty graphics** (a real inline image) →
-**half-block truecolor** (1×2 color pixels) → **colored box-drawing** →
-**monochrome Unicode box-drawing**, with OSC 11 background detection and
-capability probing to choose. It
-lives in `MermaidLayout`, so it's platform-free and runs headless on Linux/CI.
+`mermaidkit-term` is a CLI that renders Mermaid, DOT, Dippin, or `git log` source
+straight to the terminal — no display server, no window. By default it picks the
+best tier the terminal will answer to: **Kitty graphics** (a real inline image) →
+**half-block truecolor** (1×2 color pixels) → **monochrome Unicode box-drawing**,
+with OSC 11 background detection and capability probing to choose; `--mode box`
+selects **colored box-drawing**. The raster tiers draw every type; the
+box-drawing tiers are flowchart-only and come from the platform-free
+`MermaidLayout`, so they run headless on Linux/CI (the raster tiers need
+`MermaidRender`, which on Linux means the `LinuxRaster` trait).
 
 ```
 swift run mermaidkit-term flowchart.mmd
@@ -324,7 +341,7 @@ let svg = MermaidRenderer.svg(
 )   // -> "<svg …>…</svg>"
 ```
 
-`RenderScene` is a new public, `Codable`, **platform-free** render IR (in
+`RenderScene` is a public, `Codable`, **platform-free** render IR (in
 `MermaidLayout`): a complete display list — shaped nodes, arrowed edges, text,
 containers — with every shape's geometry resolved exactly once, so a backend
 just paints primitives in order rather than re-deriving a diamond's vertices or
@@ -335,19 +352,23 @@ the scene → SVG path runs headless on Linux and in CI. Because the whole tree 
 determinism gate diffs both the raster and the RenderScene/SVG signatures in CI.
 
 `RenderScene` — projected to the explicit, language-neutral **`SceneWire`** JSON
-contract — is the foundation for the shipped **Android** and **Windows/.NET**
+contract — is the foundation for the shipped **Android**, **Windows/.NET** and **Flutter**
 renderers and the WebAssembly build. Each consumes the same scene and paints it
-natively (Android with `Canvas`, Windows with SkiaSharp), so all thirty diagram
+natively (Android with `Canvas`, Windows with SkiaSharp, Flutter with a Dart
+`CustomPainter`), so all thirty diagram
 types render on every platform with no per-type work on the consumer side. The
 core's `SceneWire`/SVG output is byte-identical across macOS, Linux, Android,
-WASM, and Windows (CI-gated) — see
+WASM, and Windows (CI gates all but Android, which was verified on an emulator) — see
 [`docs/notes/android.md`](docs/notes/android.md),
 [`docs/notes/windows.md`](docs/notes/windows.md), and
 [`docs/notes/cross-platform-conformance.md`](docs/notes/cross-platform-conformance.md).
 
 ## Architecture
 
-Two targets:
+Two library targets carry the pipeline, plus `MermaidKitC` — the `mmk_*` C ABI
+over `MermaidLayout` that Android, Windows and Flutter call, shipped static as
+`MermaidKitC` and as the `MermaidKitCShared` library — and the `mermaidkit-term`
+CLI:
 
 - **MermaidLayout** — platform-free. `MermaidParser.parse(String)` →
   per-type models → `DiagramLayoutEngine.layout(_:measure:)` → pure geometry
@@ -358,14 +379,14 @@ Two targets:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "2.3.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.4.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
   categorical palette, and a dark-mode flag) and `DiagramSpacing` (layout
   density).
 
-The layered types (flowchart, class, ER, state) use network-simplex layer
+The layered types (flowchart, class, ER, state, swimlane) use network-simplex layer
 assignment — the same strategy ELK Layered and Graphviz dot default to —
 with label-space reservation and declaration-order stability, so diagrams
 stay compact, labels stay readable, and small edits don't reshuffle the
@@ -381,6 +402,9 @@ no overlapping nodes, no off-canvas or colliding labels, no marks escaping a
 plot). The linter runs in this
 package's test suite over dense fixtures for all 30 types, so layout
 regressions fail CI as *geometry* ("edge #3 passes through node 'DiagramScene' (165pt inside)"), not as pixel diffs.
+Separately, `DiagramLayoutLinter.gridAlignment(_:unit:)` measures how much of a
+box-family layout sits on a pixel grid (a `GridAlignment` metric, not a
+violation), and per-type floors in the test suite may only rise.
 
 The scene IR is also the extension seam — and it's now realized across five
 platforms. Alongside the lint-focused `DiagramScene`, a render-focused
@@ -388,8 +412,9 @@ platforms. Alongside the lint-focused `DiagramScene`, a render-focused
 every type and is consumed by the built-in `SVGRenderer` to export standalone
 SVG, all inside the platform-free `MermaidLayout` target without touching parsing
 or layout. Projected to the `SceneWire` JSON contract and crossed via the C ABI,
-that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
-**Windows/.NET** (SkiaSharp) renderers and the WebAssembly build
+that same scene now drives the shipped native **Android** (Kotlin `Canvas`),
+**Windows/.NET** (SkiaSharp) and **Flutter** (Dart `CustomPainter`) renderers and
+the WebAssembly build
 (`docs/notes/android.md`, `docs/notes/windows.md`). Further backends welcome.
 
 ## API
@@ -397,7 +422,8 @@ that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
 - `MermaidView(source, theme:spacing:)` — SwiftUI drop-in; theme defaults
   to the environment color scheme; `spacing` is the density knob
   (`.compact` / `.regular` / `.comfortable`, or custom gaps — consulted by
-  flowchart, class, ER, state, and architecture layouts).
+  flowchart, class, ER, state, and architecture layouts; `DiagramSpacing(gridSnap: 4)`
+  additionally snaps flowchart geometry onto a 4pt grid).
 - `DiagramTheme` — six colors + a categorical `palette` (node tints, pie
   slices, sankey bands…); override the palette to re-skin all 30 types at
   once. See the Theming article in the DocC docs.
@@ -415,9 +441,9 @@ that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
 - `RenderScene` / `SVGRenderer` (in `MermaidLayout`) — the `Codable`,
   CoreGraphics-free render display list and its SVG backend; consume
   `RenderScene` to reach a new output format without touching parsing or layout.
-- `MermaidRenderer.pngData(diagram:)` / `image(diagram:)` /
-  `rgbaRaster(diagram:)` — render an already-parsed `MermaidDiagram` without
-  re-serializing to Mermaid text; the path the DOT/Dippin/SQL front-ends take.
+- `MermaidRenderer.pngData(diagram:theme:)` / `image(diagram:theme:)` /
+  `rgbaRaster(diagram:theme:)` — render an already-parsed `MermaidDiagram` without
+  re-serializing to Mermaid text; the path the DOT/Dippin/SQL/git-log front-ends take.
 - `DOTParser.parse(_:)`, `DippinParser.parse(_:)`, `SQLDDLParser.parse(_:)`,
   `GitLogParser.parse(_:)` — the non-Mermaid front-ends (Graphviz DOT, Dippin,
   SQL DDL, and `git log` output → gitgraph) into the same IR;
@@ -428,7 +454,7 @@ that same scene now drives the shipped native **Android** (Kotlin `Canvas`) and
   entry points that dispatch on `DiagramSourceFormat` (`.mermaid`/`.dot`/`.dippin`/
   `.sqlDDL`/`.gitLog`), so a non-Mermaid block gets the same attachment, narration,
   and image without the consumer touching a parser (`.mermaid` = the source-only
-  methods). Diagram-based `attachmentString(diagram:)` / `altText(diagram:)` too.
+  methods). Diagram-based `attachmentString(diagram:title:theme:)` / `altText(diagram:)` too.
 - `MermaidRenderer.altText(source:)` — a VoiceOver-ready description of
   the diagram's content, and `MermaidAltText.narrate(source:)` a step-by-step
   walkthrough (see Accessibility above).
@@ -456,19 +482,22 @@ and the most-wanted list.
 
 ## FAQ
 
-**Does it render on Linux?** Yes, since v0.11.0 — `MermaidRender` draws with
+**Does it render on Linux?** Yes, since v0.11.0 — with the `LinuxRaster` package
+trait enabled (off by default since v0.12.0), `MermaidRender` draws with
 Silica (Cairo/FontConfig) on Linux, sharing the exact layout and per-type draw
 code as the Apple backend (`docs/notes/linux-rendering-via-silica.md`). The
 layout target (`MermaidLayout`) was always platform-free — and a vector SVG
 backend over the scene IR now ships from there too:
 `MermaidRenderer.svg(source:theme:)` exports standalone SVG for all 30 types via
 the CoreGraphics-free `SVGRenderer` (see
-[SVG export](#svg-export-and-the-renderscene-ir)).
+[SVG export](#svg-export-and-the-renderscene-ir)). Without the trait, SVG is still
+available headlessly: `RenderScene.from(_:theme:measure:)` + `SVGRenderer` in
+`MermaidLayout`.
 
 **Does it run on Android / Windows / Flutter / the web?** Yes — natively. The
 Swift layout core cross-compiles to each; a thin native renderer paints the shared
 `SceneWire` scene (Kotlin `Canvas` on Android, SkiaSharp on Windows/.NET, a Dart
-`CustomPainter` on Flutter, SVG or Canvas2D on WebAssembly). On Android, Windows,
+`CustomPainter` on Flutter, SVG on WebAssembly). On Android, Windows,
 and Flutter an app passes a Mermaid *source string* — via JNI, P/Invoke, and
 `dart:ffi` — and gets a drawn diagram, no Swift toolchain of its own. See
 [`android/`](android/), [`windows/`](windows/), [`flutter/`](flutter/), and the
@@ -483,8 +512,9 @@ architecture.
 
 **Is the output really the same on every platform?** The scene is: the core's
 `SceneWire`/SVG output is byte-identical across macOS, Linux, Android, WASM, and
-Windows, checked on every push by a
-[conformance gate](docs/notes/cross-platform-conformance.md). Getting there
+Windows. A [conformance gate](docs/notes/cross-platform-conformance.md) checks
+macOS, Linux, WASM and Windows on every PR and push to `main` (Android was
+verified on an emulator). Getting there
 surfaced (and fixed) two real cross-platform determinism bugs — a `Double`→JSON
 formatting difference between Foundation implementations, and a `ceil` that
 amplified a 1-ULP `sin`/`cos` difference in pie tessellation.

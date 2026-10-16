@@ -45,8 +45,8 @@ geometry tests.
 | `edge-cuts-label` | error | A foreign edge slices through a bare label |
 | `label-on-fixture` | error | An edge label sits on a bend, a crossing, another label, a box, or an arrowhead tip (flowchart/state) |
 | `label-crowds-edge` | error | An edge label's run leaves under 10pt of connector on a side (flowchart/state) |
-| `edge-endpoint-detached` | error | An edge has no polyline, is a zero-length stub, or an endpoint sits detached from every node |
-| `edges-doubled` | error | Two edges run doubled along a shared line (overlapping connectors) |
+| `edge-endpoint-detached` | error | An edge has no polyline, is a zero-length stub, or an endpoint sits detached from every node (flowchart/state) |
+| `edges-doubled` | error | Two edges run doubled along a shared line (overlapping connectors) (flowchart/state) |
 | `labels-overlap` / `label-over-node` | warning | Colliding text |
 | `edge-under-label` | warning | An edge passes under a backed (chip) label |
 | `edge-crossings` | warning | Crossing count beyond a budget |
@@ -72,10 +72,12 @@ reports the fraction of coordinates on the grid, and `report(_:)` appends a
 `grid:` line for them. It is deliberately **not** a `LayoutViolation`: today's
 layouts sit well below full alignment, so a warning would fire on every diagram.
 Instead a test tracks a per-type floor the layout can only ratchet up — the
-baseline the grid-snapping pass is verified against. That pass, ``GridQuantizer``,
+baseline the grid-snapping pass is verified against. That pass, `GridQuantizer`,
 is opt-in via ``DiagramSpacing/gridSnap`` (flowchart today): it snaps node boxes
-onto the grid and re-anchors edges, and because it runs inside the shared layout
-dispatch, both render paths and this lint IR see identical snapped geometry.
+onto the grid and re-anchors edges inside
+`DiagramLayoutEngine.layout(_:measure:spacing:)`, so the CoreGraphics and
+`RenderScene` paths draw identical snapped geometry. ``DiagramScene/lower(_:measure:)``
+takes no spacing, so it always lints the unsnapped layout.
 
 ```swift
 if let ga = DiagramLayoutLinter.gridAlignment(scene) {

@@ -1,7 +1,7 @@
 # MermaidKit — design context pack
 
 You are designing a brochure site (GitHub Pages) for MermaidKit. Everything
-in this pack was verified against the code at v2.2.0 on 2026-07-21. Cite
+in this pack was verified against the code at v2.4.0 on 2026-10-16. Cite
 facts as written; do not embellish, round up, or invent. Where a claim
 feels thin, use fewer claims — the diagrams do the impressing.
 
@@ -16,7 +16,7 @@ SVG output, VoiceOver descriptions for every diagram, themed with a single
 value. MIT license.
 
 - Repo: https://github.com/2389-research/MermaidKit
-- Latest release: v2.2.0
+- Latest release: v2.4.0
 - Site target: https://2389-research.github.io/MermaidKit/ — a static
   `index.html` placed in the repo's `docs/` folder (GitHub Pages serves
   `docs/` from `main`; reference images relatively as `images/...`)
@@ -90,7 +90,7 @@ surface (all verified names):
 
 Install:
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.2.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.4.0")
 ```
 
 ### 3. Built to meet people where they are
@@ -143,8 +143,10 @@ no extensions):
   `-)`, `--)`, `<<->>`, `<<-->>`); autonumber badges with
   start/step/off.
 - **Flowchart**: chained edges (`A --> B --> C`), `&` fan-out, inline
-  `-- text -->` labels, bidirectional `<-->`, min-length links, `--o`/
-  `--x` heads, edge IDs, `:::class` tolerance, six node shapes.
+  `-- text -->` labels, bidirectional `<-->`, thick `==>` and invisible
+  `~~~` links, circle `--o` / cross `--x` heads, longer links that span
+  more ranks, edge IDs, ids with `-`/`.`, `:::class` tolerance, 14 node
+  shapes plus `@{ shape: … }` data.
 - **Gantt**: sections, `done/active/crit/milestone`, `after`
   dependencies, `d/w/h/m/y/M/s/ms` durations; directive lines can never
   become phantom bars.
@@ -154,23 +156,25 @@ no extensions):
   self-relations; **state** composites, forks, choices; **architecture**
   author-declared edge sides with A* routing.
 
-Known gaps (say them plainly if the site mentions coverage): flowchart
-subgraph boxes and `@{ shape }` shape library; HTML in labels beyond
-`<br/>`; FontAwesome icons; click/animation interactivity; mermaid.js
+Known gaps (say them plainly if the site mentions coverage): mermaid's
+newer named flowchart shapes without a model case (e.g. `@{ shape: doc }`)
+draw as labelled rectangles; markdown strings and entity codes; HTML in
+labels beyond `<br/>`; FontAwesome icons; click/animation interactivity; mermaid.js
 theming directives (theming is `DiagramTheme`'s job).
 
-## Numbers the site may cite (all verified 2026-07-21)
+## Numbers the site may cite (all verified 2026-10-16)
 
-- **30** diagram types. **Zero** dependencies. Zero JavaScript, no
-  WebView.
+- **30** diagram types. **Zero** dependencies by default (Linux's Silica
+  raster is an opt-in trait). Zero JavaScript, no WebView.
 - Cold render **including rasterization**, Apple silicon, dense fixtures,
-  fair round-robin sampling: worst **25.0 ms** (sankey); most types
-  **2–12 ms**; repeat renders hit an in-memory cache keyed by
-  (source, theme, spacing). CI fails any type over 250 ms.
+  fair round-robin sampling: worst **~25 ms** (sankey); most types
+  **under ~15 ms**; on Apple platforms repeat renders hit an in-memory
+  cache keyed by (source, theme, spacing). Timings are measured, not a CI
+  gate: `RenderBenchmarks` asserts that every fixture renders.
 - Parse alone: 0.05–1.9 ms per fixture.
 - Input caps mirror mermaid.js: 50,000-character sources, 500 flowchart
   edges; oversized input returns nil fast.
-- 149 tests in CI, including: the geometry linter over all 30 fixtures,
+- 443 tests in CI on macOS (421 on Linux), including: the geometry linter over all 30 fixtures,
   per-fixture edge-length budgets, scene-diff edit-stability tests,
   adversarial input suite, rasterized render benchmarks, PDF export
   validation for all 30 types, alt-text determinism for all 30 types,
@@ -186,11 +190,11 @@ Each exists in light and dark; serve both via `<picture>` with
 dark variants).
 
 **Hero** — MermaidKit's own render pipeline as a sankey (~2200px wide):
-- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.2.0/docs/images/hero-light.png
-- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.2.0/docs/images/hero-dark.png
+- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.4.0/docs/images/hero-light.png
+- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.4.0/docs/images/hero-dark.png
 
 **Per-type gallery** (30 × 2, max 2000px wide). Pattern:
-`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.2.0/docs/images/types/<name>.png`
+`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.4.0/docs/images/types/<name>.png`
 
 | name | the self-portrait shows |
 |---|---|
@@ -225,8 +229,8 @@ dark variants).
 | xychart | published benchmark numbers with the budget line |
 | zenuml | the diagnose-and-fix flow |
 
-No logo exists; the diagrams are the visual identity. If a wordmark is
-designed, keep it quiet — the gallery carries the page.
+The logo lives at `docs/images/logo.svg` (plus `logo-256.png` and
+`logo-512.png`); keep it quiet — the gallery carries the page.
 
 ## Code snippets (copy exactly; these compile)
 
@@ -258,7 +262,7 @@ let pdf = MermaidRenderer.pdfData(source: source, theme: theme)
 
 Install:
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.2.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.4.0")
 ```
 
 ## Voice (non-negotiable)

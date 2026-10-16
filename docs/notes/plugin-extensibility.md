@@ -5,6 +5,8 @@ A design sketch for letting people extend MermaidKit — new input formats
 by handing a spec to a coding agent. Not yet implemented; this captures the shape
 so we build the right thing.
 
+> **Update (v2.4.0, 2026-10-16):** runtime plugins still aren't implemented, but the backend half of the contract now exists, and it is `SceneWire`, not `DiagramScene`: a versioned JSON scene (`SceneWire.currentVersion`) lowered from `RenderScene` and served over the C ABI (`mmk_scene_json`), which the Android, Flutter and Windows renderers already consume. (`DiagramScene` is the linter's geometry IR.) The frontend model IRs are still not `Codable`.
+
 ## The seam is the IR, not the code
 
 MermaidKit already funnels everything through a small set of value types. A

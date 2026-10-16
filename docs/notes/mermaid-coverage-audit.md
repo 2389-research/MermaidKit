@@ -2,11 +2,13 @@
 
 > **⟳ Reconciled 2026-07-15 against MermaidKit 1.0.** This audit was written 2026-07-07 against an older snapshot (`scratchpad/mermaidkit-ios`). Since then a **parser-honesty pass** plus a **flowchart/sequence rewrite** have landed. Net effect on this document:
 > - **Part A is obsolete** — all 7 "missing" types now ship end-to-end (6 fully; EventModeling partial). See the Part A banner.
-> - **Largely FIXED:** flowchart (8/13), sequenceDiagram (12 gaps + the alias bug), packet-beta (→ 0 gaps), radar-beta (3/4), treemap-beta (2/3), gantt phantom-task hazard + duration units, and the cross-cutting front-matter fence.
+> - **Largely FIXED:** flowchart (8/13 at 1.0; 11/13 + 1 partial at v2.4.0), sequenceDiagram (12 gaps + the alias bug), packet-beta (→ 0 gaps), radar-beta (3/4), treemap-beta (2/3), gantt phantom-task hazard + duration units, and the cross-cutting front-matter fence.
 > - **Still accurate:** classDiagram, stateDiagram-v2, erDiagram (untouched by the honesty pass), plus mindmap, block/kanban/architecture/sankey/pie/quadrant/requirement and several beta feature-gaps.
 > - **Parser locations** — the big-five parsers cited below (flowchart/sequence/class/state/er) still live in the monolithic `MermaidParser.swift`; only the newer diagram types have per-type `MermaidParser+<Type>.swift` files. Cited `MermaidParser.swift` line numbers may have drifted since this audit.
 >
 > Individual sections carry a bold **Reconciled 2026-07-15:** note; resolved worst-gaps are struck through and tagged **[FIXED]/[PARTIAL]/[remains]**.
+>
+> **⟳ Update (v2.4.0, 2026-10-16) — flowchart only.** v2.3.0 (#65) and v2.4.0 (#68) closed nearly all of the remaining flowchart gaps: invisible `~~~` (ranks nodes, isn't drawn), thick `==>`/`===` (2pt stroke; the no-arrow form parses), real circle/cross heads at one end or both, link length (`--->` spans two ranks; capped at 10 per link and 100 extra per chart), all 8 missing classic shapes, ids with `-`/`.`, and `id@{ shape:, label: }` shape data (names with a model case map to it; others such as `doc` or `bolt` draw as labelled rectangles). Flowchart now stands at **11/13 fixed + 1 partial**: markdown strings and entity codes remain, `@{shape}` is partial. Other types are unchanged since the 1.0 reconciliation.
 
 Date: 2026-07-07. Audited: MermaidKit clone at `scratchpad/mermaidkit-ios` (Sources/MermaidLayout parsers + models + scene/layout files) against live mermaid.js docs (mermaid.js.org). Scope per policy: STRUCTURAL gaps only count; styling/theming = COSMETIC (noted, not counted); click/interaction/animation = N/A.
 
@@ -16,7 +18,7 @@ Status/worst-gap cells below carry the reconciled 1.0 verdict; struck-through te
 
 | Type | Status | Structural gaps | Worst gap | Effort to close |
 |---|---|---|---|---|
-| flowchart | 8/13 fixed | 13 → 4+1 partial | ~~chained edges `A --> B --> C` silently erase the whole line~~ **[FIXED]** — remains: invisible `~~~`, 8 classic shapes, `@{shape}` spec, markdown/entities | L (chains/`&` M; subgraphs, `@{shape}` L) |
+| flowchart | 11/13 fixed (v2.4.0) | 13 → 1+1 partial | ~~chained edges `A --> B --> C` silently erase the whole line~~ **[FIXED]** — remains: markdown strings / entity codes; `@{shape}` **[PARTIAL]** (names without a model case draw as labelled rectangles) | M (markdown/entities) |
 | sequenceDiagram | 12+bug fixed | 12 (+1 bug) → 1 | ~~`->>+`/`->>-` activation shorthand mints phantom `+John`/`-John` lifelines~~ **[FIXED]** — remains only obscure `A->>()E:` phantom | L (S fix for phantoms; fragments L) |
 | classDiagram | 0 fixed | 10 **[remains]** | `class X["label"]` splits one class into two; multiplicity discarded (generics now also split) | M–L |
 | stateDiagram-v2 | 0 fixed | 6 **[remains]** | `id : description` lines dropped (can delete the state); note bodies leak as phantom states | M (2 worst fixes are S) |
@@ -41,7 +43,7 @@ Status/worst-gap cells below carry the reconciled 1.0 verdict; struck-through te
 | treemap-beta | 2/3 fixed | 3 → 1 | ~~`:::class` suffix destroys the leaf's value AND label~~ **[FIXED]** (+ classDef-as-node); unquoted `Foo: 2` `:`-truncation **[remains]** | S |
 | **Cross-cutting** | **FIXED** | ~~1~~ 0 | ~~YAML front-matter (`---\nconfig:…\n---`) rejects the whole diagram, for ALL 23 types~~ **[FIXED]** — `parse` now `stripMetadata`-strips the fence and surfaces title/accTitle/accDescr | S strip / M honor |
 
-**Totals (2026-07-07): 115 structural gaps across 23 types + 1 cross-cutting.** **Reconciled 2026-07-15:** roughly a third of the catalogued gaps are now closed — disproportionately the *worst* ones (the silent-fabrication / phantom-content class the audit called out). packet-beta and the cross-cutting front-matter fence are down to zero; flowchart, sequence, radar, treemap, gantt-phantoms and cherry-pick/RelIndex are largely fixed. classDiagram, stateDiagram-v2 and erDiagram were untouched and hold their full counts (the big four now really carry only class+state; flowchart/sequence are mostly closed). All **30** diagram types (23 audited + the 7 former "Part A" types) now ship end-to-end. Journey, sankey, quadrant, pie, requirement, timeline, kanban were already in good shape (≤3 gaps each).
+**Totals (2026-07-07): 115 structural gaps across 23 types + 1 cross-cutting.** **Reconciled 2026-07-15:** roughly a third of the catalogued gaps are now closed — disproportionately the *worst* ones (the silent-fabrication / phantom-content class the audit called out). packet-beta and the cross-cutting front-matter fence are down to zero; flowchart, sequence, radar, treemap, gantt-phantoms and cherry-pick/RelIndex are largely fixed. classDiagram, stateDiagram-v2 and erDiagram were untouched and hold their full counts (the big four now really carry only class+state; flowchart/sequence are mostly closed — flowchart down to markdown/entities plus a partial `@{shape}` as of v2.4.0). All **30** diagram types (23 audited + the 7 former "Part A" types) now ship end-to-end. Journey, sankey, quadrant, pie, requirement, timeline, kanban were already in good shape (≤3 gaps each).
 
 **Recurring pattern (worst finding of the audit):** these parsers almost never *reject*. Unrecognized syntax either falls through a per-line `continue` (silent drop) or gets half-matched by a substring connector search (phantom/corrupted content). Because the styled-source fallback only triggers when the whole parse returns nil, authors get a confident-looking but wrong diagram instead of the fallback. `ParseDiagnostics.swift` defines a `.note` severity for exactly this ("author content set aside") and **no parser currently emits it**.
 
@@ -109,8 +111,10 @@ Line references are to files under `Sources/MermaidLayout/` in the audited clone
 > - **FIXED:** chained edges `A-->B-->C`; `&` fan-out; inline `-- text -->` labels; min-length links; bidirectional (`<-->`/`o--o`/`x--x`); circle/cross ends (honest degrade — plain arrows, no phantom nodes); subgraphs (+ inner direction); edge IDs.
 > - **PARTIAL:** thick edges (parse + draw, but no thickness field; the no-arrow `===` form is still dropped).
 > - **Remains:** invisible `~~~`; the 8 missing classic shapes (delimiter leak); `@{shape}` (spec dropped, though the separate edge line now survives); markdown / entity codes.
+>
+> **Reconciled 2026-10-16 (v2.4.0): 11 FIXED, 1 PARTIAL, 1 remains.** Now also FIXED: thick `==>`/`===` (`Edge.thick`, 2pt); invisible `~~~` (`Edge.invisible` — ranks nodes, isn't drawn); real circle/cross heads (`Edge.head`, one end or both); link length (`Edge.length`); all 8 classic shapes (#65, #68). **PARTIAL:** `@{ shape: … }` — mermaid names with a model case map to it (`diam`, `cyl`, `hex`, `subproc`, `dbl-circ`, `lean-r`, `trap-b`, `odd`, …), others draw as labelled rectangles, the label is honored. **Remains:** markdown strings / entity codes.
 
-Supported: directions TD/TB/LR/BT/RL; 6 shapes (`[]`, `()`, `([])`, `[()]`, `(())`, `{}`); `-->`, `---`, `-.->`, `-.-`, `==>` (drawn solid); `|label|`; quoted labels; redeclaration label upgrade.
+Supported (v2.4.0): directions TD/TB/LR/BT/RL; 14 shapes (`[]`, `()`, `([])`, `[()]`, `(())`, `((()))`, `{}`, `{{}}`, `[[]]`, `[//]`, `[\\]`, `[/\]`, `[\/]`, `>]`) plus `id@{ shape:, label: }`; ids with `-`/`.`; `-->`, `---`, `-.->`, `-.-`, `==>`/`===` (thick), `~~~` (invisible), `o`/`x`/`<` heads at either end, longer links = more ranks; `|label|` and inline `-- text -->`; chains and `&`; subgraphs; `:::class` tolerated; quoted labels; redeclaration label upgrade. *(2026-07-07 text: 6 shapes, `==>` drawn solid.)*
 Failure mode: `parseEdgeLine` finds the first connector then `guard let fromNode…toNode… else { return nil }` (L246–248) — any unparseable endpoint kills the entire line (edge + label + both node declarations), and the standalone-node fallback fails on the same text.
 
 | Feature | Syntax | Behavior | Effort |
@@ -118,18 +122,18 @@ Failure mode: `parseEdgeLine` finds the first connector then `guard let fromNode
 | Chained edges | `A --> B --> C` | ~~**SD whole line**~~ **[FIXED]** | M |
 | Ampersand fan-out | `A & B --> C & D` | ~~**SD whole line**~~ **[FIXED]** | M |
 | Inline edge label | `A-- text -->B` | ~~**SD whole line**~~ **[FIXED]** | S |
-| Min-length links | `A ---->B`, `-...-`, `====` | ~~**SD whole line**~~ **[FIXED]** | S |
-| Invisible link | `A ~~~ B` | SD (ranking constraint lost) **[remains]** | S |
+| Min-length links | `A ---->B`, `-...-`, `====` | ~~**SD whole line**~~ **[FIXED]** — v2.4.0: each extra character adds a rank (cap 10 per link, 100 extra per chart) | S |
+| Invisible link | `A ~~~ B` | ~~SD (ranking constraint lost)~~ **[FIXED v2.4.0]** — ranks nodes, not drawn | S |
 | Bidirectional | `A <--> B`, `o--o`, `x--x` | ~~SD~~ **[FIXED]** | M |
-| Circle/cross ends | `A --o B`, `A --x B` | ~~**PC** phantom nodes~~ **[FIXED]** — honest degrade to plain arrows | M |
-| Thick edges | `A ==> B` / `===` | **[PARTIAL]** parse+draw, but no thickness field; no-arrow `===` still dropped | S |
+| Circle/cross ends | `A --o B`, `A --x B`, `o--o` | ~~**PC** phantom nodes~~ **[FIXED]** — real circle/cross heads, one end or both (v2.4.0; 1.0 drew plain arrows) | M |
+| Thick edges | `A ==> B` / `===` | ~~[PARTIAL] no thickness field; `===` dropped~~ **[FIXED v2.4.0]** — `Edge.thick`, drawn at 2pt | S |
 | Subgraphs + inner direction | `subgraph one … end` | ~~SD of grouping~~ **[FIXED]** (recursive cluster layout + inner direction) | L |
-| 8 missing classic shapes | `[[ ]]`, `{{ }}`, `[/ /]`, `[\ \]`, `[/ \]`, `[\ /]`, `((( )))`, `>x]` | DEG w/ delimiter leak **[remains]** | M |
-| `@{ shape: … }` (~30 shapes) | `A@{ shape: doc }` | **[remains]** spec dropped, but the separate edge line now survives | L |
+| 8 classic shapes | `[[ ]]`, `{{ }}`, `[/ /]`, `[\ \]`, `[/ \]`, `[\ /]`, `((( )))`, `>x]` | ~~DEG w/ delimiter leak~~ **[FIXED v2.3.0/v2.4.0]** — each has its own shape | M |
+| `@{ shape: … }` (~30 shapes) | `A@{ shape: doc }` | **[PARTIAL v2.3.0]** parsed: label kept, names with a model case map (`diam`, `cyl`, `hex`, `subproc`, `dbl-circ`, `lean-r`, `trap-t`, `odd`, …); others (e.g. `doc`, `bolt`) draw as rectangles | L |
 | Edge IDs | `A e1@--> B` | ~~**SD whole line**~~ **[FIXED]** | S |
 | Markdown strings / entity codes | `` A["`**b**`"] ``, `&#35;` | DEG literal **[remains]** | M |
 
-Cosmetic: style/classDef/class/linkStyle skipped — but `:::` on a node token makes the tokenizer reject → node SD. N/A: click, curve/elk config.
+Cosmetic: style/classDef/class/linkStyle ignored; `:::class` on a node token is stripped and the node kept (pinned in `testStyleClassSuffixTolerated`). N/A: click, curve/elk config.
 **Worst: chained edges — the most common idiom in real flowcharts erases silently.**
 
 ## sequenceDiagram (parseSequence L677–732) — 12 gaps (+1 bug)
@@ -202,7 +206,7 @@ Supported: all 8 crow's-foot glyphs, `--` vs `..` identifying, labels incl. quot
 | Feature | Syntax | Behavior | Effort |
 |---|---|---|---|
 | Word-form relationships | `CAR only one to zero or more PERSON : allows` | **SD — relationship (and entities declared only there) vanish** (separator loop L640 exhausts) | S |
-| Attribute keys | `string plate PK` | SD: tokens past index 1 discarded (L622–626); model has only type+name | M |
+| Attribute keys | `string plate PK` | SD: tokens past index 1 discarded (`parseER`); `Attribute.keys` (PK/FK/UK badge, added 1.3.0 for SQL DDL) exists but the Mermaid parser never fills it | S |
 | Attribute comments | `string name "comment"` | SD (same path) | M (shares) |
 | Entity aliases | `p[Person]` | **PC**: entity literally named `p[Person]`; relation against `p` duplicates | S |
 | Quoted entity names | `"ENTITY NAME" { }` | DEG: literal quotes in box | S |
@@ -427,7 +431,7 @@ showValues/valueFormat/padding = cosmetic (front-matter). **Worst: `:::class` de
 # PART C — Prioritized plan
 
 ## Tier 1 — Stop the lying (silent corruption / fabrication / content loss; almost all S)
-> **Reconciled 2026-07-15: most of Tier 1 has since landed (~60%).** Done: sequence `+`/`-` + alias bug (1), gantt colon-guard + units (2), radar positional + axis (3), packet `+N` (4), treemap (5), zenuml `//` + assignment (6, *partial* — fragments/`new`/`return`/`as` still open), C4 `RelIndex` (7), and front-matter strip (14). **Notable remainders:** class (9), state (10), er/requirement (13), and the mindmap parts of (12); the block parts of (8) also remain. In short — class/state/er/mindmap are the main Tier-1 work left.
+> **Reconciled 2026-07-15: most of Tier 1 has since landed (~60%).** Done: sequence `+`/`-` + alias bug (1), gantt colon-guard + units (2), radar positional + axis (3), packet `+N` (4), treemap (5), zenuml `//` + assignment (6, *partial* — fragments/`new`/`return`/`as` still open), C4 `RelIndex` (7), flowchart `--o`/`--x` phantoms + min-length + edge IDs (11), and front-matter strip (14). **Notable remainders:** class (9), state (10), er/requirement (13), and the mindmap parts of (12); the block parts of (8) also remain. In short — class/state/er/mindmap are the main Tier-1 work left.
 
 These make MermaidKit render a confident, wrong diagram. One "parser-honesty sprint" clears nearly all of them, ideally emitting `ParseDiagnostics` `.note` for anything still set aside (the severity exists and is unused).
 
@@ -449,6 +453,8 @@ These make MermaidKit render a confident, wrong diagram. One "parser-honesty spr
 Estimated: 2–3 focused sessions; parser-only, tests in MermaidKit CI.
 
 ## Tier 2 — High-value structural gaps in the big four
+> **Reconciled 2026-10-16 (v2.4.0):** the Flowchart and Sequence bullets below are done — chains/`&`, inline labels, bidirectional edges, subgraphs and every sequence item shipped in 1.0; classic shapes, thick edges and `@{ shape }` (partial: no model case → rectangle) in v2.3.0/v2.4.0. Class and State remain.
+
 - **Flowchart**: chained edges + `&` fan-out (M — biggest single win in the audit), inline `-- text -->` labels (S), remaining classic shapes (M), bidirectional/thick edges (S–M). Then subgraphs (L) and `@{ shape }` (L) as separate projects.
 - **Sequence**: cross/async arrow tokens (S parse, M arrowheads), notes (M), autonumber (S), actor figure (S–M), activations model+bars (M), boxes (M). Fragments (loop/alt/opt/par/critical/break) are the flagship L item — a frame model shared with the future block/composite work.
 - **Class**: multiplicity fields + rendering (M), annotations as badges (S), notes (M), generics display (S). Namespaces (L) later.
@@ -478,4 +484,4 @@ Estimated: flowchart chains + sequence arrows/notes first (one session each), fr
 2. **Sprint 2 — flowchart/sequence bread-and-butter**: chained/`&` edges, inline labels, missing arrow tokens, notes, autonumber, actor figures, class annotations/multiplicity, state descriptions.
 3. **Sprint 3 — quick new types**: TreeView, Cynefin, Venn, Wardley (four shippable wins, S–M each).
 4. **Sprint 4 — frames project (L)**: sequence fragments + boxes, flowchart subgraphs, block composites, C4 boundaries — all four want the same nested-frame layout concept; build it once.
-5. **Sprint 5+ — on demand**: `@{ shape }` library, gantt date axis, Event Modeling, Swimlanes, orientation variants.
+5. **Sprint 5+ — on demand**: `@{ shape }` library (parsing shipped v2.3.0; only shapes without a model case remain), gantt date axis, Event Modeling (partial), ~~Swimlanes~~ (shipped 1.0), orientation variants.

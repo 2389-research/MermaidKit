@@ -1,5 +1,63 @@
 # Changelog
 
+## 2.4.0 — Every flowchart link, every classic shape
+
+Mermaid's full set of flowchart link styles and its classic node shapes now
+draw as written, where 2.3.0 drew them as plain arrows, circles and
+rectangles. Rendering only changes for diagrams that use this syntax.
+
+> **Source compatibility.** `Flowchart.NodeShape` gains six cases. Code
+> outside the package that switches *exhaustively* over `NodeShape` stops
+> compiling until it handles them; an `@unknown default:` branch turns that into
+> a warning instead. This follows the 1.2.0 precedent (`hexagon`, `subroutine`). Everything else is
+> additive: the new `Edge` and `PlacedEdge` fields have defaults, and the
+> wire format and the Android, Flutter and Windows backends are unchanged.
+
+- **Link styles.** Thick links (`==>`, `===`) draw at 2pt, and invisible
+  links (`~~~`) are laid out but not drawn: they rank and order nodes but
+  never move a drawn edge or label, and the linter, ASCII renderer and alt
+  text skip them. Circle (`--o`) and cross (`--x`) heads work at one end or
+  both, on any stroke and with inline text. Before, they were plain arrows.
+  New fields: `Flowchart.Edge.head`, `.thick`, `.invisible`, `.length`, and
+  `PlacedEdge.head`, `.thick`, `.invisible`. (#68)
+- **Link length.** Each extra `-`, `=`, `.` or `~` adds a rank, counted as
+  mermaid counts them (`--->` spans two). It's capped at 10 per link and 100
+  extra ranks per chart, so a pathological chart still lays out in well under
+  a second. (#68)
+- **Node shapes.** `doubleCircle` `((( )))`, `parallelogram` `[/ /]`,
+  `parallelogramAlt` `[\ \]`, `trapezoid` `[/ \]`, `trapezoidAlt` `[\ /]` and
+  `asymmetric` `> ]`, plus their `@{ shape: … }` names (`dbl-circ`,
+  `lean-r`/`in-out`, `lean-l`/`out-in`, `trap-b`/`priority`, `trap-t`/`manual`,
+  `odd`). Edges land on the slanted sides and the flag's notch, not on the
+  frame. (#68)
+- **DOT and ASCII.** `doublecircle`, `parallelogram`, `trapezium` and
+  `invtrapezium` map both ways. `style=bold`/`invis`, dot-family arrowheads and
+  `minlen` carry thick, invisible, circle heads and length. `arrowhead=none` /
+  `arrowtail=none` now suppress that end. The terminal renderer has glyphs
+  for the new shapes. (#68)
+
+Thanks to @hipstersmoothie, who wrote this from the diagrams coding agents
+actually emit.
+
+### Fixed
+
+- The docs gallery flowchart draws `Scene IR` as the parallelogram it's
+  written as. (#68)
+
+### Docs
+
+- **A full documentation audit**, every claim checked against the code: the
+  README, website, DocC catalogs, API doc comments, platform READMEs and design
+  notes. Highlights: the website's lint demo used rule names that don't exist
+  and a `mermaidkit-lint` command that was never built; conformance claims now
+  say CI gates macOS, Linux, WASM and Windows (Android was verified on an
+  emulator); the terminal CLI's tier order and flowchart-only box tiers are
+  described as they behave; DOT round-trips list their lossy cases; the
+  coverage audit and dated design memos carry v2.4.0 reconciliation notes; the
+  contributor guide covers the `RenderScene` lowering and the semver rule as
+  practiced. Both DocC catalogs now build with zero warnings (nine broken
+  symbol links fixed), and the README has an install snippet.
+
 ## 2.3.0 — Flowcharts as agents write them, on a grid
 
 The flowchart forms coding agents actually emit in chat now parse instead of

@@ -39,7 +39,7 @@ public enum MermaidRenderer {
 
     /// Renders off the calling thread — for hosts batching many diagrams or
     /// staying paranoid about main-thread time (a single cold render is
-    /// under ten milliseconds for most types; the worst dense fixture is
+    /// under ~15 ms for most types; the worst dense fixture is
     /// ~25 ms rasterized). Shares the sync API's render cache. Deliberately
     /// NOT an overload of `image`: a same-name async twin silently captures
     /// every call in async contexts, making the cheap sync cache-hit path
@@ -67,7 +67,7 @@ public enum MermaidRenderer {
     #if canImport(AppKit) || canImport(UIKit)
     /// The diagram as a single-attachment attributed string, for embedding in
     /// a text view (how a markdown editor embeds it). Nil when not Mermaid.
-    /// Apple platforms only (NSTextAttachment); on Linux use ``image`` and its
+    /// Apple platforms only (NSTextAttachment); on Linux use ``image(source:theme:spacing:)`` and its
     /// `pngData()`.
     public static func attachmentString(source: String, theme: DiagramTheme,
                                         spacing: DiagramSpacing = .regular) -> NSAttributedString? {
@@ -83,7 +83,7 @@ public enum MermaidRenderer {
     }
 
     /// The diagram as PNG-encoded bytes, or nil when the source doesn't parse
-    /// or encoding fails. Reuses the full rasterizer (``image``), so this is the
+    /// or encoding fails. Reuses the full rasterizer (``image(source:theme:spacing:)``), so this is the
     /// exact desktop render — the transport for the terminal Kitty-graphics path.
     /// UIKit vends `UIImage.pngData()` and Linux `PlatformImage.pngData()`
     /// directly; AppKit's `NSImage` has none, so the CGImage is encoded through
@@ -94,7 +94,7 @@ public enum MermaidRenderer {
         return encodePNG(img)
     }
 
-    /// Renders an already-parsed diagram (e.g. from ``DOTParser``) to a native
+    /// Renders an already-parsed diagram (e.g. from `DOTParser`) to a native
     /// image, bypassing the Mermaid parser so a non-Mermaid front-end reuses the
     /// exact same layout/draw pipeline. Uncached (no source string to key on).
     public static func image(diagram: MermaidDiagram, theme: DiagramTheme,
@@ -136,7 +136,7 @@ public enum MermaidRenderer {
         case gitLog
     }
 
-    /// Parse `source` in `format` into the shared ``MermaidDiagram`` IR, or nil
+    /// Parse `source` in `format` into the shared `MermaidDiagram` IR, or nil
     /// when it doesn't parse. The non-Mermaid front-ends carry no front-matter.
     private static func diagram(source: String, format: DiagramSourceFormat) -> MermaidDiagram? {
         switch format {
