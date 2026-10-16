@@ -40,6 +40,58 @@ extension DiagramLayoutEngine {
     /// at the tail), so a caption centers on the arrow-FREE stretch instead of
     /// hugging the arrowhead.
     static let flowchartArrowheadLen: CGFloat = 11.5
+    /// Space between a double circle's rings (the renderers inset the inner
+    /// ring by this much).
+    static let doubleCircleGap: CGFloat = 4
+    /// The most ranks longer links (`--->`) add to one chart. Each is a node
+    /// for layering, which is quadratic in nodes, so a chart of maximum-length
+    /// links at the edge cap would otherwise take tens of seconds; real charts
+    /// stretch a link or two.
+    static let maxExtraRanks = 100
+
+    /// The outline of a slanted node (`[/…/]`, `[\…\]`, `[/…\]`, `[\…/]`) or a
+    /// flag (`>…]`) inscribed in `f`, clockwise from the top left; nil for any
+    /// other shape. The slant (and the flag's notch) is the hexagon's end
+    /// inset. Edge ports and `RenderScene` share it; the CoreGraphics renderer
+    /// draws the same points.
+    static func polygonOutline(_ shape: Flowchart.NodeShape, in f: CGRect) -> [CGPoint]? {
+        let s = min(f.width * 0.22, f.height / 2)
+        switch shape {
+        case .parallelogram:
+            return [CGPoint(x: f.minX + s, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                    CGPoint(x: f.maxX - s, y: f.maxY), CGPoint(x: f.minX, y: f.maxY)]
+        case .parallelogramAlt:
+            return [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX - s, y: f.minY),
+                    CGPoint(x: f.maxX, y: f.maxY), CGPoint(x: f.minX + s, y: f.maxY)]
+        case .trapezoid:
+            return [CGPoint(x: f.minX + s, y: f.minY), CGPoint(x: f.maxX - s, y: f.minY),
+                    CGPoint(x: f.maxX, y: f.maxY), CGPoint(x: f.minX, y: f.maxY)]
+        case .trapezoidAlt:
+            return [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                    CGPoint(x: f.maxX - s, y: f.maxY), CGPoint(x: f.minX + s, y: f.maxY)]
+        case .asymmetric:
+            return [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                    CGPoint(x: f.maxX, y: f.maxY), CGPoint(x: f.minX, y: f.maxY),
+                    CGPoint(x: f.minX + s, y: f.midY)]
+        default:
+            return nil
+        }
+    }
+
+    /// Where a line crosses a polygon's outline: a horizontal line at `y`
+    /// (giving x) when `atY`, else a vertical line at `value` (giving y). The
+    /// far crossing (right or bottom) when `far`, else the near one.
+    static func outlineCrossing(_ polygon: [CGPoint], at value: CGFloat,
+                                atY: Bool, far: Bool) -> CGFloat? {
+        var hits: [CGFloat] = []
+        for i in polygon.indices {
+            let a = polygon[i], b = polygon[(i + 1) % polygon.count]
+            let (a0, a1, b0, b1) = atY ? (a.y, a.x, b.y, b.x) : (a.x, a.y, b.x, b.y)
+            guard a0 != b0, min(a0, b0) <= value, value <= max(a0, b0) else { continue }
+            hits.append(a1 + (value - a0) / (b0 - a0) * (b1 - a1))
+        }
+        return far ? hits.max() : hits.min()
+    }
 
     /// Lays out a flowchart with the layered (Sugiyama/dagre-style) pipeline:
     /// cycle-safe layer assignment, dummy-node channels for long edges,
@@ -75,13 +127,32 @@ extension DiagramLayoutEngine {
         let ids = chart.nodes.map(\.id)
         let allEdges = chart.edges.map { ($0.from, $0.to) }
 
-        // 1. Break cycles, then assign layers on the acyclic forward edges.
+        // 1. Break cycles, then assign layers on the acyclic forward edges. A
+        // longer link (`--->`, length 2) ranks through stand-in nodes, one per
+        // extra rank, so its ends sit at least `length` layers apart — up to
+        // `maxExtraRanks` stand-ins a chart, past which links rank as length 1.
         let backEdges = backEdgeIndices(ids: ids, edges: allEdges)
-        let forwardEdges = chart.edges.enumerated()
-            .filter { !backEdges.contains($0.offset) }
-            .map { ($0.element.from, $0.element.to) }
-        let layerOf = assignLayers(ids: ids, edges: forwardEdges)
-        let layerCount = (layerOf.values.max() ?? 0) + 1
+        var rankIDs = ids
+        var forwardEdges: [(String, String)] = []
+        var extraRanks = 0
+        for (index, edge) in chart.edges.enumerated() where !backEdges.contains(index) {
+            let length = min(edge.length, 1 + maxExtraRanks - extraRanks)
+            guard length > 1, edge.from != edge.to else {
+                forwardEdges.append((edge.from, edge.to))
+                continue
+            }
+            extraRanks += length - 1
+            var tail = edge.from
+            for step in 1..<length {
+                let standIn = "\u{a7}len\(index).\(step)"
+                rankIDs.append(standIn)
+                forwardEdges.append((tail, standIn))
+                tail = standIn
+            }
+            forwardEdges.append((tail, edge.to))
+        }
+        let layerOf = assignLayers(ids: rankIDs, edges: forwardEdges)
+        let layerCount = (ids.compactMap { layerOf[$0] }.max() ?? 0) + 1
 
         // 2. Insert dummy nodes for every edge spanning more than one layer
         // (forward or back). Dummies join their layer and reserve channel space
@@ -150,7 +221,7 @@ extension DiagramLayoutEngine {
         // `labelExtent + 2*stub` — we grow the gap up front rather than
         // place-and-hope. Only the boundary the edge actually spans grows.
         var layerGaps = [CGFloat](repeating: flowchartLayerGap, count: max(layerCount, 1))
-        for edge in chart.edges {
+        for edge in chart.edges where !edge.invisible {
             guard let text = edge.label, !text.isEmpty,
                   let lu = layerOf[edge.from], let lv = layerOf[edge.to],
                   abs(lu - lv) == 1 else { continue }
@@ -213,7 +284,8 @@ extension DiagramLayoutEngine {
         measure: DiagramTextMeasurer
     ) -> [FlowchartLayout.PlacedEdge] {
         let labelSizes = edges.map { edge -> CGSize? in
-            guard let label = edge.label, !label.isEmpty else { return nil }
+            // An invisible link draws no label either.
+            guard !edge.invisible, let label = edge.label, !label.isEmpty else { return nil }
             return measure(label, labelFontSize)
         }
         // The head end eats the drawn arrowhead; a bidirectional edge's tail
@@ -235,7 +307,8 @@ extension DiagramLayoutEngine {
         FlowchartLayout.PlacedEdge(
             start: edge.start, end: edge.end, points: edge.points,
             label: edge.label, dashed: edge.dashed, hasArrow: edge.hasArrow,
-            backArrow: edge.backArrow, labelPoint: point)
+            backArrow: edge.backArrow, head: edge.head, thick: edge.thick,
+            invisible: edge.invisible, labelPoint: point)
     }
 
     /// Comfortable clearance a caption keeps from any obstacle it does not sit
@@ -492,13 +565,19 @@ extension DiagramLayoutEngine {
             switch node.shape {
             case .diamond:
                 size = CGSize(width: size.width * 1.3, height: size.height * 1.5)
-            case .hexagon:
-                // Pointed ends eat horizontal room — widen so the label clears.
+            case .hexagon, .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt:
+                // Pointed or slanted ends eat horizontal room — widen so the
+                // label clears.
                 size.width += size.height
+            case .asymmetric:
+                size.width += size.height / 2   // the notch on the left
             case .subroutine:
                 size.width += 16   // room for the twin inner rails
             case .circle:
                 let d = max(size.width, size.height)
+                size = CGSize(width: d, height: d)
+            case .doubleCircle:
+                let d = max(size.width, size.height) + 2 * doubleCircleGap
                 size = CGSize(width: d, height: d)
             case .stateStart:
                 size = CGSize(width: 14, height: 14)
@@ -611,7 +690,7 @@ extension DiagramLayoutEngine {
                 let hh = max(f.height / 2, 0.001)
                 var x = rightOrBottom ? f.maxX : f.minX
                 switch shape {
-                case .circle, .stateStart, .stateEnd:
+                case .circle, .doubleCircle, .stateStart, .stateEnd:
                     let dx = (f.width / 2) * sqrt(max(0, 1 - pow((y - f.midY) / hh, 2)))
                     x = rightOrBottom ? f.midX + dx : f.midX - dx
                 case .hexagon:
@@ -621,7 +700,12 @@ extension DiagramLayoutEngine {
                     let hexInset = min(f.width * 0.22, f.height / 2)
                     let frac = min(abs(y - f.midY) / hh, 1)
                     x = rightOrBottom ? f.maxX - hexInset * frac : f.minX + hexInset * frac
-                default: break
+                default:
+                    // Slanted sides and the flag's notch: onto the drawn outline.
+                    if let outline = polygonOutline(shape, in: f),
+                       let onOutline = outlineCrossing(outline, at: y, atY: true, far: rightOrBottom) {
+                        x = onOutline
+                    }
                 }
                 return CGPoint(x: x, y: y)
             } else {
@@ -630,7 +714,7 @@ extension DiagramLayoutEngine {
                 let hw = max(f.width / 2, 0.001)
                 var y = rightOrBottom ? f.maxY : f.minY
                 switch shape {
-                case .circle, .stateStart, .stateEnd:
+                case .circle, .doubleCircle, .stateStart, .stateEnd:
                     let dy = (f.height / 2) * sqrt(max(0, 1 - pow((x - f.midX) / hw, 2)))
                     y = rightOrBottom ? f.midY + dy : f.midY - dy
                 default: break
@@ -943,7 +1027,8 @@ extension DiagramLayoutEngine {
             placedEdges.append(FlowchartLayout.PlacedEdge(
                 start: pts.first!, end: pts.last!, points: pts,
                 label: edge.label, dashed: edge.dashed, hasArrow: edge.hasArrow,
-                    backArrow: edge.backArrow))
+                    backArrow: edge.backArrow, head: edge.head, thick: edge.thick,
+                    invisible: edge.invisible))
         }
         return (placedEdges, crossLimit)
     }

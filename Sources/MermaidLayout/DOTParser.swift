@@ -471,9 +471,16 @@ private final class DOTParserImpl {
         case "both": hasArrow = true;  backArrow = true
         default:     hasArrow = true;  backArrow = false   // forward / unknown
         }
+        // A `dot` arrowhead (or arrowtail, for a back-only edge) is a circle head.
+        let endShape = (hasArrow ? attrs["arrowhead"] : attrs["arrowtail"])?.lowercased()
+        // `minlen` is the rank span, clamped like a mermaid link's length.
+        let length = min(max(Int(attrs["minlen"] ?? "") ?? 1, 1), MermaidParser.maxLinkLength)
         edges.append(Flowchart.Edge(from: from, to: to,
                                     label: (label?.isEmpty == true) ? nil : label,
-                                    dashed: dashed, hasArrow: hasArrow, backArrow: backArrow))
+                                    dashed: dashed, hasArrow: hasArrow, backArrow: backArrow,
+                                    head: endShape == "dot" ? .circle : .arrow,
+                                    thick: style.contains("bold"), invisible: style.contains("invis"),
+                                    length: length))
         if edges.count > MermaidParser.maxEdges { aborted = true }
     }
 
@@ -613,11 +620,15 @@ private final class DOTParserImpl {
     private func shapeFrom(_ raw: String?) -> Flowchart.NodeShape {
         switch (raw ?? "").lowercased() {
         case "diamond", "mdiamond":                     return .diamond
-        case "circle", "doublecircle", "point":         return .circle
+        case "circle", "point":                         return .circle
+        case "doublecircle":                            return .doubleCircle
         case "ellipse", "oval":                         return .rounded
         case "cylinder":                                return .cylinder
         case "stadium":                                 return .stadium
         case "hexagon":                                 return .hexagon
+        case "parallelogram":                           return .parallelogram
+        case "trapezium":                               return .trapezoid
+        case "invtrapezium":                            return .trapezoidAlt
         // box/rect/square/record/Mrecord/plaintext/none and unknowns → rect.
         default:                                        return .rectangle
         }

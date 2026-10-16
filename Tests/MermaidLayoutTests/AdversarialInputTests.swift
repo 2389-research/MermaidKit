@@ -56,6 +56,11 @@ final class AdversarialInputTests: XCTestCase {
             "A@{", "A@{}", "A@{ shape: }", "A@{ shape: diam, label: \"unterminated }",
             "A@{ , , : , }", "A{{", "A}}", "A[[x]", "A[/", "A[/x\\", "A>", "A>x] & B>y] & ]]] & C", "] & ) & }","-.-.", "a-.-.b",
             "a--b.c--d", "a.-b", ".a --> -b",
+            // Link tokens: heads, strokes and lengths, alone, mismatched or
+            // unfinished.
+            "A --o", "o--o", "x--x", "A o--x B", "A <--o B", "A <~~~> B", "A ~~ B", "~~~~~~",
+            "A ==", "A === ", "A ==o==o B", "A -.", "A -..- B -...-x C", "A -- o --o B",
+            "A --ob", "o --> o --> o", "x x--x x", "A -- x --x", "A -. .-> B", "A == ==> B",
         ]
         for header in ["flowchart TD", "sequenceDiagram", "erDiagram", "gantt",
                        "sankey-beta", "xychart-beta", "gitGraph", "mindmap"] {
@@ -89,6 +94,12 @@ final class AdversarialInputTests: XCTestCase {
         // crashing or trapping; a pathological hang would trip the CI job
         // timeout. (No wall-clock assertion — see testOversizedInputsRejected.)
         pipeline(flow, "at-cap edges")
+
+        // Every link at the longest length honored, and one far past it.
+        var long = "flowchart TD\n"
+        let link = String(repeating: "-", count: 5_000) + ">"
+        for i in 0..<MermaidParser.maxEdges { long += " n\(i) \(i == 0 ? link : "---------->") n\(i + 1)\n" }
+        pipeline(long, "at-cap longest links")
 
         var sank = "sankey-beta\n"
         for i in 0..<1_000 { sank += "a\(i),b\(i),1\n" }

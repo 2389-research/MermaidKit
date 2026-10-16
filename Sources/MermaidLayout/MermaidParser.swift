@@ -312,8 +312,8 @@ public enum MermaidParser {
             }
             if line.hasPrefix("classDef") || line.hasPrefix("class ") || line.hasPrefix("style") { continue }
 
-            // Split on edge connectors, keeping the connector kind.
-            // Supported: --> , --- , -.-> , ==> , with optional |label|.
+            // Split on links (`-->`, `---`, `-.->`, `==>`, `~~~`, `--o`, …),
+            // keeping what each draws and its optional |label|.
             if let parsed = parseEdgeLine(line), !parsed.isEmpty {
                 for edge in parsed {
                     note(edge.fromNode)
@@ -396,30 +396,105 @@ public enum MermaidParser {
         let edge: Flowchart.Edge
     }
 
-    /// Normalizes edge-syntax variants onto the five canonical connectors so
-    /// one scanner handles them all: inline labels (`-- text -->` becomes
-    /// `-->|text|`), min-length stretches (`---->`), circle/cross heads
-    /// (`--o`/`--x`, drawn as plain arrows — an honest degradation), and edge
-    /// IDs (`e1@-->`), which are animation targets we drop.
+    /// Moves inline link text onto the `|text|` form so one scanner reads
+    /// every link (`-- text -->` becomes `-->|text|`, `<-. text .-o` becomes
+    /// `<-.-o|text|`), and drops edge IDs (`e1@-->`), which are animation
+    /// targets.
     private static func normalizeEdgeSyntax(_ line: String) -> String {
         func sub(_ pattern: String, _ template: String, _ s: String) -> String {
             (try? NSRegularExpression(pattern: pattern))
                 .map { $0.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s),
                                                    withTemplate: template) } ?? s
         }
+        // A start head: `<`, or an `o`/`x` that isn't the end of an id.
+        let start = #"((?<![^\s])[ox]|<)?"#
+        // An `o`/`x` end head is followed by a space, `|` or the line's end.
+        let head = #"[ox](?=[\s|]|$)"#
         var s = line
-        s = sub(#"\s\w+@(?=[-=<])"#, " ", s)                         // edge IDs
-        s = sub(#"--\s+([^-|>][^-]*?)\s+-->"#, "-->|$1|", s)         // -- text -->
-        s = sub(#"-\.\s+([^.|]+?)\s+\.->"#, "-.->|$1|", s)          // -. text .->
-        s = sub(#"==\s+([^=|>][^=]*?)\s+==>"#, "==>|$1|", s)         // == text ==>
-        s = sub(#"o--o"#, "<-->", s)                                  // circle both ends
-        s = sub(#"x--x"#, "<-->", s)                                  // cross both ends
-        s = sub(#"--[ox](\s|$)"#, "-->$1", s)                         // --o / --x heads
-        s = sub(#"-{3,}>"#, "-->", s)                                 // ---->
-        s = sub(#"={3,}>"#, "==>", s)                                 // ====>
-        s = sub(#"-\.{2,}-(?![->])"#, "-.-", s)                       // -..-
-        s = sub(#"(?<![-.>])-{4,}(?![->])"#, "---", s)                 // -----
+        s = sub(#"\s\w+@(?=[-=<~ox])"#, " ", s)                                   // edge IDs
+        s = sub(start + #"--\s+([^-|>][^-]*?)\s+(-{2,}>|-{2,}\#(head)|-{3,})"#, "$1$3|$2|", s) // -- text -->
+        s = sub(start + #"-\.\s+([^.|]+?)\s+(\.+->|\.+-\#(head)|\.+-)"#, "$1-$3|$2|", s)    // -. text .->
+        s = sub(start + #"==\s+([^=|>][^=]*?)\s+(={2,}>|={2,}\#(head)|={3,})"#, "$1$3|$2|", s) // == text ==>
         return s
+    }
+
+    /// One link token between two endpoint lists.
+    private struct Link {
+        var dashed = false
+        var thick = false
+        var invisible = false
+        var hasArrow = false
+        var backArrow = false
+        var head = Flowchart.Edge.Head.arrow
+        var length = 1
+        var label: String?
+    }
+
+    /// The longest link `length` honored: each extra rank is a layer of
+    /// routing channels, so a runaway `------…->` can't blow up the layout.
+    static let maxLinkLength = 10
+
+    /// Mermaid's link tokens: solid (`-->`, `---`, `--o`, `--x`), thick
+    /// (`==>`, `===`), dotted (`-.->`, `-.-`), invisible (`~~~`), each
+    /// longer for a longer link, with an optional matching start head
+    /// (`<-->`, `o--o`, `x--x`). Group 1 is the start head, 2 the body.
+    private static let linkPattern: NSRegularExpression? = {
+        let head = #"[ox](?=[\s|]|$)"#
+        let body = [
+            #"-{2,}>"#, #"-{2,}\#(head)"#, #"-{3,}"#,
+            #"={2,}>"#, #"={2,}\#(head)"#, #"={3,}"#,
+            #"-\.+->"#, #"-\.+-\#(head)"#, #"-\.+-"#,
+            #"~{3,}"#,
+        ].joined(separator: "|")
+        return try? NSRegularExpression(pattern: #"((?<![^\s])[ox]|<)?("# + body + ")")
+    }()
+
+    /// The first link token in `text`: its range (without a start head that
+    /// doesn't match the end's, which stays with the endpoint before it) and
+    /// what it draws.
+    private static func firstLink(in text: Substring) -> (range: Range<Substring.Index>, link: Link)? {
+        let string = String(text)
+        guard let pattern = linkPattern,
+              let match = pattern.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)),
+              let bodyRange = Range(match.range(at: 2), in: string) else { return nil }
+        var body = string[bodyRange]
+        var link = Link()
+        switch body.last {
+        case ">": link.hasArrow = true; link.head = .arrow
+        case "o": link.hasArrow = true; link.head = .circle
+        case "x": link.hasArrow = true; link.head = .cross
+        default: break
+        }
+        if link.hasArrow { body = body.dropLast() }
+        var lower = bodyRange.lowerBound
+        if let startRange = Range(match.range(at: 1), in: string) {
+            let start = string[startRange]
+            let matches = link.hasArrow &&
+                ((start == "<" && link.head == .arrow) || (start == "o" && link.head == .circle) ||
+                 (start == "x" && link.head == .cross))
+            if matches {
+                link.backArrow = true
+                lower = startRange.lowerBound
+            }
+        }
+        // Lengths as mermaid counts them: dots for a dotted link, otherwise
+        // the body less its first character (less one more for an open link,
+        // whose body has no head to stand in for it).
+        if body.hasPrefix("~") {
+            link.invisible = true
+            link.length = body.count - 2
+        } else if body.contains(".") {
+            link.dashed = true
+            link.length = body.filter { $0 == "." }.count
+        } else {
+            link.thick = body.hasPrefix("=")
+            link.length = body.count - (link.hasArrow ? 1 : 2)
+        }
+        link.length = min(max(link.length, 1), maxLinkLength)
+        let offset = string.distance(from: string.startIndex, to: lower)
+        let length = string.distance(from: lower, to: bodyRange.upperBound)
+        let from = text.index(text.startIndex, offsetBy: offset)
+        return (from..<text.index(from, offsetBy: length), link)
     }
 
     /// Splits an endpoint list on `&` at bracket depth 0 only, so labels
@@ -449,36 +524,22 @@ public enum MermaidParser {
     /// most common idioms in real flowcharts.
     private static func parseEdgeLine(_ raw: String) -> [ParsedEdge]? {
         let line = normalizeEdgeSyntax(raw)
-        let connectors: [(token: String, dashed: Bool, arrow: Bool)] = [
-            ("-.->", true, true), ("==>", false, true), ("-->", false, true),
-            ("-.-", true, false), ("---", false, false),
-        ]
         var segments: [String] = []
-        var joins: [(dashed: Bool, arrow: Bool, back: Bool, label: String?)] = []
+        var joins: [Link] = []
         var rest = Substring(line)
         while true {
-            var best: (range: Range<Substring.Index>, connector: (token: String, dashed: Bool, arrow: Bool))?
-            for connector in connectors {
-                if let r = rest.range(of: connector.token),
-                   best == nil || r.lowerBound < best!.range.lowerBound {
-                    best = (r, connector)
-                }
-            }
-            guard let found = best else {
+            guard let found = firstLink(in: rest) else {
                 segments.append(String(rest))
                 break
             }
-            var left = String(rest[..<found.range.lowerBound]).trimmingCharacters(in: .whitespaces)
-            var back = false
-            if left.hasSuffix("<") { back = true; left = String(left.dropLast()) }
-            segments.append(left)
+            segments.append(String(rest[..<found.range.lowerBound]).trimmingCharacters(in: .whitespaces))
+            var link = found.link
             var after = rest[found.range.upperBound...].drop(while: { $0 == " " })
-            var label: String?
             if after.hasPrefix("|"), let close = after.dropFirst().firstIndex(of: "|") {
-                label = String(after[after.index(after: after.startIndex)..<close])
+                link.label = String(after[after.index(after: after.startIndex)..<close])
                 after = after[after.index(after: close)...]
             }
-            joins.append((found.connector.dashed, found.connector.arrow, back, label))
+            joins.append(link)
             rest = after
         }
         guard !joins.isEmpty, segments.count == joins.count + 1 else { return nil }
@@ -493,8 +554,10 @@ public enum MermaidParser {
                     out.append(ParsedEdge(
                         fromNode: l, toNode: r,
                         edge: Flowchart.Edge(from: l.id, to: r.id, label: join.label,
-                                             dashed: join.dashed, hasArrow: join.arrow,
-                                             backArrow: join.back)))
+                                             dashed: join.dashed, hasArrow: join.hasArrow,
+                                             backArrow: join.backArrow, head: join.head,
+                                             thick: join.thick, invisible: join.invisible,
+                                             length: join.length)))
                 }
             }
         }
@@ -502,12 +565,11 @@ public enum MermaidParser {
     }
 
     /// Parses `id`, `id[Label]`, `id(Label)`, `id([Label])`, `id{Label}`,
-    /// `id((Label))`, `id[(Label)]`, `id[[Label]]`, `id{{Label}}`, and the
+    /// `id((Label))`, `id(((Label)))`, `id[(Label)]`, `id[[Label]]`,
+    /// `id{{Label}}`, the slanted `id[/Label/]`, `id[\Label\]`, `id[/Label\]`
+    /// and `id[\Label/]`, the asymmetric `id>Label]`, and the
     /// `id@{ shape: …, label: … }` shape-data form. Ids may contain `-` and `.`
     /// between word characters (`api-gateway`, `auth.service`), as in mermaid.
-    /// Shapes the model has no case for degrade to the nearest one with the
-    /// label intact: `(((double circle)))` to a circle, the slanted
-    /// `[/…/]`/`[\…\]`/`[/…\]`/`[\…/]` and the asymmetric `>…]` to rectangles.
     static func parseNodeToken(_ token: Substring) -> Flowchart.Node? {
         var trimmed = token.trimmingCharacters(in: .whitespaces)
         // `:::className` binds a style class — styling we ignore; without
@@ -557,12 +619,12 @@ public enum MermaidParser {
         // Longest delimiters first, so `{{` isn't read as `{` with a brace in
         // the label.
         let shapes: [(open: String, close: String, shape: Flowchart.NodeShape)] = [
-            ("(((", ")))", .circle), ("((", "))", .circle), ("([", "])", .stadium),
+            ("(((", ")))", .doubleCircle), ("((", "))", .circle), ("([", "])", .stadium),
             ("[(", ")]", .cylinder), ("[[", "]]", .subroutine), ("{{", "}}", .hexagon),
-            ("[/", "/]", .rectangle), ("[\\", "\\]", .rectangle),
-            ("[/", "\\]", .rectangle), ("[\\", "/]", .rectangle),
+            ("[/", "/]", .parallelogram), ("[\\", "\\]", .parallelogramAlt),
+            ("[/", "\\]", .trapezoid), ("[\\", "/]", .trapezoidAlt),
             ("[", "]", .rectangle), ("(", ")", .rounded), ("{", "}", .diamond),
-            (">", "]", .rectangle),
+            (">", "]", .asymmetric),
         ]
         for (open, close, shape) in shapes {
             if let label = stripped(open, close) {
@@ -612,7 +674,13 @@ public enum MermaidParser {
         "rounded": .rounded, "event": .rounded,
         "stadium": .stadium, "pill": .stadium, "terminal": .stadium,
         "diam": .diamond, "diamond": .diamond, "decision": .diamond, "question": .diamond,
-        "circle": .circle, "circ": .circle, "dbl-circ": .circle, "double-circle": .circle,
+        "circle": .circle, "circ": .circle,
+        "dbl-circ": .doubleCircle, "double-circle": .doubleCircle,
+        "lean-r": .parallelogram, "lean-right": .parallelogram, "in-out": .parallelogram,
+        "lean-l": .parallelogramAlt, "lean-left": .parallelogramAlt, "out-in": .parallelogramAlt,
+        "trap-b": .trapezoid, "trapezoid-bottom": .trapezoid, "priority": .trapezoid,
+        "trap-t": .trapezoidAlt, "trapezoid-top": .trapezoidAlt, "manual": .trapezoidAlt,
+        "odd": .asymmetric,
         "cyl": .cylinder, "cylinder": .cylinder, "database": .cylinder, "db": .cylinder,
         "hex": .hexagon, "hexagon": .hexagon, "prepare": .hexagon,
         "subproc": .subroutine, "subprocess": .subroutine, "subroutine": .subroutine,

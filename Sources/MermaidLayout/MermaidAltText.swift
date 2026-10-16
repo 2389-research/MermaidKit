@@ -16,8 +16,10 @@ public enum MermaidAltText {
         switch diagram {
         case .flowchart(let d):
             let names = list(d.nodes.map(\.label))
+            // Invisible links (`~~~`) only position nodes; they aren't connections.
+            let connections = d.edges.filter { !$0.invisible }.count
             return "Flowchart with \(count(d.nodes.count, "node")) and " +
-                "\(count(d.edges.count, "connection")): \(names)."
+                "\(count(connections, "connection")): \(names)."
         case .sequence(let d):
             return "Sequence diagram: \(count(d.messages.count, "message")) between " +
                 "\(list(d.participants.map(\.label)))."

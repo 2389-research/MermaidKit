@@ -442,6 +442,24 @@ public enum ASCIIRenderer {
             // Call to a predefined sub-process: heavy double side rails (the
             // monospace echo of the flowchart `[[ … ]]` box).
             sideCaps("║", "║")
+        case .doubleCircle:
+            // A circle with doubled rails top and bottom for the second ring.
+            corners("◜", "◝", "◟", "◞")
+            sideCaps("(", ")")
+            topBottomCaps("═")
+        case .parallelogram:
+            // Both sides lean right (`[/ … /]`).
+            corners("╱", "╱", "╱", "╱")
+        case .parallelogramAlt:
+            corners("╲", "╲", "╲", "╲")
+        case .trapezoid:
+            // Wider at the bottom (`[/ … \]`).
+            corners("╱", "╲", "╱", "╲")
+        case .trapezoidAlt:
+            corners("╲", "╱", "╲", "╱")
+        case .asymmetric:
+            // A flag: the left side notched (`> … ]`).
+            for r in (r0 + 1)..<r1 { canvas.setGlyph(r, c0, ">", color: color) }
         }
     }
 

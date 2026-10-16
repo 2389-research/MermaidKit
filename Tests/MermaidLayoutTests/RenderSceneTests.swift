@@ -84,6 +84,79 @@ final class RenderSceneTests: XCTestCase {
         XCTAssertEqual(texts, labeledNodes + labeledEdges + labeledContainers)
     }
 
+    // MARK: Link styles and the slanted shapes
+
+    private func polylines(_ scene: RenderScene) -> [RenderScene.Polyline] {
+        scene.elements.compactMap { if case .polyline(let p) = $0 { p } else { nil } }
+    }
+
+    private func shapes(_ scene: RenderScene) -> [RenderScene.Shape] {
+        scene.elements.compactMap { if case .shape(let s) = $0 { s } else { nil } }
+    }
+
+    func testThickAndInvisibleLinks() throws {
+        let lines = polylines(try scene("flowchart TD\n A ==> B\n B ~~~ C\n C -- hidden --> D\n A ~~~|nope| D"))
+        XCTAssertEqual(lines.count, 2, "the two `~~~` links draw nothing")
+        XCTAssertEqual(lines[0].stroke.width, 2, "`==>` is thick")
+        XCTAssertTrue(lines[0].endArrow)
+        XCTAssertEqual(lines[1].stroke.width, 1)
+        let texts = try scene("flowchart TD\n A ~~~|nope| B").elements.filter {
+            if case .text(let t) = $0 { t.string == "nope" } else { false }
+        }
+        XCTAssertTrue(texts.isEmpty, "an invisible link's label isn't drawn")
+    }
+
+    func testCircleAndCrossHeadsAreMarksNotArrows() throws {
+        let s = try scene("flowchart LR\n A --o B\n C x--x D")
+        let lines = polylines(s)
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines.allSatisfy { !$0.startArrow && !$0.endArrow })
+        // The circle: a canvas disc, then the edge-colored one over it.
+        let discs = shapes(s).filter { if case .ellipse(let r) = $0.path { r.width == 8 } else { false } }
+        XCTAssertEqual(discs.count, 2)
+        XCTAssertEqual(discs.first?.fill, theme.canvas)
+        // A cross at each end of `x--x`, each a stroked pair of arms.
+        let crosses = shapes(s).filter { if case .path = $0.path { $0.fill == nil } else { false } }
+        XCTAssertEqual(crosses.count, 2)
+        // The line stops short of the circle; it runs into the crosses.
+        let circleLine = lines[0], b = try layout("flowchart LR\n A --o B").nodes[1].frame
+        XCTAssertLessThan(try XCTUnwrap(circleLine.points.last).x, b.minX - 10)
+    }
+
+    func testSlantedFlagAndDoubleCircleOutlines() throws {
+        let s = try scene("flowchart LR\n a[/In/] --> b[\\Out\\] --> c[/Wide\\] --> d[\\Narrow/] --> e>Flag] --> f(((Done)))")
+        let polygons = shapes(s).compactMap { shape -> [CGPoint]? in
+            if case .polygon(let points) = shape.path { points } else { nil }
+        }
+        XCTAssertEqual(polygons.map(\.count), [4, 4, 4, 4, 5])
+        // `[/…/]` leans right: its top edge starts right of its bottom one.
+        let lean = polygons[0]
+        XCTAssertGreaterThan(lean[0].x, lean[3].x)
+        // `[/…\]` is wider at the bottom, `[\…/]` at the top.
+        XCTAssertLessThan(polygons[2][1].x - polygons[2][0].x, polygons[2][2].x - polygons[2][3].x)
+        XCTAssertGreaterThan(polygons[3][1].x - polygons[3][0].x, polygons[3][2].x - polygons[3][3].x)
+        // The double circle: two rings.
+        let rings = shapes(s).filter { if case .ellipse = $0.path { true } else { false } }
+        XCTAssertEqual(rings.count, 2)
+    }
+
+    /// Edges land on the drawn outline of a slanted side, not the frame.
+    func testEdgesAttachToSlantedSides() throws {
+        let l = try layout("flowchart LR\n a --> b[/Lean/] --> c")
+        let b = try XCTUnwrap(l.nodes.first { $0.id == "b" })
+        let outline = try XCTUnwrap(DiagramLayoutEngine.polygonOutline(b.shape, in: b.frame))
+        // Edges are in source order: `a --> b` ends on b, `b --> c` leaves it.
+        XCTAssertEqual(l.edges.count, 2)
+        for (index, edge) in l.edges.enumerated() {
+            let leaves = index == 1
+            let port = leaves ? edge.start : edge.end
+            let x = try XCTUnwrap(DiagramLayoutEngine.outlineCrossing(
+                outline, at: port.y, atY: true, far: leaves))
+            XCTAssertEqual(port.x, x, accuracy: 0.5)
+            XCTAssertNotEqual(port.x, leaves ? b.frame.maxX : b.frame.minX, accuracy: 0.5)
+        }
+    }
+
     // MARK: SVG well-formedness
 
     func testSVGIsWellFormedAndSized() throws {

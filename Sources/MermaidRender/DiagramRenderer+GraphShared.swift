@@ -28,14 +28,15 @@ extension DiagramRenderer {
     /// single composite stroke — crossing edges then don't stack their
     /// translucent strokes into darker seams. Each entry is (polyline, dashed).
     static func strokeEdgeShafts(
-        _ shafts: [(points: [CGPoint], dashed: Bool)], color: PlatformColor, in context: CGContext
+        _ shafts: [(points: [CGPoint], dashed: Bool)], color: PlatformColor,
+        lineWidth: CGFloat = 1, in context: CGContext
     ) {
         for dashed in [false, true] {
             let group = shafts.filter { $0.dashed == dashed }
             guard !group.isEmpty else { continue }
             context.saveGState()
             context.setStrokeColor(resolvedCGColor(color))
-            context.setLineWidth(1)
+            context.setLineWidth(lineWidth)
             if dashed { context.setLineDash(phase: 0, lengths: [4, 3]) }
             context.beginPath()
             for shaft in group { appendRoundedPolyline(shaft.points, to: context) }
@@ -103,6 +104,57 @@ extension DiagramRenderer {
         context.addPath(path)
         context.fillPath()
         context.restoreGState()
+    }
+
+    /// A circle (`--o`) or cross (`--x`) mark for a line ending at `tip` from
+    /// `origin`; returns where the line should stop. Matches
+    /// `RenderScene.endMark`: 3pt clear of the node like an arrowhead's tip, a
+    /// filled 4pt-radius circle (canvas first, as `drawArrowhead` does) or a
+    /// 1.5pt cross 8pt across, which the line runs into.
+    @discardableResult
+    static func drawEndMark(
+        _ head: Flowchart.Edge.Head, at tip: CGPoint, from origin: CGPoint,
+        color: PlatformColor, canvas: PlatformColor, in context: CGContext?
+    ) -> CGPoint {
+        let dx = tip.x - origin.x, dy = tip.y - origin.y
+        let len = max(hypot(dx, dy), 0.001)
+        let (ux, uy) = (dx / len, dy / len)
+        let radius: CGFloat = 4
+        let center = CGPoint(x: tip.x - ux * (3 + radius), y: tip.y - uy * (3 + radius))
+        switch head {
+        case .circle:
+            if let context {
+                let box = CGRect(x: center.x - radius, y: center.y - radius,
+                                 width: radius * 2, height: radius * 2)
+                context.saveGState()
+                context.setFillColor(resolvedCGColor(canvas))
+                context.fillEllipse(in: box)
+                context.setFillColor(resolvedCGColor(color))
+                context.fillEllipse(in: box)
+                context.restoreGState()
+            }
+            return CGPoint(x: center.x - ux * radius, y: center.y - uy * radius)
+        case .cross:
+            if let context {
+                // Two arms at 45° to the line.
+                let arm = radius / 2.squareRoot()
+                let a = CGPoint(x: (ux - uy) * arm, y: (uy + ux) * arm)
+                let b = CGPoint(x: (ux + uy) * arm, y: (uy - ux) * arm)
+                context.saveGState()
+                context.setStrokeColor(resolvedCGColor(color))
+                context.setLineWidth(1.5)
+                context.beginPath()
+                context.move(to: CGPoint(x: center.x - a.x, y: center.y - a.y))
+                context.addLine(to: CGPoint(x: center.x + a.x, y: center.y + a.y))
+                context.move(to: CGPoint(x: center.x - b.x, y: center.y - b.y))
+                context.addLine(to: CGPoint(x: center.x + b.x, y: center.y + b.y))
+                context.strokePath()
+                context.restoreGState()
+            }
+            return center
+        case .arrow:
+            return tip
+        }
     }
 
     /// A filled arrowhead for the box families (C4 / architecture / block) whose
@@ -327,6 +379,39 @@ extension DiagramRenderer {
         p.addLine(to: CGPoint(x: f.maxX, y: f.midY))
         p.addLine(to: CGPoint(x: f.maxX - inset, y: f.maxY))
         p.addLine(to: CGPoint(x: f.minX + inset, y: f.maxY))
+        p.closeSubpath()
+        return p
+    }
+
+    /// A slanted node (`[/…/]`, `[\…\]`, `[/…\]`, `[\…/]`) or a flag (`>…]`):
+    /// the points of `DiagramLayoutEngine.polygonOutline`, which edge ports
+    /// land on. The slant (and the notch) is `hexagonPath`'s end inset.
+    static func slantedPath(_ shape: Flowchart.NodeShape, in f: CGRect) -> CGPath {
+        let s = min(f.width * 0.22, f.height / 2)
+        let points: [CGPoint]
+        switch shape {
+        case .parallelogram:
+            points = [CGPoint(x: f.minX + s, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                      CGPoint(x: f.maxX - s, y: f.maxY), CGPoint(x: f.minX, y: f.maxY)]
+        case .parallelogramAlt:
+            points = [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX - s, y: f.minY),
+                      CGPoint(x: f.maxX, y: f.maxY), CGPoint(x: f.minX + s, y: f.maxY)]
+        case .trapezoid:
+            points = [CGPoint(x: f.minX + s, y: f.minY), CGPoint(x: f.maxX - s, y: f.minY),
+                      CGPoint(x: f.maxX, y: f.maxY), CGPoint(x: f.minX, y: f.maxY)]
+        case .trapezoidAlt:
+            points = [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                      CGPoint(x: f.maxX - s, y: f.maxY), CGPoint(x: f.minX + s, y: f.maxY)]
+        case .asymmetric:
+            points = [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                      CGPoint(x: f.maxX, y: f.maxY), CGPoint(x: f.minX, y: f.maxY),
+                      CGPoint(x: f.minX + s, y: f.midY)]
+        default:
+            return CGPath(roundedRect: f, cornerWidth: 4, cornerHeight: 4, transform: nil)
+        }
+        let p = CGMutablePath()
+        p.move(to: points[0])
+        for point in points.dropFirst() { p.addLine(to: point) }
         p.closeSubpath()
         return p
     }
