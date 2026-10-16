@@ -6,6 +6,8 @@ denominator — monospace box glyphs. This note maps what richer terminals,
 specifically **Kitty** and **Ghostty**, expose, and how MermaidKit can exploit
 each tier while degrading gracefully.
 
+> **Update (v2.4.0, 2026-10-16):** the experimental branch is merged and build-order steps 1–4 shipped in 1.2.0 as `mermaidkit-term`. Auto mode picks Kitty graphics → half-block truecolor → plain box-drawing (colored box-drawing is `--mode box`), using `TerminalCapabilities` probing and OSC 11 background detection. The box tiers (`ASCIIRenderer`) are flowchart-scoped and gained glyphs for the v2.4.0 shapes; the raster tiers go through `MermaidRender`. Sixel and OSC 8/mouse interactivity are not implemented.
+
 The through-line: MermaidKit already produces a full raster (CoreGraphics on
 Apple, Silica/Cairo on Linux) and a vector PDF. So "better than ASCII" is mostly
 a *transport* problem — getting bytes into an escape sequence — not a new

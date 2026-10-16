@@ -36,10 +36,11 @@ only the *first* sight of a new diagram costs a render.
 
 ## What's proven, and where
 
-- **Compositor, culling, zoom-reraster, framebuffer/PNG** — verified visually on
-  macOS (CoreGraphics) **and on aarch64 Linux — the Pi's exact architecture —
-  with the Silica/Cairo raster** (the same stack the Pi runs), producing the same
-  composite.
+- **Compositor, culling, framebuffer/PNG** — verified visually on macOS
+  (CoreGraphics) **and on aarch64 Linux — the Pi's exact architecture — with the
+  Silica/Cairo raster** (the same stack the Pi runs). Zoom re-rasterization is
+  CoreGraphics-only: Silica returns natural-size rasters, so on the Pi zoomed
+  cards are repositioned at their natural size.
 - **RGB565 packing** — `Rgb565.pack`/`convert` are pure and platform-free.
 - **The one on-device line** — the final `mmap`+`memcpy` to a real `/dev/fb0`
   can only run on hardware; everything feeding it is exercised headlessly.

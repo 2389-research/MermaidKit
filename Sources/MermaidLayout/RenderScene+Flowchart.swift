@@ -48,25 +48,41 @@ extension RenderScene {
         // 2. Edge shafts. Pull an arrowhead tip back 3pt along the last segment
         //    so the head doesn't jam into the box it points at — the same gap
         //    the renderer opens before drawing the arrowhead.
-        for edge in layout.edges {
+        //    An invisible link (`~~~`) draws nothing. Circle and cross heads are
+        //    marks of their own, drawn after the line, which stops where the
+        //    mark begins.
+        var marks: [Element] = []
+        for edge in layout.edges where !edge.invisible {
             var points = edge.points
             let approach = points.count > 1 ? points[points.count - 2] : edge.start
+            let arrows = edge.head == .arrow
             if edge.hasArrow, points.count >= 2 {
                 let end = points[points.count - 1]
-                let dx = end.x - approach.x, dy = end.y - approach.y
-                let len = max(hypot(dx, dy), 0.001)
-                let gap: CGFloat = 3
-                points[points.count - 1] = CGPoint(x: end.x - dx / len * gap,
-                                                   y: end.y - dy / len * gap)
+                if arrows {
+                    let dx = end.x - approach.x, dy = end.y - approach.y
+                    let len = max(hypot(dx, dy), 0.001)
+                    let gap: CGFloat = 3
+                    points[points.count - 1] = CGPoint(x: end.x - dx / len * gap,
+                                                       y: end.y - dy / len * gap)
+                } else {
+                    points[points.count - 1] = endMark(
+                        edge.head, at: end, from: approach, color: edgeStrokeColor,
+                        canvas: theme.canvas, into: &marks)
+                }
             }
-            let stroke = Stroke(color: edgeStrokeColor, width: 1, dashed: edge.dashed)
+            if edge.backArrow, !arrows, points.count >= 2 {
+                points[0] = endMark(edge.head, at: points[0], from: points[1],
+                                    color: edgeStrokeColor, canvas: theme.canvas, into: &marks)
+            }
+            let stroke = Stroke(color: edgeStrokeColor, width: edge.thick ? 2 : 1, dashed: edge.dashed)
             elements.append(.polyline(Polyline(
                 points: points, stroke: stroke,
-                startArrow: edge.backArrow, endArrow: edge.hasArrow)))
+                startArrow: edge.backArrow && arrows, endArrow: edge.hasArrow && arrows)))
         }
+        elements.append(contentsOf: marks)
 
         // 3. Edge labels, on their canvas-colored chips, above every wire.
-        for edge in layout.edges {
+        for edge in layout.edges where !edge.invisible {
             guard let label = edge.label, !label.isEmpty else { continue }
             let point = edge.labelPoint ?? DiagramScene.polylineMidpoint(edge.points)
             elements.append(.text(Text(
@@ -124,7 +140,9 @@ extension RenderScene {
                     center: CGPoint(x: f.midX, y: f.midY + capH / 2),
                     fontSize: 12, weight: .medium, color: theme.ink)))
                 continue
-            case .rectangle, .rounded, .stadium, .circle, .diamond, .hexagon, .subroutine:
+            case .rectangle, .rounded, .stadium, .circle, .doubleCircle, .diamond, .hexagon,
+                 .subroutine, .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt,
+                 .asymmetric:
                 break
             }
 
@@ -157,12 +175,22 @@ extension RenderScene {
                 ])
             case .subroutine:
                 path = .roundedRect(f, radius: 4)
+            case .doubleCircle:
+                path = .ellipse(f)
+            case .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt, .asymmetric:
+                path = .polygon(DiagramLayoutEngine.polygonOutline(node.shape, in: f) ?? [])
             case .cylinder, .stateStart, .stateEnd:
                 continue // handled above
             }
-            // Phase 0b: as Flowchart.NodeShape grows (parallelogram, …) add the
-            // matching ShapePath here and in the CoreGraphics renderer together.
+            // As Flowchart.NodeShape grows, add the matching ShapePath here
+            // and in the CoreGraphics renderer together.
             elements.append(.shape(Shape(path: path, fill: nodeFill, stroke: nodeStroke)))
+            if node.shape == .doubleCircle {
+                // The inner ring (match DiagramRenderer).
+                let gap = DiagramLayoutEngine.doubleCircleGap
+                elements.append(.shape(Shape(
+                    path: .ellipse(f.insetBy(dx: gap, dy: gap)), fill: nil, stroke: nodeStroke)))
+            }
             if node.shape == .subroutine {
                 // Twin inner rails of a `[[ … ]]` box (match DiagramRenderer).
                 let inset = min(6, f.width / 4)
@@ -172,12 +200,57 @@ extension RenderScene {
                         stroke: nodeStroke, startArrow: false, endArrow: false)))
                 }
             }
+            // A flag's label centers on the part right of its notch.
+            let notch = node.shape == .asymmetric ? min(f.width * 0.22, f.height / 2) : 0
             elements.append(.text(Text(
                 string: node.label,
-                center: CGPoint(x: f.midX, y: f.midY),
+                center: CGPoint(x: f.midX + notch / 2, y: f.midY),
                 fontSize: 12, weight: .medium, color: theme.ink)))
         }
 
         return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+    }
+
+    /// Adds a circle (`--o`) or cross (`--x`) mark for a line ending at `tip`
+    /// from `approach`, and returns where the line should stop. Matches
+    /// `DiagramRenderer.drawEndMark`: 3pt clear of the node like an arrow's
+    /// tip, a filled 4pt-radius circle (canvas first, so the translucent
+    /// line doesn't show through) or a 1.5pt cross 8pt across, which the line
+    /// runs into.
+    static func endMark(_ head: Flowchart.Edge.Head, at tip: CGPoint, from approach: CGPoint,
+                        color: DiagramColor, canvas: DiagramColor,
+                        into marks: inout [Element]) -> CGPoint {
+        let dx = tip.x - approach.x, dy = tip.y - approach.y
+        let len = max(hypot(dx, dy), 0.001)
+        let (ux, uy) = (dx / len, dy / len)
+        let radius: CGFloat = 4
+        // Where the line stops, measured back from the tip. Never past half
+        // the segment, so a short `o--o` keeps a forward shaft between marks.
+        let reach: CGFloat = head == .circle ? 3 + 2 * radius : 3 + radius
+        let scale = min(1, len / 2 / reach)
+        let back = (3 + radius) * scale
+        let center = CGPoint(x: tip.x - ux * back, y: tip.y - uy * back)
+        switch head {
+        case .circle:
+            let box = CGRect(x: center.x - radius, y: center.y - radius,
+                             width: radius * 2, height: radius * 2)
+            marks.append(.shape(Shape(path: .ellipse(box), fill: canvas, stroke: nil)))
+            marks.append(.shape(Shape(path: .ellipse(box), fill: color, stroke: nil)))
+            return CGPoint(x: tip.x - ux * reach * scale, y: tip.y - uy * reach * scale)
+        case .cross:
+            // Two arms at 45° to the line.
+            let arm = radius / 2.squareRoot()
+            let a = CGPoint(x: (ux - uy) * arm, y: (uy + ux) * arm)
+            let b = CGPoint(x: (ux + uy) * arm, y: (uy - ux) * arm)
+            marks.append(.shape(Shape(path: .path([
+                .move(CGPoint(x: center.x - a.x, y: center.y - a.y)),
+                .line(CGPoint(x: center.x + a.x, y: center.y + a.y)),
+                .move(CGPoint(x: center.x - b.x, y: center.y - b.y)),
+                .line(CGPoint(x: center.x + b.x, y: center.y + b.y)),
+            ]), fill: nil, stroke: Stroke(color: color, width: 1.5, dashed: false))))
+            return center
+        case .arrow:
+            return tip
+        }
     }
 }

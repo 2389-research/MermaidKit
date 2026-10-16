@@ -136,15 +136,179 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.nodes.first { $0.id == "D" }?.label, "Plain")
     }
 
-    /// Double circles, the slanted shapes and the asymmetric flag have no model
-    /// case: they degrade to the nearest one with the label intact, not the
-    /// delimiters.
-    func testShapesWithoutAModelCaseKeepTheirLabels() throws {
+    /// Double circles, the slanted shapes and the asymmetric flag. They were
+    /// a circle and rectangles.
+    func testDoubleCircleSlantedAndFlagShapes() throws {
         let c = try flow("a(((Done))) --> b>Flag] --> c[/In/] --> d[\\Out\\] --> e[/Wide\\] --> f[\\Narrow/]")
         XCTAssertEqual(c.edges.count, 5)
         XCTAssertEqual(c.nodes.map(\.label), ["Done", "Flag", "In", "Out", "Wide", "Narrow"])
-        XCTAssertEqual(c.nodes.first?.shape, .circle)
-        XCTAssertEqual(Set(c.nodes.dropFirst().map(\.shape)), [.rectangle])
+        XCTAssertEqual(c.nodes.map(\.shape),
+                       [.doubleCircle, .asymmetric, .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt])
+    }
+
+    /// The same shapes by their `@{ shape: … }` names and aliases.
+    func testShapeDataNamesForTheNewShapes() throws {
+        let c = try flow("""
+            a@{ shape: dbl-circ }
+            b@{ shape: lean-r }
+            c@{ shape: out-in }
+            d@{ shape: priority }
+            e@{ shape: trap-t }
+            f@{ shape: odd }
+            """)
+        XCTAssertEqual(c.nodes.map(\.shape),
+                       [.doubleCircle, .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt, .asymmetric])
+    }
+
+    /// Thick, dotted and invisible links. `===` and `~~~` used to drop their
+    /// line, and `==>` drew like `-->`.
+    func testLinkStrokes() throws {
+        let c = try flow("A ==> B\nB === C\nC ~~~ D\nD -.- E\nE --> F")
+        XCTAssertEqual(c.edges.count, 5)
+        let e = c.edges
+        XCTAssertTrue(e[0].thick && e[0].hasArrow && !e[0].dashed)
+        XCTAssertTrue(e[1].thick && !e[1].hasArrow)
+        XCTAssertTrue(e[2].invisible && !e[2].hasArrow && !e[2].thick)
+        XCTAssertTrue(e[3].dashed && !e[3].hasArrow && !e[3].thick)
+        XCTAssertFalse(e[4].thick || e[4].invisible || e[4].dashed)
+    }
+
+    /// Circle and cross heads, at one end or both, on every stroke and with
+    /// inline text. They were plain arrows, and `-.-x`, `==o` dropped the line.
+    func testCircleAndCrossHeads() throws {
+        let c = try flow("""
+            A --o B
+            B --x C
+            C o--o D
+            D x--x E
+            E <--> F
+            F -.-x G
+            G ==o H
+            H -- yes --o I
+            """)
+        XCTAssertEqual(c.edges.count, 8)
+        let heads = c.edges.map { "\($0.head) \($0.hasArrow) \($0.backArrow)" }
+        XCTAssertEqual(heads, [
+            "circle true false", "cross true false", "circle true true", "cross true true",
+            "arrow true true", "cross true false", "circle true false", "circle true false",
+        ])
+        XCTAssertTrue(c.edges[5].dashed)
+        XCTAssertTrue(c.edges[6].thick)
+        XCTAssertEqual(c.edges[7].label, "yes")
+    }
+
+    /// An `o` or `x` that's an id stays one: a head needs a link right after
+    /// it (or before it), and a start head must match the end's.
+    func testNodesNamedOAndX() throws {
+        let c = try flow("o --> x\nx-->o\nq --o o")
+        XCTAssertEqual(c.nodes.map(\.id), ["o", "x", "q"])
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.head) \($0.backArrow)" },
+                       ["o>x arrow false", "x>o arrow false", "q>o circle false"])
+    }
+
+    /// A chain of open links is two links, not one with the middle node as
+    /// inline text: the `-- text ---` reading once matched from the second
+    /// dash of the first `---` and swallowed `B`.
+    func testOpenLinkChainsKeepTheirMiddleNode() throws {
+        for (source, thick) in [("A --- B --- C", false), ("A === B === C", true),
+                                ("A --- B --> C", false), ("A ---- B --- C", false)] {
+            let c = try flow(source)
+            XCTAssertEqual(c.nodes.map(\.id), ["A", "B", "C"], source)
+            XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C"], source)
+            XCTAssertEqual(c.edges.map(\.label), [nil, nil], source)
+            XCTAssertEqual(c.edges[0].thick, thick, source)
+        }
+        // Inline text on an open link still reads as text.
+        let text = try flow("A -- yes --- B")
+        XCTAssertEqual(text.edges.map(\.label), ["yes"])
+    }
+
+    /// An `@` in a label is text; only `id@` directly before a link is an
+    /// edge id. Stripping once ate `ops@` before `xmail`.
+    func testAtSignsInLabelsAreText() throws {
+        let c = try flow("A -->|ping ops@xmail.com| B\nC[mail joe@outlook.com] --> D\nE e1@--> F\nG e2@--o H\nI e3@~~~ J")
+        XCTAssertEqual(c.edges.map(\.label), ["ping ops@xmail.com", nil, nil, nil, nil])
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "mail joe@outlook.com")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "C>D", "E>F", "G>H", "I>J"])
+        XCTAssertEqual(c.edges[3].head, .circle)
+        XCTAssertTrue(c.edges[4].invisible)
+    }
+
+    /// A start head that doesn't match the end (`<---`, `<--o`, `o-->`) is one
+    /// mermaid rejects; we degrade to the link without it rather than drop
+    /// the line.
+    func testMismatchedStartHeadDegradesToTheLink() throws {
+        let c = try flow("A <--- B\nC <--o D\nE o--> F\nG x--o H")
+        XCTAssertEqual(c.nodes.map(\.id), ["A", "B", "C", "D", "E", "F", "G", "H"])
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.hasArrow) \($0.backArrow) \($0.head)" },
+                       ["A>B false false arrow", "C>D true false circle",
+                        "E>F true false arrow", "G>H true false circle"])
+    }
+
+    /// Extra `-`, `=`, `.` or `~` make a longer link, as in mermaid. They used
+    /// to be normalized away.
+    func testLinkLengths() throws {
+        let c = try flow("""
+            A --> B
+            A ---> C
+            A ----> D
+            A ---- E
+            A -..-> F
+            A ===> G
+            A ~~~~ H
+            A -- text ---> I
+            A \(String(repeating: "-", count: 50))> J
+            """)
+        XCTAssertEqual(c.edges.map(\.length), [1, 2, 3, 2, 2, 2, 2, 2, MermaidParser.maxLinkLength])
+        XCTAssertEqual(c.edges[7].label, "text")
+    }
+
+    /// A longer link puts its target that many ranks down.
+    func testLongerLinkSpansMoreRanks() throws {
+        let c = try flow("A --> B\nA ---> C\nA ----> D")
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        let frame = Dictionary(uniqueKeysWithValues: layout.nodes.map { ($0.id, $0.frame) })
+        let a = try XCTUnwrap(frame["A"]), b = try XCTUnwrap(frame["B"])
+        let cc = try XCTUnwrap(frame["C"]), d = try XCTUnwrap(frame["D"])
+        XCTAssertLessThan(a.maxY, b.minY)
+        XCTAssertLessThan(b.maxY, cc.minY, "C is a rank below B")
+        XCTAssertLessThan(cc.maxY, d.minY, "D is a rank below C")
+    }
+
+    /// `~~~` positions its nodes but draws nothing, so the linter and the alt
+    /// text don't see it either. (The drawing is in `RenderSceneTests`.)
+    func testInvisibleLinkPositionsButIsntDrawn() throws {
+        let c = try flow("A ~~~ B\nB --> C")
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        let frame = Dictionary(uniqueKeysWithValues: layout.nodes.map { ($0.id, $0.frame) })
+        XCTAssertLessThan(try XCTUnwrap(frame["A"]).maxY, try XCTUnwrap(frame["B"]).minY)
+        XCTAssertEqual(DiagramScene.from(layout, measure: measure).edges.count, 1)
+        XCTAssertTrue(MermaidAltText.describe(.flowchart(c)).contains("1 connection:"))
+    }
+
+    /// An invisible link ranks its nodes but never moves a drawn one: no face
+    /// port spread for it, no run nudged aside, no label steered around it.
+    /// Here it ranks nothing new, so the visible edge must match the chart
+    /// without it exactly.
+    func testInvisibleLinkDoesNotMoveVisibleEdges() throws {
+        for direction in ["TD", "LR"] {
+            let alone = DiagramLayoutEngine.layout(
+                try flowIn(direction, "A -->|yes| B\nA --> C"), measure: measure)
+            let with = DiagramLayoutEngine.layout(
+                try flowIn(direction, "A -->|yes| B\nA --> C\nA ~~~ B"), measure: measure)
+            XCTAssertEqual(with.nodes.map(\.frame), alone.nodes.map(\.frame), direction)
+            for i in 0..<2 {
+                XCTAssertEqual(with.edges[i].points, alone.edges[i].points, "\(direction) edge \(i)")
+                XCTAssertEqual(with.edges[i].labelPoint, alone.edges[i].labelPoint, "\(direction) edge \(i)")
+            }
+        }
+    }
+
+    private func flowIn(_ direction: String, _ body: String) throws -> Flowchart {
+        guard case .flowchart(let c)? = MermaidParser.parse("flowchart \(direction)\n" + body) else {
+            throw XCTSkip("parse failed: \(body)")
+        }
+        return c
     }
 
     /// `>…]` closes a bracket it never opened; inside an `&` fan that once

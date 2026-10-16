@@ -8,6 +8,8 @@ integrated into mermaid (mermaid.js.org/syntax/zenuml.html), D2
 (d2lang.com/tour/sequence-diagrams). Current-state references are to the
 MermaidKit clone at `scratchpad/mermaidkit-ios`.
 
+> **Update (v2.4.0, 2026-10-16):** a historical memo — every "Current MermaidKit" line below describes the July 2026 clone. Stages 1–8 of §D shipped by 1.0: arrow-head identity (including `<<->>`), `autonumber` variants, `<br>` line breaks, fragment frames (loop/alt/opt/par/critical/break and `rect`) with nesting, activation bars, `box` groups, create/destroy, and typed participants (`@{ "type": … }`). Not implemented: `mirrorActors`, `link`/`links` metadata, half-arrows, and central `()` connections. The ZenUML uplift (stage 11) is still open. See `mermaid-coverage-audit.md` for current status.
+
 Current MermaidKit sequence support (baseline for every gap noted below):
 `MermaidParser.parseSequence` (MermaidParser.swift:797) — participants/actors
 with `as` aliases, arrow tokens `->` `-->` `->>` `-->>` `-x` `--x` `-)` `--)`

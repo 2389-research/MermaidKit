@@ -1,8 +1,8 @@
 # MermaidKit on Android: fidelity, utility, and zero-hassle bridges
 
-Design memo · the plan for first-class Android support. Not yet implemented;
-this records the options, the reasoning, and what we decided so we build the
-right thing.
+Design memo · first-class Android support. Phases 1–3 are implemented (see the
+per-phase status below); this records the options, the reasoning, and what we
+decided.
 
 ## The goal
 
@@ -77,7 +77,7 @@ alongside Swift's). We accept it because:
 
 ## The linchpin: a complete `RenderScene`
 
-The one real blocker. Today's `DiagramScene` is **lossy** — it was built for the
+The one real blocker (since resolved by `RenderScene`). At the time, `DiagramScene` was **lossy** — it was built for the
 linter, so it carries frames, polylines, and label frames but **drops shape and
 color** (confirmed by the export-substrate research). A Kotlin renderer can't
 draw shapes it can't see.
@@ -142,9 +142,10 @@ contract (#14) reads, and its bytes are **determinism-gated across processes**
   ```
 - **One Gradle line**, nothing else:
   ```kotlin
-  implementation("ai.2389:mermaidkit-android:1.x")
+  implementation("ai.2389:mermaidkit-android:0.1.0")
   ```
-  from Maven Central. The `.aar` bundles **prebuilt `.so` for every ABI**
+  from Maven Central once published (today it publishes to `mavenLocal()` — see
+  `android/README.md`). The `.aar` bundles **prebuilt `.so` for every ABI**
   (arm64-v8a, armeabi-v7a, x86_64). The consumer never sees the NDK, Swift, or
   JNI — *we* eat the cross-compile so they don't. That is the whole "no
   frustration" requirement.
@@ -156,8 +157,9 @@ contract (#14) reads, and its bytes are **determinism-gated across processes**
   *initial* C ABI (returned alongside the scene), wired to `contentDescription`.
   **Not** bolted on per-view later: cheap if designed in, painful to retrofit
   (Vinculum's lesson). Instant differentiator.
-- **Tap callbacks** — the scene carries every node's frame, so hit-testing gives
-  `onNodeClick(nodeId)` with no extra layout work.
+- **Tap callbacks** — `onNodeClick(nodeId)` needs the ABI to also emit a
+  node→rect hit-test map (`SceneWire` itself is flattened primitives with no node
+  identity); not yet built.
 - **Material theming** (`DiagramTheme` ← `MaterialTheme` colors), light/dark,
   DPI-aware, and export to PNG/SVG/PDF from Kotlin.
 
@@ -166,6 +168,8 @@ contract (#14) reads, and its bytes are **determinism-gated across processes**
 Layout is only correct if it measures with the **exact face that draws**.
 **Decision (product surface): the batched `Paint.measureText` callback — the
 device's Skia face both measures and draws.** This is committed, not an "or."
+*(As shipped: one `Paint.measureText` callback per text run through a C
+trampoline, not a single batched hop; batching remains a possible optimization.)*
 
 Why we pin it rather than leave it open (Vinculum's lesson, their issue #62):
 measuring with a bundled Roboto in Swift while drawing with the device's
@@ -204,6 +208,9 @@ unify this axis.
 - **No FontConfig on Android** → irrelevant; native `Paint` handles fonts.
 - **Swift↔Kotlin bridge** → tiny **C ABI**: takes `source + options + a batched
   measure callback`, returns the **scene + the narration/alt-text + diagnostics**
+  *(as shipped: `mmk_scene_json`/`mmk_scene_json_themed` with a per-run measure
+  callback return the scene; `mmk_narrate` returns narration separately; no
+  diagnostics cross the ABI)*
   (accessibility threaded from the first surface, per Vinculum). Not the rich
   Swift API; hidden inside the AAR. The scene crosses as the explicit
   **`SceneWire`** JSON schema (see below), not `RenderScene`'s synthesized
@@ -219,7 +226,7 @@ unify this axis.
 Each phase is independently valuable and testable; nothing needs the Android
 toolchain until Phase 1.
 
-### Phase 0 — Complete `RenderScene` + SVG reference renderer (pure Swift) ← START HERE
+### Phase 0 — Complete `RenderScene` + SVG reference renderer (pure Swift) — done (0a/0b shipped; 0c, the cross-backend ink-signature gate, is still open)
 The linchpin. A new **complete, `Codable` `RenderScene`** that fully determines
 the picture — shaped nodes (frame, shape, fill/stroke/dash), edges (polyline +
 arrowheads + dash), text with font size, containers, canvas — lowered from the
@@ -236,12 +243,13 @@ scene contract (#14).
   no field the renderer needs is missing (the scene fully determines the picture).
 
 ### Phase 1 — C ABI + NDK cross-compile
-Thin C ABI (`MermaidKitC`): `source + options + batched measure callback → scene
-(SceneWire JSON) + narration/alt-text`. **Done + verified:** the `mmk_*` ABI
+Thin C ABI (`MermaidKitC`): `source + prefers_dark + per-run measure callback →
+scene (SceneWire JSON)`, with `mmk_narrate` for narration/alt-text. **Done + verified:** the `mmk_*` ABI
 lands (`mmk_scene_json`/`mmk_narrate`/`mmk_free`/`mmk_version`) and
-**cross-compiles cleanly to Android** via the Swift Android SDK — arm64 gated by
-`scripts/check-android-build.sh` (a Bionic-libc buildability check that builds
-`MermaidKitC` for `aarch64-linux-android`), x86_64 by the emulator job's JNI
+**cross-compiles cleanly to Android** via the Swift Android SDK — arm64 checked by
+`scripts/check-android-build.sh` (a manual Bionic-libc buildability check that
+builds `MermaidKitC` for `aarch64-linux-android`) and built in CI by the
+`android-aar` job, x86_64 by the emulator job's JNI
 cross-compile. The **JNI `.so` is done + verified** (see Phase 2), and the
 release-AAR job builds and bundles **all three ABIs** (arm64-v8a, armeabi-v7a,
 x86_64), asserting each `jni/<abi>/libmermaidkit.so` is present.
@@ -280,8 +288,10 @@ theme to `MaterialTheme.colorScheme` — so a diagram matches the app's theme
 (`SceneWire` is flattened primitives with no node identity — needs the ABI to
 also emit a node→rect hit-test map).
 - *Acceptance:* a sample app renders every fixture natively, light/dark, with
-  a11y labels and tap callbacks. *(Renderer, on-device draw, and the native
-  source→scene seam proven; the measure callback + snap-in surface remain.)*
+  a11y labels and tap callbacks. *(Renderer, on-device draw, the native
+  source→scene seam, the measure callback, the snap-in surface and Material
+  theming are proven; tap callbacks remain, pending a node→rect hit-test map in
+  the ABI.)*
 
 ### Phase 3 — Distribution
 **Done + verified:** the release `.aar` bundles prebuilt, **stripped** `.so` for

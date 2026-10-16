@@ -68,7 +68,8 @@ enum GridQuantizer {
             if !pts.isEmpty { pts[0] = start; pts[pts.count - 1] = end }
             return FlowchartLayout.PlacedEdge(
                 start: start, end: end, points: pts, label: e.label, dashed: e.dashed,
-                hasArrow: e.hasArrow, backArrow: e.backArrow, labelPoint: e.labelPoint.map(snapPoint))
+                hasArrow: e.hasArrow, backArrow: e.backArrow, head: e.head, thick: e.thick,
+                invisible: e.invisible, labelPoint: e.labelPoint.map(snapPoint))
         }
 
         // The canvas grows to hold any box that snapped past the old bounds.

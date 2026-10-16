@@ -5,9 +5,11 @@ the Swift core emits (`mmk_scene_json`) and paints it on Flutter's `Canvas` with
 `CustomPainter`. Flutter's Canvas is Skia/Impeller — the same engine as the Android
 `Canvas` — so this is a fidelity match for the Android backend.
 
-The leverage: **one plugin reaches all of Flutter's targets** — iOS, Android, web,
-Windows, macOS, Linux — from a single Dart integration, because Flutter draws its
-own UI rather than using native widgets (exactly MermaidKit's model).
+The leverage: **the Dart renderer (`SceneWire` + `MermaidPainter`) runs on every
+Flutter target** — iOS, Android, web, Windows, macOS, Linux — because Flutter
+draws its own UI rather than using native widgets (exactly MermaidKit's model).
+The `dart:ffi` source → scene bridge (`MermaidNative`) covers the native targets
+only, not web, and the app supplies the `MermaidKitCShared` library.
 
 ```mermaid
 flowchart LR
@@ -66,3 +68,6 @@ builds the lib, the Flutter job tests against it).
 
 - A `MermaidDiagram.source(...)` convenience wrapping `MermaidNative.scene`, and
   theming across the ABI (`mmk_scene_json_themed`, already on the Swift side).
+- A device-font **measure callback** through `dart:ffi` — `MermaidNative.scene`
+  passes none, so native layout uses a coarse glyph-box metric rather than the
+  face that draws.

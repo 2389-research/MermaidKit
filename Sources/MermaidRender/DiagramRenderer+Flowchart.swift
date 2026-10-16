@@ -44,37 +44,54 @@ extension DiagramRenderer {
         // Batch edge shafts by dash style and stroke each group in a single
         // pass, so crossing edges composite as one region instead of stacking
         // their translucent strokes into darker seams. Arrowheads and labels
-        // draw on top afterward.
-        var solidShafts: [[CGPoint]] = []
-        var dashedShafts: [[CGPoint]] = []
+        // draw on top afterward. Thick links (`==>`) are a batch of their own;
+        // invisible ones (`~~~`) draw nothing.
+        var shafts: [(points: [CGPoint], dashed: Bool)] = []
+        var thickShafts: [(points: [CGPoint], dashed: Bool)] = []
         var arrows: [(tip: CGPoint, from: CGPoint)] = []
-        for edge in layout.edges {
+        var marks: [(head: Flowchart.Edge.Head, tip: CGPoint, from: CGPoint)] = []
+        for edge in layout.edges where !edge.invisible {
             // Leave a small gap between an arrowhead and the box it points at.
             var points = edge.points
             let approach = points.count > 1 ? points[points.count - 2] : edge.start
             if edge.hasArrow, points.count >= 2 {
                 let end = points[points.count - 1]
-                let dx = end.x - approach.x, dy = end.y - approach.y
-                let len = max(hypot(dx, dy), 0.001)
-                let gap: CGFloat = 3
-                points[points.count - 1] = CGPoint(x: end.x - dx / len * gap, y: end.y - dy / len * gap)
-                arrows.append((points[points.count - 1], approach))
+                if edge.head == .arrow {
+                    let dx = end.x - approach.x, dy = end.y - approach.y
+                    let len = max(hypot(dx, dy), 0.001)
+                    let gap: CGFloat = 3
+                    points[points.count - 1] = CGPoint(x: end.x - dx / len * gap, y: end.y - dy / len * gap)
+                    arrows.append((points[points.count - 1], approach))
+                } else {
+                    // A circle or cross: the line stops where the mark begins.
+                    marks.append((edge.head, end, approach))
+                    points[points.count - 1] = drawEndMark(
+                        edge.head, at: end, from: approach, color: stroke, canvas: theme.canvas, in: nil)
+                }
             }
             if edge.backArrow, points.count >= 2 {
                 // Bidirectional: a second head at the start, pointing back.
-                arrows.append((points[0], points[1]))
+                if edge.head == .arrow {
+                    arrows.append((points[0], points[1]))
+                } else {
+                    marks.append((edge.head, points[0], points[1]))
+                    points[0] = drawEndMark(
+                        edge.head, at: points[0], from: points[1], color: stroke, canvas: theme.canvas, in: nil)
+                }
             }
-            if edge.dashed { dashedShafts.append(points) } else { solidShafts.append(points) }
+            if edge.thick { thickShafts.append((points, edge.dashed)) } else { shafts.append((points, edge.dashed)) }
         }
 
-        strokeEdgeShafts(
-            solidShafts.map { ($0, false) } + dashedShafts.map { ($0, true) },
-            color: stroke, in: context)
+        strokeEdgeShafts(shafts, color: stroke, in: context)
+        strokeEdgeShafts(thickShafts, color: stroke, lineWidth: 2, in: context)
 
         for arrow in arrows {
             drawArrowhead(at: arrow.tip, from: arrow.from, color: stroke, canvas: theme.canvas, in: context)
         }
-        for edge in layout.edges {
+        for mark in marks {
+            drawEndMark(mark.head, at: mark.tip, from: mark.from, color: stroke, canvas: theme.canvas, in: context)
+        }
+        for edge in layout.edges where !edge.invisible {
             guard let label = edge.label, !label.isEmpty else { continue }
             let point = edge.labelPoint ?? polylineMidpoint(edge.points)
             drawEdgeLabel(label, at: point, theme: theme, in: context)
@@ -116,12 +133,14 @@ extension DiagramRenderer {
             case .stadium:
                 let r = node.frame.height / 2
                 path = CGPath(roundedRect: node.frame, cornerWidth: r, cornerHeight: r, transform: nil)
-            case .circle, .stateStart, .stateEnd: // terminals handled above
+            case .circle, .doubleCircle, .stateStart, .stateEnd: // terminals handled above
                 path = CGPath(ellipseIn: node.frame, transform: nil)
             case .diamond:
                 path = diamondPath(node.frame)
             case .hexagon:
                 path = hexagonPath(node.frame)
+            case .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt, .asymmetric:
+                path = slantedPath(node.shape, in: node.frame)
             case .subroutine:
                 path = CGPath(roundedRect: node.frame, cornerWidth: 4, cornerHeight: 4, transform: nil)
             case .cylinder: // handled above with a continue; keep exhaustive
@@ -143,8 +162,18 @@ extension DiagramRenderer {
                 context.strokePath()
                 context.restoreGState()
             }
+            // Double circle: the inner ring (`DiagramLayoutEngine.doubleCircleGap` in).
+            if node.shape == .doubleCircle {
+                context.saveGState()
+                context.setStrokeColor(resolvedCGColor(stroke))
+                context.setLineWidth(1)
+                context.strokeEllipse(in: node.frame.insetBy(dx: 4, dy: 4))
+                context.restoreGState()
+            }
 
-            drawText(node.label, center: CGPoint(x: node.frame.midX, y: node.frame.midY),
+            // A flag's label centers on the part right of its notch.
+            let notch = node.shape == .asymmetric ? min(node.frame.width * 0.22, node.frame.height / 2) : 0
+            drawText(node.label, center: CGPoint(x: node.frame.midX + notch / 2, y: node.frame.midY),
                      size: 12, weight: .medium, color: theme.ink, in: context)
         }
     }

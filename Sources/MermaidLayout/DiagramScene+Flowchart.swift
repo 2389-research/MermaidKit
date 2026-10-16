@@ -20,7 +20,9 @@ extension DiagramScene {
         nodes.append(contentsOf: layout.nodes.map { node in
             Node(id: node.id, frame: node.frame, isContainer: false)
         })
-        var labels: [Label] = layout.edges.enumerated().compactMap { index, edge -> Label? in
+        // Invisible links (`~~~`) aren't drawn, so there's nothing to check.
+        let edges = layout.edges.filter { !$0.invisible }
+        var labels: [Label] = edges.enumerated().compactMap { index, edge -> Label? in
             guard let text = edge.label, !text.isEmpty else { return nil }
             let center = edge.labelPoint ?? CGPoint(
                 x: (edge.start.x + edge.end.x) / 2,
@@ -49,7 +51,7 @@ extension DiagramScene {
             name: "flowchart",
             size: layout.size,
             nodes: nodes,
-            edges: layout.edges.map { edge in
+            edges: edges.map { edge in
                 Edge(polyline: edge.points, label: edge.label)
             },
             labels: labels

@@ -151,6 +151,12 @@ yourself via FreeType or accept reduced fidelity. Don't assume — measure.
 - Add SilicaCairo + Cairo as **Linux-only target dependencies**
   (`.product(..., condition: .when(platforms: [.linux]))`). On Apple they are
   never linked; CoreGraphics/CoreText are used.
+  *Update (v2.4.0): a platform condition alone isn't enough — SwiftPM still
+  resolves Silica's branch-pinned graph on every platform, which breaks
+  `from:`-pinned consumers. MermaidKit also gates the dependency behind the
+  opt-in `LinuxRaster` package trait
+  (`condition: .when(platforms: [.linux], traits: ["LinuxRaster"])`); see
+  `Package.swift`.*
 - Widen every render file's guard from
   `#if canImport(AppKit) || canImport(UIKit)` to
   `... || canImport(SilicaCairo)`. `canImport(SilicaCairo)` is the precise
@@ -197,7 +203,9 @@ yourself via FreeType or accept reduced fidelity. Don't assume — measure.
    layout nondeterminism (a hashed-collection order leaking into coordinates —
    at least in the zenuml layout, likely a couple of others) is worth fixing at
    the source (sort before iterating / use model order) so output is stable for
-   users too, not just under the test's fixed seed. If Vinculum's math layout
+   users too, not just under the test's fixed seed. *Update (v2.4.0): fixed at
+   the source (issue #1) and gated in CI by `scripts/check-determinism.sh`, which
+   renders every fixture in two fresh processes and diffs them.* If Vinculum's math layout
    uses hashed collections anywhere positions are derived, it will have the same
    latent issue.
 

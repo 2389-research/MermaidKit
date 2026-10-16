@@ -104,6 +104,9 @@ the instrumented test (`connectedDebugAndroidTest`).*
 - `mermaidkit/src/main/kotlin/ai/mermaidkit/MermaidView.kt` /
   `MermaidDiagram.kt` — the snap-in surface: a classic `View` (no Compose dep) and
   a `@Composable`, each rendering a source string in one line (see above).
+- `mermaidkit/src/main/kotlin/ai/mermaidkit/MermaidTheme.kt` /
+  `MermaidThemeMaterial.kt` — the theme colors sent over the ABI and
+  `MermaidTheme.fromMaterial(colorScheme)`.
 - `native/` — the JNI native side: `Sources/MermaidJNI/mermaidkit_jni.c` (the C
   shim) and its own `Package.swift`. `build-jni.sh` cross-compiles it with the
   Swift Android SDK into `libmermaidkit.so` (the shim + `MermaidKitC` linked in)
@@ -112,6 +115,8 @@ the instrumented test (`connectedDebugAndroidTest`).*
   the emulator's Skia `Canvas` and asserts real ink lands.
 - `mermaidkit/src/androidTest/…/NativeBridgeTest.kt` — the full seam on-device:
   source string → JNI → Swift → `SceneWire` → render.
+- `mermaidkit/src/androidTest/…/MermaidViewTest.kt` / `MermaidDiagramTest.kt` —
+  the snap-in surfaces on-device (render, size, narration).
 
 ## Build & test
 

@@ -241,7 +241,9 @@ public enum ASCIIRenderer {
 
     /// Parse → lower with the monospace measurer → quantize → draw. Returns nil
     /// for non-flowchart sources (POC scope). `color` selects plain Unicode or
-    /// Tier-4 truecolor.
+    /// Tier-4 truecolor. Every node shape has a glyph; edges draw as solid lines
+    /// with one arrowhead at the target (link style and head kind aren't shown
+    /// in the terminal), and invisible links are skipped.
     public static func asciiRenderFlowchart(_ source: String,
                                             color: ASCIIColorMode = .plain,
                                             background: TerminalBackground = .dark) -> String? {
@@ -442,6 +444,24 @@ public enum ASCIIRenderer {
             // Call to a predefined sub-process: heavy double side rails (the
             // monospace echo of the flowchart `[[ … ]]` box).
             sideCaps("║", "║")
+        case .doubleCircle:
+            // A circle with doubled rails top and bottom for the second ring.
+            corners("◜", "◝", "◟", "◞")
+            sideCaps("(", ")")
+            topBottomCaps("═")
+        case .parallelogram:
+            // Both sides lean right (`[/ … /]`).
+            corners("╱", "╱", "╱", "╱")
+        case .parallelogramAlt:
+            corners("╲", "╲", "╲", "╲")
+        case .trapezoid:
+            // Wider at the bottom (`[/ … \]`).
+            corners("╱", "╲", "╱", "╲")
+        case .trapezoidAlt:
+            corners("╲", "╱", "╲", "╱")
+        case .asymmetric:
+            // A flag: the left side notched (`> … ]`).
+            for r in (r0 + 1)..<r1 { canvas.setGlyph(r, c0, ">", color: color) }
         }
     }
 

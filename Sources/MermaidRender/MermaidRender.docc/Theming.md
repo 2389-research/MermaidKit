@@ -11,7 +11,7 @@ it to re-skin all 30 diagram types at once.
 | `secondaryTextColor` | Edge labels, captions, legends |
 | `tertiaryTextColor` | De-emphasized text: type tags, ticks, watermarks |
 | `canvas` | The background — also the "chip" behind edge labels, so it must match what the diagram sits on |
-| `accent` | Highlights: active states, links, emphasis |
+| `accent` | Node fills (flowchart/class/ER/state/sequence boxes, at low alpha), markers, single-hue highlights |
 | `hairline` | Rules and borders: table lines, axes, lifelines |
 | `palette` | **Categorical accents** — node tints, pie slices, sankey bands, gantt sections, git branches, cycled by index |
 | `prefersDark` | Keys the render cache and dark-tuned alpha choices |
@@ -80,5 +80,6 @@ line art.
 
 Follow the environment (what ``MermaidView`` does by default), or key your
 own theme off your app's appearance system and pass it explicitly. The
-render cache keys on `prefersDark`, so flipping appearance re-renders
+render cache keys on the theme's colors (resolved under its `prefersDark`
+appearance) and the spacing, so flipping appearance or re-skinning re-renders
 correctly without cache pollution.

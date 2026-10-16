@@ -7,6 +7,8 @@ public struct ParseDiagnostic: Hashable, Sendable {
         /// The source cannot produce a diagram.
         case error
         /// The source parses, but something the author wrote was set aside.
+        /// Reserved: `diagnose` currently reports only errors, and returns `[]`
+        /// for a source that parses.
         case note
     }
 

@@ -4,10 +4,15 @@ Perf memo, last revised 2026-07-16. Machine: **Apple M1 Max**, macOS 26.5.
 Re-verified on the same M1 Max after the v1.2 edge-label / back-edge layout
 overhaul: the numbers below still hold — worst is sankey ~23–25 ms, most types
 under ~15 ms, and rasterization still dominates.
+
+> **Update (v2.4.0, 2026-10-16):** these figures were last measured on the M1 Max
+> at v1.2 and not re-run since. A v2.4.0 spot check (`BENCH_TABLE=1`, Apple M4
+> Max) stayed well inside the ranges quoted here (worst: sankey ~9 ms), so the
+> README's ranges remain conservative.
 Every number here is machine-specific and best-of-N cold — it is **not** a CI
 threshold. MermaidKit's test suite asserts correctness only; timing gates flake
 under CI load, so nothing here gates a merge. Numbers over adjectives: this memo
-is the receipts behind the README's "under 25 ms" claim, an honest read on
+is the receipts behind the README's "most types under ~15 ms, worst ~25 ms" claim, an honest read on
 whether any of it is worth touching, and — as of this revision — the record of
 three shared-pipeline redundancies removed and one backing-store lever
 **evaluated and rejected on measurement** (see *Fixable vs irreducible*).
@@ -136,7 +141,7 @@ Two things stand out:
    sankey, and state are the next heaviest layouts (~3 ms) — the layered layout
    shared by flowchart and swimlane (network-simplex ranking + crossing reduction)
    is **super-linear in edge count**, which is why the parse-level `maxEdges` (500)
-   cap bounds it.
+   cap bounds it for flowchart (swimlane is uncapped).
 
 ### The fixed-overhead floor
 
@@ -240,8 +245,9 @@ The honest framing. Two columns: what can't be cheaper, and what was slack.
 - **The first typeset of each unique label** must build a `CTLine`. The memo
   below removes the *redundant* typesets, not the first one.
 - **The layered layout is super-linear in edge count** (network-simplex ranking +
-  crossing reduction) — flowchart and swimlane share it. Capped at parse by the
-  shared `maxEdges` = 500, not optimized away.
+  crossing reduction) — flowchart and swimlane share it. Flowchart is capped at
+  parse by `maxEdges` = 500 (swimlane has no edge cap, only `maxTextSize`), not
+  optimized away.
 - **Measurement variance** — tens of percent run-to-run. Not a cost, but a floor
   on how precisely any of this can be quoted.
 

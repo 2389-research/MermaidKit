@@ -13,9 +13,9 @@ parse into the same IR and render through the same layout and backends — and
 `DOTExporter` emits a flowchart back as DOT, so MermaidKit doubles as a
 Mermaid ⇄ DOT converter. Every type also exports to standalone SVG
 (`MermaidRenderer.svg(source:theme:)`, via the platform-free `RenderScene` IR and
-`SVGRenderer`), and renders in the terminal via the platform-free
-`mermaidkit-term` CLI (Kitty graphics, half-block truecolor, box-drawing, or
-plain ASCII). See the [README](../README.md) for details.
+`SVGRenderer`), and renders in the terminal via the `mermaidkit-term` CLI
+(Kitty graphics or half-block truecolor for every type; colored or plain
+box-drawing for flowcharts). See the [README](../README.md) for details.
 
 ## Architecture
 
