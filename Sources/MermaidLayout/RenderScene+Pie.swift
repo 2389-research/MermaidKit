@@ -26,7 +26,7 @@ extension RenderScene {
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
                 string: title,
-                center: CGPoint(x: layout.center.x, y: layout.center.y - layout.radius - 16),
+                center: CGPoint(x: layout.center.x, y: layout.center.y - layout.radius - DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 
@@ -57,7 +57,8 @@ extension RenderScene {
         // Legend: value chips vertically stacked.
         var y = layout.legendOrigin.y
         for slice in layout.slices {
-            let swatch = CGRect(x: layout.legendOrigin.x, y: y + 4, width: 10, height: 10)
+            let row = DiagramLayoutEngine.pieLegendRow(measure)
+            let swatch = CGRect(x: layout.legendOrigin.x, y: y + (row - 10) / 2 - 1, width: 10, height: 10)
             elements.append(.shape(Shape(
                 path: .roundedRect(swatch, radius: 2),
                 fill: theme.categoricalColor(slice.colorIndex), stroke: nil)))
@@ -69,7 +70,7 @@ extension RenderScene {
                 string: label,
                 center: CGPoint(x: swatch.maxX + 6 + size.width / 2, y: swatch.midY),
                 fontSize: 10.5, color: theme.secondaryText)))
-            y += 20
+            y += row
         }
 
         return RenderScene(size: layout.size, background: theme.canvas, elements: elements)

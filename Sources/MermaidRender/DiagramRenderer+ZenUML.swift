@@ -67,7 +67,7 @@ extension DiagramRenderer {
                               from: CGPoint(x: arrow.fromX, y: arrow.y),
                               color: shaft, canvas: theme.canvas, in: context)
                 if !arrow.label.isEmpty {
-                    let mid = CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: arrow.y - 9)
+                    let mid = CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: arrow.y - DiagramLayoutEngine.zenUMLLabelRise(layoutMeasure))
                     drawEdgeLabel(arrow.label, at: mid, theme: theme, in: context)
                 }
             }
@@ -80,9 +80,9 @@ extension DiagramRenderer {
                           fill: color.withAlphaComponent(0.14),
                           stroke: color.withAlphaComponent(0.6), in: context)
             if let s = p.stereotype {
-                drawText(s, center: CGPoint(x: p.frame.midX, y: p.frame.minY + 12),
+                drawText(s, center: CGPoint(x: p.frame.midX, y: p.frame.minY + DiagramLayoutEngine.zenUMLBoxMetrics(layoutMeasure).stereotypeY),
                          size: 8.5, color: theme.tertiaryTextColor, in: context)
-                drawText(p.name, center: CGPoint(x: p.frame.midX, y: p.frame.minY + 25),
+                drawText(p.name, center: CGPoint(x: p.frame.midX, y: p.frame.minY + DiagramLayoutEngine.zenUMLBoxMetrics(layoutMeasure).nameY),
                          size: 12, weight: .medium, color: theme.ink, in: context)
             } else {
                 drawText(p.name, center: CGPoint(x: p.frame.midX, y: p.frame.midY),

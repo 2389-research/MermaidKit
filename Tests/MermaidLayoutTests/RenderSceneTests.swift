@@ -1214,6 +1214,28 @@ final class RenderSceneTests: XCTestCase {
         }
     }
 
+    // MARK: Text scale
+
+    /// `textScale` lays the diagram out for the larger text and draws every
+    /// run at its scaled size; 1 is the scene as it always was.
+    func testTextScaleScalesTextAndGrowsTheScene() throws {
+        let diagram = try XCTUnwrap(MermaidParser.parse(
+            "sequenceDiagram\n  A->>B: ask for the rendered diagram\n  B-->>A: here is the image"))
+        let plain = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure))
+        let one = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure,
+                                                 spacing: DiagramSpacing(textScale: 1)))
+        XCTAssertEqual(SVGRenderer.svg(plain), SVGRenderer.svg(one))
+
+        let big = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure,
+                                                 spacing: DiagramSpacing(textScale: 2)))
+        func sizes(_ scene: RenderScene) -> [CGFloat] {
+            scene.elements.compactMap { if case .text(let t) = $0 { t.fontSize } else { nil } }
+        }
+        XCTAssertEqual(sizes(big), sizes(plain).map { $0 * 2 })
+        XCTAssertGreaterThan(big.size.width, plain.size.width)
+        XCTAssertGreaterThan(big.size.height, plain.size.height)
+    }
+
     // MARK: Helpers
 
     private func countOccurrences(of needle: String, in haystack: String) -> Int {

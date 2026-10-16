@@ -49,6 +49,15 @@ public struct C4Layout: Sendable {
 
 extension DiagramLayoutEngine {
 
+    /// The line pitches of a C4 box's stacked text — the 9.5pt stereotype, the
+    /// 12pt title lines, the 10pt detail lines — 13, 16 and 13 at the default
+    /// size, grown with the text. The layout sizes boxes with them and both
+    /// renderers place the lines by them.
+    package static func c4LinePitches(_ measure: DiagramTextMeasurer)
+        -> (stereotype: CGFloat, title: CGFloat, detail: CGFloat) {
+        (grown(13, fontSize: 9.5, measure), grown(16, fontSize: 12, measure), grown(13, fontSize: 10, measure))
+    }
+
     /// Lays out a C4 diagram: elements as uniform-width boxes in
     /// relationship-layered, horizontally centered rows; arrows thread the
     /// empty channels between rows (multi-row hops via side-gutter lanes) and
@@ -56,16 +65,20 @@ extension DiagramLayoutEngine {
     /// only draws.
     public static func layout(_ diagram: C4Diagram, measure: DiagramTextMeasurer) -> C4Layout {
         let margin: CGFloat = 16
-        let titleHeight: CGFloat = diagram.title == nil ? 0 : 24
-        let boxWidth: CGFloat = 176
+        let titleHeight: CGFloat = diagram.title == nil ? 0 : Self.titleHeight(24, measure)
+        // Boxes widen with the text, so a label wraps to the same lines at any
+        // text size.
+        let boxWidth: CGFloat = grown(176, fontSize: nodeFontSize, measure)
         let pad: CGFloat = 10
         let textWidth = boxWidth - pad * 2
-        let stereoH: CGFloat = 13
+        let pitches = c4LinePitches(measure)
+        let stereoH = pitches.stereotype
         let titleGap: CGFloat = 3
-        let titleLineH: CGFloat = 16
-        let detailLineH: CGFloat = 13
+        let titleLineH = pitches.title
+        let detailLineH = pitches.detail
         let hGap: CGFloat = 26
-        let vGap: CGFloat = 62          // room for arrows, stacked labels, a person's head
+        // Room for arrows, stacked labels, a person's head.
+        let vGap: CGFloat = grown(62, fontSize: labelFontSize, measure)
         let maxCols = 6
 
         // Greedy word-wrap capped at `maxLines`; the last kept line absorbs the
@@ -180,7 +193,8 @@ extension DiagramLayoutEngine {
 
         let widestCols = visualRows.map(\.count).max() ?? 1
         let canvasWidth = max(220,
-            margin * 2 + CGFloat(widestCols) * boxWidth + CGFloat(widestCols - 1) * hGap)
+            margin * 2 + CGFloat(widestCols) * boxWidth + CGFloat(widestCols - 1) * hGap,
+            diagram.title.map { measure($0, titleFontSize).width + margin * 2 } ?? 0)
 
         // Place boxes row by row, each row centered horizontally, top-aligned
         // within the row's tallest box. Record each element's visual row so the
@@ -356,7 +370,7 @@ extension DiagramLayoutEngine {
         for (_, idxs) in bands where idxs.count > 1 {
             let ordered = idxs.sorted { routes[$0].labelPoint.x < routes[$1].labelPoint.x }
             let baseY = routes[ordered[0]].labelPoint.y
-            let step: CGFloat = 15
+            let step = grown(15, fontSize: labelFontSize, measure)
             // Keep the whole stack inside the channel (± ~half a gap off boxes).
             let limit = vGap / 2 - 8
             let span = min(CGFloat(ordered.count - 1) * step, 2 * limit)

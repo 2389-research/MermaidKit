@@ -10,10 +10,10 @@ extension DiagramLayoutEngine {
     /// curve labels sits below. Pure geometry — the renderer only draws.
     public static func layout(_ chart: RadarChart, measure: DiagramTextMeasurer) -> RadarLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = chart.title == nil ? 0 : 26
-        let radius: CGFloat = 108
-        let hMargin: CGFloat = 78          // room for side axis labels
-        let vMargin: CGFloat = 26          // room for top/bottom axis labels
+        let titleHeight: CGFloat = chart.title == nil ? 0 : Self.titleHeight(26, measure)
+        let radius: CGFloat = grown(108, fontSize: 9.5, measure)
+        let hMargin: CGFloat = grown(78, fontSize: 9.5, measure)   // room for side axis labels
+        let vMargin: CGFloat = grown(26, fontSize: 9.5, measure)   // room for top/bottom axis labels
         let axisCount = chart.axes.count
 
         let center = CGPoint(x: margin + hMargin + radius,
@@ -59,7 +59,7 @@ extension DiagramLayoutEngine {
         var legend: [RadarLayout.LegendEntry] = []
         var legendWidth: CGFloat = 0
         for (i, curve) in chart.curves.enumerated() {
-            let y = chartBottom + 10 + CGFloat(i) * 18
+            let y = chartBottom + grown(10, fontSize: 10, measure) + CGFloat(i) * grown(18, fontSize: 10, measure)
             let label = flattenLines(curve.label)   // single-line legend chrome
             legend.append(RadarLayout.LegendEntry(
                 label: label,
@@ -71,7 +71,7 @@ extension DiagramLayoutEngine {
         }
 
         let width = max(center.x + radius + hMargin + margin, margin + legendWidth + margin)
-        let height = (legend.last?.labelPoint.y ?? chartBottom) + margin
+        let height = (legend.last?.labelPoint.y ?? chartBottom) + grown(margin, fontSize: 10, measure)
         return RadarLayout(
             size: CGSize(width: width, height: height),
             title: chart.title.map(flattenLines),

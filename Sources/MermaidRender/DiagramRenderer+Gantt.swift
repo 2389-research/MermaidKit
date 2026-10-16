@@ -35,7 +35,7 @@ extension DiagramRenderer {
             context.addLine(to: CGPoint(x: tick.x, y: tick.bottom))
             context.strokePath()
             context.restoreGState()
-            drawText(tick.label, center: CGPoint(x: tick.x, y: tick.bottom + 9),
+            drawText(tick.label, center: CGPoint(x: tick.x, y: tick.bottom + DiagramLayoutEngine.grown(9, fontSize: 9, layoutMeasure)),
                      size: 9, color: theme.tertiaryTextColor, in: context)
         }
 

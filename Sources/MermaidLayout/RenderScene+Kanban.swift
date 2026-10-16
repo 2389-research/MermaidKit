@@ -42,18 +42,20 @@ extension RenderScene {
                                           width: 3, height: card.frame.height - 8), radius: 0),
                 fill: tint.withAlpha(0.85), stroke: nil)))
 
-            var textY = card.frame.minY + 9 + 7
+            let metrics = DiagramLayoutEngine.kanbanCardMetrics(measure)
+            var textY = card.frame.minY + 9 + (metrics.line - 1) / 2
             for line in card.lines {
                 if !line.isEmpty {
                     elements.append(.text(leftText(
                         line, at: CGPoint(x: card.frame.minX + 12, y: textY),
                         fontSize: 11, color: theme.ink, measure: measure)))
                 }
-                textY += 15
+                textY += metrics.line
             }
             if let ticket = card.ticket, !ticket.isEmpty {
                 elements.append(.text(leftText(
-                    ticket, at: CGPoint(x: card.frame.minX + 12, y: card.frame.maxY - 9),
+                    ticket, at: CGPoint(x: card.frame.minX + 12,
+                                        y: card.frame.maxY - 9 - (metrics.ticket - 14) / 2),
                     fontSize: 8.5, weight: .medium, color: theme.tertiaryText, measure: measure)))
             }
         }

@@ -32,7 +32,7 @@ extension DiagramLayoutEngine {
     /// connector from its parent's glyph column.
     public static func layout(_ tree: TreeViewDiagram, measure: DiagramTextMeasurer) -> TreeViewLayout {
         let margin: CGFloat = 14
-        let rowHeight: CGFloat = 22
+        let rowHeight: CGFloat = grown(22, fontSize: nodeFontSize, measure)
         let indent: CGFloat = 20
         let glyph: CGFloat = 13
 

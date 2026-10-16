@@ -41,7 +41,8 @@ extension DiagramLayoutEngine {
     public static func layout(_ diagram: IshikawaDiagram, measure: DiagramTextMeasurer) -> IshikawaLayout {
         let margin: CGFloat = 16
         let maxTwigs = diagram.causes.map(\.subCauses.count).max() ?? 0
-        let ribRise: CGFloat = max(88, 46 + CGFloat(maxTwigs) * 26)
+        // Twigs step 26 apart along a rib, so a rib grows with its labels.
+        let ribRise: CGFloat = max(88, 46 + CGFloat(maxTwigs) * 26) * textGrowth(labelFontSize, measure)
         let ribRun: CGFloat = ribRise * 0.58   // ~60 degrees from horizontal
         // Longest twig label bounds the horizontal room each rib pair needs.
         let twigWidth: CGFloat = diagram.causes
@@ -56,12 +57,13 @@ extension DiagramLayoutEngine {
 
         let headSize = measure(diagram.problem, nodeFontSize)
         let headWidth = headSize.width + 22
-        let spineY = margin + 18 + ribRise
+        let spineY = margin + grown(18, fontSize: nodeFontSize, measure) + ribRise
         let spineStart = CGPoint(x: margin + 4, y: spineY)
         let spineLength = CGFloat(pairs) * ribSpacing + 40
         let spineEnd = CGPoint(x: spineStart.x + spineLength, y: spineY)
-        let headFrame = CGRect(x: spineEnd.x + 2, y: spineY - 17,
-                               width: headWidth, height: 34)
+        let headHeight = grown(34, fontSize: nodeFontSize, measure)
+        let headFrame = CGRect(x: spineEnd.x + 2, y: spineY - headHeight / 2,
+                               width: headWidth, height: headHeight)
 
         func makeRib(_ pairIndex: Int, _ index: Int, _ cause: IshikawaDiagram.Cause,
                      isAbove: Bool) -> IshikawaLayout.Rib {
@@ -70,7 +72,7 @@ extension DiagramLayoutEngine {
                 y: spineY)
             let sign: CGFloat = isAbove ? -1 : 1
             let tip = CGPoint(x: junction.x + ribRun, y: junction.y + sign * ribRise)
-            let labelCenter = CGPoint(x: tip.x, y: tip.y + sign * 12)
+            let labelCenter = CGPoint(x: tip.x, y: tip.y + sign * grown(12, fontSize: nodeFontSize, measure))
             // Twigs step along the rib from the tip inward, extending toward
             // the label side (right), horizontal.
             let twigs: [IshikawaLayout.Twig] = cause.subCauses.enumerated().map { i, sub in
@@ -107,7 +109,7 @@ extension DiagramLayoutEngine {
             }
         }
         return IshikawaLayout(
-            size: CGSize(width: maxX, height: spineY + ribRise + 18 + margin),
+            size: CGSize(width: maxX, height: spineY + ribRise + grown(18, fontSize: nodeFontSize, measure) + margin),
             spineStart: spineStart, spineEnd: spineEnd,
             headFrame: headFrame, problem: diagram.problem, ribs: ribs)
     }

@@ -16,14 +16,16 @@ extension DiagramScene {
         // unless the type's own lowering already emitted it (pie, radar).
         if let title = diagram.titleText, !title.isEmpty,
            !scene.labels.contains(where: { $0.text == title && $0.frame.minY < 26 }) {
-            let width = measure(title, 12.5).width
+            let width = measure(title, DiagramLayoutEngine.titleFontSize).width
+            let height = DiagramLayoutEngine.grown(14, fontSize: DiagramLayoutEngine.titleFontSize, measure)
+            let centerY = DiagramLayoutEngine.titleCenterY(measure)
             scene = DiagramScene(
                 name: scene.name, size: scene.size,
                 nodes: scene.nodes, edges: scene.edges,
                 labels: scene.labels + [Label(
                     text: title,
-                    frame: CGRect(x: scene.size.width / 2 - width / 2, y: 7,
-                                  width: width, height: 14))])
+                    frame: CGRect(x: scene.size.width / 2 - width / 2, y: centerY - height / 2,
+                                  width: width, height: height))])
         }
         return scene
     }

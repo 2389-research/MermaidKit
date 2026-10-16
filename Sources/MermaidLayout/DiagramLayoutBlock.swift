@@ -68,7 +68,7 @@ extension DiagramLayoutEngine {
         for block in diagram.blocks where block.shape != .space {
             widest = max(widest, measure(block.label, nodeFontSize).width)
         }
-        let cellWidth = min(max(widest + 30, 96), 220)
+        let cellWidth = min(max(widest + 30, 96), grown(220, fontSize: nodeFontSize, measure))
 
         let count = diagram.blocks.count
         let rows = max(1, Int((Double(count) / Double(cols)).rounded(.up)))

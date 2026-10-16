@@ -23,7 +23,7 @@ extension RenderScene {
 
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 14),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.titleCenterY(measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 
@@ -41,7 +41,7 @@ extension RenderScene {
                 stroke: Stroke(color: theme.hairline, width: 1))))
             if !tick.label.isEmpty {
                 elements.append(.text(Text(
-                    string: tick.label, center: CGPoint(x: tick.x, y: tick.bottom + 9),
+                    string: tick.label, center: CGPoint(x: tick.x, y: tick.bottom + DiagramLayoutEngine.grown(9, fontSize: 9, measure)),
                     fontSize: 9, color: theme.tertiaryText)))
             }
         }

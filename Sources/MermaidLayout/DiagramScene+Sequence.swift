@@ -24,7 +24,7 @@ extension DiagramScene {
                 // frame; extend the node so the linter sees the text too.
                 var frame = head.frame
                 if head.isActor || head.kind != "participant" {
-                    frame.size.height += 14
+                    frame.size.height += 2 * DiagramLayoutEngine.sequenceNameDrop(measure)
                 }
                 return Node(id: head.label, frame: frame, isContainer: false)
             } + layout.notes.map { note in

@@ -128,13 +128,13 @@ extension RenderScene {
                     .move(CGPoint(x: cx, y: top + 17)), .line(CGPoint(x: cx + 5, y: top + 24)),
                 ]), fill: nil, stroke: s)))
                 elements.append(.text(Text(
-                    string: head.label, center: CGPoint(x: cx, y: head.frame.maxY + 7),
+                    string: head.label, center: CGPoint(x: cx, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(measure)),
                     fontSize: 10.5, weight: .medium, color: theme.ink)))
             } else if head.kind != "participant" {
                 elements += participantGlyphElements(head.kind, frame: head.frame, theme: theme, stroke: stroke)
                 elements.append(.text(Text(
                     string: head.label,
-                    center: CGPoint(x: head.frame.midX, y: head.frame.maxY + 7),
+                    center: CGPoint(x: head.frame.midX, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(measure)),
                     fontSize: 10.5, weight: .medium, color: theme.ink)))
             } else {
                 elements.append(.shape(Shape(

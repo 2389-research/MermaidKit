@@ -12,7 +12,7 @@ extension DiagramLayoutEngine {
     /// its own tint. Pure geometry — the renderer only draws.
     public static func layout(_ mindmap: Mindmap, measure: DiagramTextMeasurer) -> MindmapLayout {
         let margin: CGFloat = 14
-        let nodeHeight: CGFloat = 26
+        let nodeHeight: CGFloat = grown(26, fontSize: nodeFontSize, measure)
         let vGap: CGFloat = 10          // between stacked leaves
         let hGap: CGFloat = 34          // between depth columns
         let pad: CGFloat = 12           // text inset inside a node
@@ -32,7 +32,7 @@ extension DiagramLayoutEngine {
         var items: [Item] = []
 
         func nodeWidth(_ label: String) -> CGFloat {
-            min(max(measure(label, nodeFontSize).width + pad * 2, 44), 240)
+            min(max(measure(label, nodeFontSize).width + pad * 2, 44), grown(240, fontSize: nodeFontSize, measure))
         }
 
         @discardableResult

@@ -38,11 +38,11 @@ extension DiagramLayoutEngine {
     /// optimized, so only the main axis is solved.
     public static func layout(_ diagram: SwimlaneDiagram, measure: DiagramTextMeasurer) -> SwimlaneLayout {
         let margin: CGFloat = 14
-        let gutter: CGFloat = 30    // lane label gutter (rotated text)
-        let columnGap: CGFloat = 46
-        let rowGap: CGFloat = 14
+        let gutter: CGFloat = grown(30, fontSize: 10, measure)    // lane label gutter (rotated text)
+        let columnGap: CGFloat = grown(46, fontSize: labelFontSize, measure)   // edge labels sit between columns
+        let rowGap: CGFloat = grown(14, fontSize: labelFontSize, measure)
         let lanePad: CGFloat = 16
-        let boxHeight: CGFloat = 32
+        let boxHeight: CGFloat = grown(32, fontSize: nodeFontSize, measure)
 
         // 1. Global columns from the layered layering (back-edges stripped
         //    the same way the flowchart pipeline does: cycles must not wedge

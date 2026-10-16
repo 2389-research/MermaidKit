@@ -243,12 +243,12 @@ extension DiagramRenderer {
                 context.move(to: CGPoint(x: cx, y: top + 17))
                 context.addLine(to: CGPoint(x: cx + 5, y: top + 24))
                 context.strokePath()
-                drawText(head.label, center: CGPoint(x: cx, y: head.frame.maxY + 7),
+                drawText(head.label, center: CGPoint(x: cx, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(layoutMeasure)),
                          size: 10.5, weight: .medium, color: theme.ink, in: context)
             } else if head.kind != "participant" {
                 drawParticipantGlyph(head.kind, frame: head.frame, theme: theme,
                                      stroke: stroke, in: context)
-                drawText(head.label, center: CGPoint(x: head.frame.midX, y: head.frame.maxY + 7),
+                drawText(head.label, center: CGPoint(x: head.frame.midX, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(layoutMeasure)),
                          size: 10.5, weight: .medium, color: theme.ink, in: context)
             } else {
                 fillStrokeBox(head.frame, radius: 6, fill: theme.accent.withAlphaComponent(0.06), stroke: stroke, in: context)

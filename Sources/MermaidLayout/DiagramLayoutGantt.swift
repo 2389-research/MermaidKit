@@ -11,14 +11,14 @@ extension DiagramLayoutEngine {
     /// produce a runaway canvas. Pure geometry — the renderer only draws.
     public static func layout(_ gantt: GanttChart, measure: DiagramTextMeasurer) -> GanttLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = gantt.title == nil ? 0 : 24
-        let rowHeight: CGFloat = 24
+        let titleHeight: CGFloat = gantt.title == nil ? 0 : Self.titleHeight(24, measure)
+        let rowHeight: CGFloat = grown(24, fontSize: labelFontSize, measure)
         let barHeight: CGFloat = 14
-        let axisHeight: CGFloat = 18
+        let axisHeight: CGFloat = grown(18, fontSize: 9, measure)
 
         // Left gutter sized to the widest task label (clamped).
         let labelWidth = gantt.tasks.map { measure($0.label, labelFontSize).width }.max() ?? 60
-        let gutter = margin + min(max(labelWidth, 40), 180) + 10
+        let gutter = margin + min(max(labelWidth, 40), grown(180, fontSize: labelFontSize, measure)) + 10
 
         // Day → x, with the day width bounded so the chart stays a sane size
         // regardless of the schedule's span (guards the runaway-width budget).

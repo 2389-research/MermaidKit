@@ -1301,11 +1301,18 @@ extension DiagramLayoutEngine {
                              : lines.joined(separator: " ")
     }
 
+    /// How far below its head frame an actor or typed glyph's name is centered:
+    /// 7 at the default size, grown with its 12pt text. Both renderers place
+    /// the name by it and the lint scene extends the head to cover it.
+    package static func sequenceNameDrop(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(7, fontSize: nodeFontSize, measure)
+    }
+
     public static func layout(_ diagram: SequenceDiagram, measure: DiagramTextMeasurer) -> SequenceLayout {
         let margin: CGFloat = 12
         let headPaddingX: CGFloat = 14
-        let headHeight: CGFloat = 30
-        let rowHeight: CGFloat = 34
+        let headHeight: CGFloat = grown(30, fontSize: nodeFontSize, measure)
+        let rowHeight: CGFloat = grown(34, fontSize: labelFontSize, measure)
         let minColumn: CGFloat = 110
 
         // Column widths driven by head labels and message texts.
@@ -1359,8 +1366,8 @@ extension DiagramLayoutEngine {
         }
 
         let noteRowHeight = rowHeight
-        let openRowHeight: CGFloat = 24
-        let dividerRowHeight: CGFloat = 22
+        let openRowHeight: CGFloat = grown(24, fontSize: 9.5, measure)
+        let dividerRowHeight: CGFloat = grown(22, fontSize: 9.5, measure)
         let closeRowHeight: CGFloat = 12
 
         struct OpenFrame {
@@ -1423,7 +1430,7 @@ extension DiagramLayoutEngine {
                 guard !ids.isEmpty else { y += noteRowHeight; continue }
                 let lines = brLines(noteItem.text)
                 let textWidth = lines.map { measure($0, labelFontSize).width }.max() ?? 0
-                let boxHeight = max(noteRowHeight - 10, CGFloat(lines.count) * 13 + 9)
+                let boxHeight = max(noteRowHeight - 10, CGFloat(lines.count) * grown(13, fontSize: labelFontSize, measure) + 9)
                 var frame: CGRect
                 switch noteItem.position {
                 case .rightOf:
@@ -1549,10 +1556,16 @@ extension DiagramLayoutEngine {
     /// from 12 o'clock), a legend column right of the disk, and left padding
     /// reserved so a title wider than the disk never clips. Pure geometry —
     /// the renderer only draws.
+    /// A pie legend row: 20 at the default size, grown with its 10.5pt text.
+    /// The layout sizes the legend with it and both renderers step by it.
+    package static func pieLegendRow(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(20, fontSize: labelFontSize, measure)
+    }
+
     public static func layout(_ pie: PieChart, measure: DiagramTextMeasurer) -> PieLayout {
         let margin: CGFloat = 14
         let radius: CGFloat = 76
-        let titleHeight: CGFloat = pie.title == nil ? 0 : 26
+        let titleHeight: CGFloat = pie.title == nil ? 0 : Self.titleHeight(26, measure)
 
         let total = pie.slices.reduce(0) { $0 + $1.value }
         var slices: [PieLayout.Slice] = []
@@ -1577,7 +1590,7 @@ extension DiagramLayoutEngine {
         let legendWidth = slices
             .map { measure("\($0.label) (0000)", labelFontSize).width + 22 }
             .max() ?? 80
-        let legendHeight = CGFloat(pie.slices.count) * 20
+        let legendHeight = CGFloat(pie.slices.count) * pieLegendRow(measure)
 
         // The title is centred horizontally on the disk's centre (the renderer
         // draws it there). A long title is far wider than the disk, so unless
@@ -1591,12 +1604,15 @@ extension DiagramLayoutEngine {
         let titleWidth: CGFloat = flatTitle.map { title in
             max(measure(title, 12.5).width, DiagramScene.estimatedLabelSize(title).width)
         } ?? 0
-        let leftPad = max(margin, titleWidth / 2 - radius + margin)
+        // The title draws semibold, a little wider than measured; the margin
+        // beside it grows with it.
+        let titleMargin = grown(margin, fontSize: titleFontSize, measure)
+        let leftPad = max(margin, titleWidth / 2 - radius + titleMargin)
         let centerX = leftPad + radius
         let legendX = centerX + radius + 28
 
         let contentRight = legendX + legendWidth + margin
-        let titleRight = centerX + titleWidth / 2 + margin
+        let titleRight = centerX + titleWidth / 2 + titleMargin
         let width = max(contentRight, titleRight)
         let height = margin + titleHeight + max(radius * 2, legendHeight) + margin
         return PieLayout(

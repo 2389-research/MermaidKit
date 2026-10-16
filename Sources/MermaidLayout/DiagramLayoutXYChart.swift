@@ -11,12 +11,12 @@ extension DiagramLayoutEngine {
     /// centers. Pure geometry — the renderer only draws.
     public static func layout(_ chart: XYChart, measure: DiagramTextMeasurer) -> XYChartLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = chart.title == nil ? 0 : 26
-        let yGutter: CGFloat = 44          // value labels + rotated axis title
-        let xStrip: CGFloat = chart.xAxisTitle == nil ? 22 : 38
-        let plotHeight: CGFloat = 240
+        let titleHeight: CGFloat = chart.title == nil ? 0 : Self.titleHeight(26, measure)
+        let yGutter: CGFloat = grown(44, fontSize: 9.5, measure)   // value labels + rotated axis title
+        let xStrip: CGFloat = grown(chart.xAxisTitle == nil ? 22 : 38, fontSize: 9.5, measure)
+        let plotHeight: CGFloat = grown(240, fontSize: 9.5, measure)
         let categoryCount = max(chart.categories.count, 1)
-        let plotWidth = CGFloat(categoryCount) * 56
+        let plotWidth = CGFloat(categoryCount) * grown(56, fontSize: 9.5, measure)   // room for category names
 
         let plotRect = CGRect(x: margin + yGutter, y: margin + titleHeight,
                               width: plotWidth, height: plotHeight)
@@ -72,7 +72,7 @@ extension DiagramLayoutEngine {
         // x-axis category labels. Axis chrome is single-line: collapse any
         // line break to a space rather than wrap a fixed-height tick strip.
         let xLabels = chart.categories.enumerated().map { i, text in
-            XYChartLayout.Label(text: flattenLines(text), center: CGPoint(x: categoryCenter(i), y: plotRect.maxY + 11))
+            XYChartLayout.Label(text: flattenLines(text), center: CGPoint(x: categoryCenter(i), y: plotRect.maxY + grown(11, fontSize: 9.5, measure)))
         }
 
         // y-axis value ticks (5 divisions).

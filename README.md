@@ -72,7 +72,7 @@ sub-millisecond), and results are cached per (source, theme, spacing).
 | Output | `NSImage`/`UIImage`, PDF, SVG, `NSAttributedString`, SwiftUI | HTML/SVG in webview | image, SVG, ASCII |
 | Layout engine | network-simplex layering, label-space reservation, fixed-side ports | dagre / ELK | elk-swift |
 | Layout verification | **geometric linter in CI** + stability tests | — | — |
-| Density control | `DiagramSpacing` presets | config | — |
+| Density control | `DiagramSpacing` presets, Dynamic Type text sizes | config | — |
 | Syntax coverage | core syntax per type (see matrix) | reference | core syntax, 6 types |
 
 If you need iOS 15 or pixel-parity with mermaid.js, those other rows are good
@@ -361,7 +361,9 @@ Two targets:
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
   categorical palette, and a dark-mode flag) and `DiagramSpacing` (layout
-  density).
+  density and text size: `textScale` lays labels out larger or smaller — boxes,
+  rows and canvases grow around the text instead of the image being scaled —
+  and `MermaidView` follows the environment's Dynamic Type size).
 
 The layered types (flowchart, class, ER, state) use network-simplex layer
 assignment — the same strategy ELK Layered and Graphviz dot default to —

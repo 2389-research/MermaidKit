@@ -35,10 +35,8 @@ extension DiagramRenderer {
         }
 
         let padding: CGFloat = 11
-        let stereoH: CGFloat = 14
-        let nameH: CGFloat = 20
+        let (stereoH, nameH, lineH) = DiagramLayoutEngine.requirementRows(layoutMeasure)
         let sepGap: CGFloat = 8
-        let lineH: CGFloat = 15
 
         for box in layout.boxes {
             let tint = theme.categoricalColor(box.colorIndex)

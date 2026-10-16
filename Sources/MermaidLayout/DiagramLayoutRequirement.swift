@@ -42,20 +42,28 @@ public struct RequirementLayout: Sendable {
 
 extension DiagramLayoutEngine {
 
+    /// A requirement box's rows — the 9.5pt stereotype, the 12.5pt name, the
+    /// 10.5pt detail lines — 14, 20 and 15 at the default size, grown with the
+    /// text. The layout sizes boxes with them and both renderers place the
+    /// text by them.
+    package static func requirementRows(_ measure: DiagramTextMeasurer)
+        -> (stereotype: CGFloat, name: CGFloat, line: CGFloat) {
+        (grown(14, fontSize: 9.5, measure), grown(20, fontSize: 12.5, measure),
+         grown(15, fontSize: labelFontSize, measure))
+    }
+
     /// Lays out a requirement diagram: requirement then element boxes in a
     /// grid of at most three columns, relations routed through the clear
     /// row/column gutters with the relation verb as the edge label. Pure
     /// geometry — the renderer only draws.
     public static func layout(_ diagram: RequirementDiagram, measure: DiagramTextMeasurer) -> RequirementLayout {
         let margin: CGFloat = 16
-        let boxWidth: CGFloat = 204
-        let hGap: CGFloat = 40
-        let vGap: CGFloat = 44
+        let boxWidth: CGFloat = grown(204, fontSize: labelFontSize, measure)
+        let hGap: CGFloat = grown(40, fontSize: labelFontSize, measure)   // relation labels sit in the gutters
+        let vGap: CGFloat = grown(44, fontSize: labelFontSize, measure)
         let padding: CGFloat = 11
-        let stereoH: CGFloat = 14
-        let nameH: CGFloat = 20
+        let (stereoH, nameH, lineH) = requirementRows(measure)
         let sepGap: CGFloat = 8
-        let lineH: CGFloat = 15
         let textWidth = boxWidth - padding * 2
 
         // Greedy word-wrap of a detail value, capped at `maxLines`.

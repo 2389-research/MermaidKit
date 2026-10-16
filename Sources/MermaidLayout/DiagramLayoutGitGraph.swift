@@ -11,14 +11,14 @@ extension DiagramLayoutEngine {
     /// a merge). Pure geometry — the renderer only draws.
     public static func layout(_ graph: GitGraph, measure: DiagramTextMeasurer) -> GitGraphLayout {
         let margin: CGFloat = 14
-        let commitGap: CGFloat = 46
-        let laneGap: CGFloat = 46
+        let commitGap: CGFloat = grown(46, fontSize: labelFontSize, measure)
+        let laneGap: CGFloat = grown(46, fontSize: labelFontSize, measure)   // ids and tags sit between lanes
         let dotRadius: CGFloat = 7
 
         // Lane label gutter sized to the widest branch name.
         let labelWidth = graph.branches.map { measure($0, labelFontSize).width }.max() ?? 40
-        let gutter = margin + min(max(labelWidth, 30), 120) + 10
-        let topMargin = margin + 14   // room for a tag above the first lane
+        let gutter = margin + min(max(labelWidth, 30), grown(120, fontSize: labelFontSize, measure)) + 10
+        let topMargin = margin + grown(14, fontSize: 9, measure)   // room for a tag above the first lane
 
         func lane(_ branch: String) -> Int { graph.branches.firstIndex(of: branch) ?? 0 }
         func y(_ branch: String) -> CGFloat { topMargin + CGFloat(lane(branch)) * laneGap }
@@ -50,7 +50,7 @@ extension DiagramLayoutEngine {
                 center: center,
                 colorIndex: lane(commit.branch),
                 id: commit.id, label: labels[order],
-                labelCenter: labels[order] == nil ? nil : CGPoint(x: center.x, y: center.y + 16),
+                labelCenter: labels[order] == nil ? nil : CGPoint(x: center.x, y: center.y + grown(16, fontSize: labelFontSize, measure)),
                 tag: commit.tag, isMerge: commit.isMerge))
         }
 
@@ -122,17 +122,17 @@ extension DiagramLayoutEngine {
                         && min(edge.from.y, edge.to.y) < yHi && max(edge.from.y, edge.to.y) > yLo
                 }
             }
-            let belowBusy = legOccupies(commit.center.y + dotRadius, commit.center.y + 24)
+            let belowBusy = legOccupies(commit.center.y + dotRadius, commit.center.y + grown(24, fontSize: labelFontSize, measure))
             guard belowBusy else { return commit }
             let aboveBusy = commit.tag != nil
-                || legOccupies(commit.center.y - 24, commit.center.y - dotRadius)
+                || legOccupies(commit.center.y - grown(24, fontSize: labelFontSize, measure), commit.center.y - dotRadius)
             let flipped: CGPoint
             if aboveBusy {
                 // Shift right of the descending leg, still under the rail.
                 let w = measure(label, labelFontSize).width
                 flipped = CGPoint(x: commit.center.x + w / 2 + 10, y: defaultCenter.y)
             } else {
-                flipped = CGPoint(x: commit.center.x, y: commit.center.y - 16)
+                flipped = CGPoint(x: commit.center.x, y: commit.center.y - grown(16, fontSize: labelFontSize, measure))
             }
             return GitGraphLayout.Commit(
                 center: commit.center, colorIndex: commit.colorIndex,
@@ -155,7 +155,8 @@ extension DiagramLayoutEngine {
             rightEdge = max(rightEdge, x(order) + widths[order] / 2)
         }
         let width = rightEdge + margin
-        let height = topMargin + CGFloat(max(graph.branches.count - 1, 0)) * laneGap + dotRadius + 22 + margin
+        let height = topMargin + CGFloat(max(graph.branches.count - 1, 0)) * laneGap + dotRadius
+            + grown(22, fontSize: labelFontSize, measure) + margin   // ids under the last lane
         return GitGraphLayout(
             size: CGSize(width: width, height: height),
             commits: commits,

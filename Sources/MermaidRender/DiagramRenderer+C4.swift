@@ -64,23 +64,25 @@ extension DiagramRenderer {
                 context.restoreGState()
             }
 
-            // Stacked text: stereotype, bold title, detail lines.
+            // Stacked text: stereotype, bold title, detail lines, each centered
+            // in its line pitch (the layout's).
             let midX = box.frame.midX
+            let pitch = DiagramLayoutEngine.c4LinePitches(layoutMeasure)
             var y = box.frame.minY + 10          // top padding
-            drawText(box.stereotype, center: CGPoint(x: midX, y: y + 6.5),
+            drawText(box.stereotype, center: CGPoint(x: midX, y: y + pitch.stereotype / 2),
                      size: 9.5, color: theme.secondaryTextColor, in: context)
-            y += 13 + 3                           // stereoH + titleGap
+            y += pitch.stereotype + 3             // + titleGap
             for line in box.titleLines {
-                drawText(line, center: CGPoint(x: midX, y: y + 8),
+                drawText(line, center: CGPoint(x: midX, y: y + pitch.title / 2),
                          size: 12, weight: .semibold, color: theme.ink, in: context)
-                y += 16
+                y += pitch.title
             }
             if !box.detailLines.isEmpty {
                 y += 4
                 for line in box.detailLines {
-                    drawText(line, center: CGPoint(x: midX, y: y + 6.5),
+                    drawText(line, center: CGPoint(x: midX, y: y + pitch.detail / 2),
                              size: 10, color: theme.secondaryTextColor, in: context)
-                    y += 13
+                    y += pitch.detail
                 }
             }
         }
