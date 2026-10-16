@@ -143,9 +143,8 @@ no extensions):
   `-)`, `--)`, `<<->>`, `<<-->>`); autonumber badges with
   start/step/off.
 - **Flowchart**: chained edges (`A --> B --> C`), `&` fan-out, inline
-  `-- text -->` labels, bidirectional `<-->`, longer, thick and invisible
-  links, `--o`/`--x` heads, edge IDs, `:::class` tolerance, fourteen node
-  shapes.
+  `-- text -->` labels, bidirectional `<-->`, min-length links, `--o`/
+  `--x` heads, edge IDs, `:::class` tolerance, six node shapes.
 - **Gantt**: sections, `done/active/crit/milestone`, `after`
   dependencies, `d/w/h/m/y/M/s/ms` durations; directive lines can never
   become phantom bars.

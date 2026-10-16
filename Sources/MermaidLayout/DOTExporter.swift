@@ -17,6 +17,9 @@ import Foundation
 // (`box` / `circle` / `parallelogram`) and re-parse to that — they do not
 // round-trip to themselves. Every other shape does. Of the edges, only a cross
 // head (`--x`) is lossy: DOT has no cross arrowhead, so it re-parses as an arrow.
+// (Importing is lossy the other way: every dot-family DOT arrow reads as a
+// circle head, and a `dir=both` edge with different head and tail takes its
+// head's kind for both ends.)
 public enum DOTExporter {
 
     /// Emits `chart` as a Graphviz `digraph`.

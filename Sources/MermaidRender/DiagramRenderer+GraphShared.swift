@@ -120,7 +120,12 @@ extension DiagramRenderer {
         let len = max(hypot(dx, dy), 0.001)
         let (ux, uy) = (dx / len, dy / len)
         let radius: CGFloat = 4
-        let center = CGPoint(x: tip.x - ux * (3 + radius), y: tip.y - uy * (3 + radius))
+        // Where the line stops, measured back from the tip. Never past half
+        // the segment, so a short `o--o` keeps a forward shaft between marks.
+        let reach: CGFloat = head == .circle ? 3 + 2 * radius : 3 + radius
+        let scale = min(1, len / 2 / reach)
+        let back = (3 + radius) * scale
+        let center = CGPoint(x: tip.x - ux * back, y: tip.y - uy * back)
         switch head {
         case .circle:
             if let context {
@@ -133,7 +138,7 @@ extension DiagramRenderer {
                 context.fillEllipse(in: box)
                 context.restoreGState()
             }
-            return CGPoint(x: center.x - ux * radius, y: center.y - uy * radius)
+            return CGPoint(x: tip.x - ux * reach * scale, y: tip.y - uy * reach * scale)
         case .cross:
             if let context {
                 // Two arms at 45° to the line.

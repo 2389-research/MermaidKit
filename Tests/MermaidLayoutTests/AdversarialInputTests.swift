@@ -54,7 +54,7 @@ final class AdversarialInputTests: XCTestCase {
             // Node-token syntax: shape data, doubled and slanted brackets, ids
             // that are all separators.
             "A@{", "A@{}", "A@{ shape: }", "A@{ shape: diam, label: \"unterminated }",
-            "A@{ , , : , }", "A{{", "A}}", "A[[x]", "A[/", "A[/x\\", "A>", "A>x] & B>y] & ]]] & C", "] & ) & }","-.-.", "a-.-.b",
+            "A@{ , , : , }", "A{{", "A}}", "A[[x]", "A[/", "A[/x\\", "A>", "A>x] & B>y] & ]]] & C", "a@ --- @b --- @", "x@x@x--x@x", "@--o@", "< < <--- o--o x", "o--> --> -->x", "] & ) & }","-.-.", "a-.-.b",
             "a--b.c--d", "a.-b", ".a --> -b",
             // Link tokens: heads, strokes and lengths, alone, mismatched or
             // unfinished.

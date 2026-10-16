@@ -123,6 +123,24 @@ final class RenderSceneTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(circleLine.points.last).x, b.minX - 10)
     }
 
+    /// A mark never pulls its line back past the segment's midpoint, so a
+    /// short `o--o`/`x--x` keeps a forward shaft instead of reversing.
+    func testEndMarksStayWithinHalfAShortSegment() {
+        let tip = CGPoint(x: 0, y: 0), approach = CGPoint(x: 10, y: 0)
+        for head in [Flowchart.Edge.Head.circle, .cross] {
+            var marks: [RenderScene.Element] = []
+            let stop = RenderScene.endMark(head, at: tip, from: approach, color: theme.ink,
+                                           canvas: theme.canvas, into: &marks)
+            XCTAssertGreaterThanOrEqual(stop.x, 0, "\(head)")
+            XCTAssertLessThanOrEqual(stop.x, 5, "\(head)")
+        }
+        // A long segment keeps the full 3pt gap plus the mark.
+        var marks: [RenderScene.Element] = []
+        let far = RenderScene.endMark(.circle, at: tip, from: CGPoint(x: 100, y: 0),
+                                      color: theme.ink, canvas: theme.canvas, into: &marks)
+        XCTAssertEqual(far.x, 11, accuracy: 0.001)
+    }
+
     func testSlantedFlagAndDoubleCircleOutlines() throws {
         let s = try scene("flowchart LR\n a[/In/] --> b[\\Out\\] --> c[/Wide\\] --> d[\\Narrow/] --> e>Flag] --> f(((Done)))")
         let polygons = shapes(s).compactMap { shape -> [CGPoint]? in

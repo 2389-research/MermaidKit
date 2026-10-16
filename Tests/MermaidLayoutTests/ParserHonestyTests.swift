@@ -206,6 +206,45 @@ final class ParserHonestyTests: XCTestCase {
                        ["o>x arrow false", "x>o arrow false", "q>o circle false"])
     }
 
+    /// A chain of open links is two links, not one with the middle node as
+    /// inline text: the `-- text ---` reading once matched from the second
+    /// dash of the first `---` and swallowed `B`.
+    func testOpenLinkChainsKeepTheirMiddleNode() throws {
+        for (source, thick) in [("A --- B --- C", false), ("A === B === C", true),
+                                ("A --- B --> C", false), ("A ---- B --- C", false)] {
+            let c = try flow(source)
+            XCTAssertEqual(c.nodes.map(\.id), ["A", "B", "C"], source)
+            XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C"], source)
+            XCTAssertEqual(c.edges.map(\.label), [nil, nil], source)
+            XCTAssertEqual(c.edges[0].thick, thick, source)
+        }
+        // Inline text on an open link still reads as text.
+        let text = try flow("A -- yes --- B")
+        XCTAssertEqual(text.edges.map(\.label), ["yes"])
+    }
+
+    /// An `@` in a label is text; only `id@` directly before a link is an
+    /// edge id. Stripping once ate `ops@` before `xmail`.
+    func testAtSignsInLabelsAreText() throws {
+        let c = try flow("A -->|ping ops@xmail.com| B\nC[mail joe@outlook.com] --> D\nE e1@--> F\nG e2@--o H\nI e3@~~~ J")
+        XCTAssertEqual(c.edges.map(\.label), ["ping ops@xmail.com", nil, nil, nil, nil])
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "mail joe@outlook.com")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "C>D", "E>F", "G>H", "I>J"])
+        XCTAssertEqual(c.edges[3].head, .circle)
+        XCTAssertTrue(c.edges[4].invisible)
+    }
+
+    /// A start head that doesn't match the end (`<---`, `<--o`, `o-->`) is one
+    /// mermaid rejects; we degrade to the link without it rather than drop
+    /// the line.
+    func testMismatchedStartHeadDegradesToTheLink() throws {
+        let c = try flow("A <--- B\nC <--o D\nE o--> F\nG x--o H")
+        XCTAssertEqual(c.nodes.map(\.id), ["A", "B", "C", "D", "E", "F", "G", "H"])
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.hasArrow) \($0.backArrow) \($0.head)" },
+                       ["A>B false false arrow", "C>D true false circle",
+                        "E>F true false arrow", "G>H true false circle"])
+    }
+
     /// Extra `-`, `=`, `.` or `~` make a longer link, as in mermaid. They used
     /// to be normalized away.
     func testLinkLengths() throws {
@@ -245,6 +284,31 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(frame["A"]).maxY, try XCTUnwrap(frame["B"]).minY)
         XCTAssertEqual(DiagramScene.from(layout, measure: measure).edges.count, 1)
         XCTAssertTrue(MermaidAltText.describe(.flowchart(c)).contains("1 connection:"))
+    }
+
+    /// An invisible link ranks its nodes but never moves a drawn one: no face
+    /// port spread for it, no run nudged aside, no label steered around it.
+    /// Here it ranks nothing new, so the visible edge must match the chart
+    /// without it exactly.
+    func testInvisibleLinkDoesNotMoveVisibleEdges() throws {
+        for direction in ["TD", "LR"] {
+            let alone = DiagramLayoutEngine.layout(
+                try flowIn(direction, "A -->|yes| B\nA --> C"), measure: measure)
+            let with = DiagramLayoutEngine.layout(
+                try flowIn(direction, "A -->|yes| B\nA --> C\nA ~~~ B"), measure: measure)
+            XCTAssertEqual(with.nodes.map(\.frame), alone.nodes.map(\.frame), direction)
+            for i in 0..<2 {
+                XCTAssertEqual(with.edges[i].points, alone.edges[i].points, "\(direction) edge \(i)")
+                XCTAssertEqual(with.edges[i].labelPoint, alone.edges[i].labelPoint, "\(direction) edge \(i)")
+            }
+        }
+    }
+
+    private func flowIn(_ direction: String, _ body: String) throws -> Flowchart {
+        guard case .flowchart(let c)? = MermaidParser.parse("flowchart \(direction)\n" + body) else {
+            throw XCTSkip("parse failed: \(body)")
+        }
+        return c
     }
 
     /// `>…]` closes a bracket it never opened; inside an `&` fan that once

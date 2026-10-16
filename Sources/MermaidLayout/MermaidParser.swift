@@ -406,12 +406,15 @@ public enum MermaidParser {
                 .map { $0.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s),
                                                    withTemplate: template) } ?? s
         }
-        // A start head: `<`, or an `o`/`x` that isn't the end of an id.
-        let start = #"((?<![^\s])[ox]|<)?"#
+        // A start head: `<`, or an `o`/`x` that isn't the end of an id. The
+        // opener can't begin inside a longer link, or `A --- B --- C` would
+        // read from the first `---`'s second dash as `-- B ---`.
+        let start = #"((?<![^\s])[ox]|<)?(?<![-=.~])"#
         // An `o`/`x` end head is followed by a space, `|` or the line's end.
         let head = #"[ox](?=[\s|]|$)"#
         var s = line
-        s = sub(#"\s\w+@(?=[-=<~ox])"#, " ", s)                                   // edge IDs
+        // An edge id only right before a link, so `ops@xmail` in a label stays.
+        s = sub(#"\s\w+@(?=[ox<]?(?:--|==|-\.|~~~))"#, " ", s)                    // edge IDs
         s = sub(start + #"--\s+([^-|>][^-]*?)\s+(-{2,}>|-{2,}\#(head)|-{3,})"#, "$1$3|$2|", s) // -- text -->
         s = sub(start + #"-\.\s+([^.|]+?)\s+(\.+->|\.+-\#(head)|\.+-)"#, "$1-$3|$2|", s)    // -. text .->
         s = sub(start + #"==\s+([^=|>][^=]*?)\s+(={2,}>|={2,}\#(head)|={3,})"#, "$1$3|$2|", s) // == text ==>
@@ -474,6 +477,12 @@ public enum MermaidParser {
                  (start == "x" && link.head == .cross))
             if matches {
                 link.backArrow = true
+                lower = startRange.lowerBound
+            } else if start == "<" || !string[..<startRange.lowerBound]
+                        .trimmingCharacters(in: .whitespaces).isEmpty {
+                // A start head that doesn't match the end (`<---`, `o-->`) is
+                // one mermaid rejects; drop it and keep the link. An `o`/`x`
+                // with nothing before it is the endpoint itself (`x-->o`).
                 lower = startRange.lowerBound
             }
         }

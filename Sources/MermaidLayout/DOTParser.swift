@@ -471,14 +471,16 @@ private final class DOTParserImpl {
         case "both": hasArrow = true;  backArrow = true
         default:     hasArrow = true;  backArrow = false   // forward / unknown
         }
-        // A `dot` arrowhead (or arrowtail, for a back-only edge) is a circle head.
+        // A dot-family arrowhead (`dot`, `odot`, `invdot`, `dotnormal`, …; the
+        // arrowtail for a back-only edge) is a circle head. The model has one
+        // head kind per edge, so a `dir=both` edge takes its arrowhead's.
         let endShape = (hasArrow ? attrs["arrowhead"] : attrs["arrowtail"])?.lowercased()
         // `minlen` is the rank span, clamped like a mermaid link's length.
         let length = min(max(Int(attrs["minlen"] ?? "") ?? 1, 1), MermaidParser.maxLinkLength)
         edges.append(Flowchart.Edge(from: from, to: to,
                                     label: (label?.isEmpty == true) ? nil : label,
                                     dashed: dashed, hasArrow: hasArrow, backArrow: backArrow,
-                                    head: endShape == "dot" ? .circle : .arrow,
+                                    head: endShape?.contains("dot") == true ? .circle : .arrow,
                                     thick: style.contains("bold"), invisible: style.contains("invis"),
                                     length: length))
         if edges.count > MermaidParser.maxEdges { aborted = true }

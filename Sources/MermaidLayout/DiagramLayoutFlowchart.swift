@@ -294,7 +294,8 @@ extension DiagramLayoutEngine {
         // hugging the arrowhead).
         let headInsets = edges.map { $0.hasArrow ? flowchartArrowheadLen : 0 }
         let tailInsets = edges.map { $0.backArrow ? flowchartArrowheadLen : 0 }
-        let anchors = placeRunLabels(routes: edges.map(\.points),
+        // An invisible link is no obstacle: no bend, crossing or tip to avoid.
+        let anchors = placeRunLabels(routes: edges.map { $0.invisible ? [] : $0.points },
                                      labelSizes: labelSizes, nodeFrames: nodeFrames,
                                      headInsets: headInsets, tailInsets: tailInsets)
         return zip(edges, anchors).map { edge, anchor in
@@ -819,11 +820,14 @@ extension DiagramLayoutEngine {
             g.srcDiamond = shapeOf[chain[0]] == .diamond
             g.dstDiamond = shapeOf[chain[chain.count - 1]] == .diamond
             geos[index] = g
-            if !g.srcDiamond {
+            // An invisible link (`~~~`) routes on its natural channel; it takes
+            // no face slot, so it never pushes a drawn edge's port aside.
+            let drawn = !chart.edges[index].invisible
+            if drawn, !g.srcDiamond {
                 buckets[faceKey(chain[0], bottom: g.exitBottom), default: []]
                     .append((index, true, horizontal ? g.firstNext.y : g.firstNext.x))
             }
-            if !g.dstDiamond {
+            if drawn, !g.dstDiamond {
                 // The target port wants to sit where the edge actually descends,
                 // not under the source's centre. For a routed (dummy) edge that
                 // is the last dummy's channel; for an adjacent edge it's where
@@ -875,7 +879,7 @@ extension DiagramLayoutEngine {
         // another (the "double corner" where two edges turn into one box).
         var jogBias = [CGFloat](repeating: 0, count: chart.edges.count)
         var targetGroups: [String: [Int]] = [:]
-        for index in chart.edges.indices where geos[index].valid {
+        for index in chart.edges.indices where geos[index].valid && !chart.edges[index].invisible {
             targetGroups[geos[index].chain[geos[index].chain.count - 1], default: []].append(index)
         }
         for idxs in targetGroups.values where idxs.count > 1 {
@@ -897,7 +901,7 @@ extension DiagramLayoutEngine {
         // Ordered by the direction each edge heads (its `firstNext` cross), so
         // the corners stack in approach order rather than nesting.
         var sourceGroups: [String: [Int]] = [:]
-        for index in chart.edges.indices where geos[index].valid {
+        for index in chart.edges.indices where geos[index].valid && !chart.edges[index].invisible {
             sourceGroups[geos[index].chain[0], default: []].append(index)
         }
         for idxs in sourceGroups.values where idxs.count > 1 {
@@ -977,7 +981,13 @@ extension DiagramLayoutEngine {
         // land on one node column) read as a single doubled line. Nudge the
         // movable run — one whose ends are interior bends, not anchored to a
         // box — aside to restore the minimum separation.
-        separateRuns(&routes, horizontal: horizontal, minSep: flowchartPortSep)
+        // Invisible links sit out: nothing drawn can read as doubled with them.
+        let hidden = chart.edges.indices.filter { chart.edges[$0].invisible }
+        var drawnRoutes = routes
+        for index in hidden { drawnRoutes[index] = [] }
+        separateRuns(&drawnRoutes, horizontal: horizontal, minSep: flowchartPortSep)
+        for index in hidden { drawnRoutes[index] = routes[index] }
+        routes = drawnRoutes
 
         // Straighten needless zags: a waypoint (a diamond vertex vs. its dummy
         // channel, a stub vs. a face port) can step a run sideways by only a
