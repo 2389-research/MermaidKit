@@ -116,6 +116,35 @@ final class DOTParserTests: XCTestCase {
         XCTAssertTrue(chart.edges[1].backArrow)
     }
 
+    /// Every Graphviz arrow built on a dot (`odot`, `invdot`, `dotnormal`, …)
+    /// is a circle head; anything else stays an arrow. A back-only edge reads
+    /// its tail.
+    func testDotFamilyArrowheadsAreCircleHeads() {
+        let chart = parse("""
+            digraph {
+              A -> B [arrowhead=dot]; C -> D [arrowhead=odot]; E -> F [arrowhead=invdot]
+              G -> H [arrowhead=dotnormal]; I -> J [arrowhead=normal]; K -> L [arrowhead=diamond]
+              M -> N [dir=back, arrowtail=odot]
+            }
+            """)
+        XCTAssertEqual(chart.edges.map(\.head),
+                       [.circle, .circle, .circle, .circle, .arrow, .arrow, .circle])
+    }
+
+    /// `arrowhead=none` / `arrowtail=none` suppress the mark at that end, as
+    /// in Graphviz, whatever `dir` asked for.
+    func testNoneArrowStylesSuppressTheirEnd() {
+        let chart = parse("""
+            digraph {
+              A -> B [arrowhead=none]; C -> D [dir=back, arrowtail=none]
+              E -> F [dir=both, arrowhead=none]; G -> H [dir=both, arrowtail=none]
+              I -> J [arrowtail=none]
+            }
+            """)
+        XCTAssertEqual(chart.edges.map { "\($0.hasArrow) \($0.backArrow)" },
+                       ["false false", "false false", "false true", "true false", "true false"])
+    }
+
     func testLabelLineBreaks() {
         let chart = parse(#"digraph { A [label="one\ntwo\lthree"] }"#)
         XCTAssertEqual(chart.nodes.first?.label, "one\ntwo\nthree")

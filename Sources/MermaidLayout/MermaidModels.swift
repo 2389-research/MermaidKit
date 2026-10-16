@@ -29,6 +29,12 @@ public struct Flowchart: Hashable, Sendable {
         case subroutine     // A[[Label]] — a call to a predefined sub-process
         case stateStart     // state diagram [*] as a source: filled dot
         case stateEnd       // state diagram [*] as a target: ringed dot
+        case doubleCircle   // A(((Label))) — a circle inside a circle
+        case parallelogram  // A[/Label/] — input/output, leaning right
+        case parallelogramAlt // A[\Label\] — leaning left
+        case trapezoid      // A[/Label\] — wider at the bottom
+        case trapezoidAlt   // A[\Label/] — wider at the top
+        case asymmetric     // A>Label] — a flag, notched on the left
     }
 
     /// One node; `id` is the Mermaid identifier.
@@ -53,6 +59,24 @@ public struct Flowchart: Hashable, Sendable {
         public var hasArrow: Bool
         /// True for bidirectional links (`<-->`): an arrowhead at BOTH ends.
         public var backArrow: Bool = false
+        /// What `hasArrow` and `backArrow` put on the line's ends: a point
+        /// (`-->`), a circle (`--o`, `o--o`) or a cross (`--x`, `x--x`).
+        public var head: Head = .arrow
+        /// Thick connectors (`==>`, `===`) draw a heavier line.
+        public var thick: Bool = false
+        /// Invisible links (`~~~`) are laid out like any other but not drawn,
+        /// so they only position their nodes.
+        public var invisible: Bool = false
+        /// The fewest ranks the link spans: 1 for `-->`, one more per extra
+        /// `-`, `=`, `.` or `~` (`--->` and `-..->` are 2).
+        public var length: Int = 1
+
+        /// The mark at a line's end, wherever `hasArrow` or `backArrow` asks for one.
+        public enum Head: Hashable, Sendable {
+            case arrow
+            case circle
+            case cross
+        }
     }
 
     /// A `subgraph id[Label] … end` grouping box. Membership is by id: a node

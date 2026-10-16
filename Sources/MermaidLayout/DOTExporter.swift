@@ -11,10 +11,15 @@ import Foundation
 // the cluster it is first mentioned in, so cluster members must be emitted inside
 // the cluster block rather than in original chart order.
 //
-// Lossy shapes: `subroutine` and the state pseudo-nodes (`stateStart`/`stateEnd`)
-// have no DOT shape `DOTParser` recognizes, so they emit their nearest DOT shape
-// (`box` / `circle`) and re-parse to `.rectangle` / `.circle` — they do not
-// round-trip to themselves. Every other shape does.
+// Lossy shapes: `subroutine`, `asymmetric` and the state pseudo-nodes
+// (`stateStart`/`stateEnd`) have no DOT shape `DOTParser` recognizes, and
+// `parallelogramAlt` has no mirrored one, so they emit their nearest DOT shape
+// (`box` / `circle` / `parallelogram`) and re-parse to that — they do not
+// round-trip to themselves. Every other shape does. Of the edges, only a cross
+// head (`--x`) is lossy: DOT has no cross arrowhead, so it re-parses as an arrow.
+// (Importing is lossy the other way: every dot-family DOT arrow reads as a
+// circle head, and a `dir=both` edge with different head and tail takes its
+// head's kind for both ends.)
 public enum DOTExporter {
 
     /// Emits `chart` as a Graphviz `digraph`.
@@ -67,7 +72,7 @@ public enum DOTExporter {
     }
 
     /// DOT shape whose `DOTParser` mapping restores the same `NodeShape` — except
-    /// the two documented lossy cases.
+    /// the documented lossy cases.
     private static func shapeName(_ shape: Flowchart.NodeShape) -> String {
         switch shape {
         case .rectangle:            return "box"        // box → rectangle
@@ -75,9 +80,15 @@ public enum DOTExporter {
         case .stadium:              return "stadium"
         case .diamond:              return "diamond"
         case .circle:               return "circle"
+        case .doubleCircle:         return "doublecircle"
         case .cylinder:             return "cylinder"
         case .hexagon:              return "hexagon"
+        case .parallelogram:        return "parallelogram"
+        case .parallelogramAlt:     return "parallelogram" // lossy → parallelogram
+        case .trapezoid:            return "trapezium"
+        case .trapezoidAlt:         return "invtrapezium"
         case .subroutine:           return "box"        // lossy → rectangle
+        case .asymmetric:           return "box"        // lossy → rectangle
         case .stateStart, .stateEnd: return "circle"    // lossy → circle
         }
     }
@@ -87,7 +98,19 @@ public enum DOTExporter {
     private static func edgeDecl(_ e: Flowchart.Edge) -> String {
         var attrs: [String] = []
         if let label = e.label, !label.isEmpty { attrs.append("label=\(quote(label))") }
-        if e.dashed { attrs.append("style=dashed") }
+        let styles = [(e.dashed, "dashed"), (e.thick, "bold"), (e.invisible, "invis")]
+            .filter(\.0).map(\.1)
+        if styles.count == 1 {
+            attrs.append("style=\(styles[0])")
+        } else if !styles.isEmpty {
+            attrs.append("style=\(quote(styles.joined(separator: ",")))")
+        }
+        // A circle head is DOT's `dot`; a cross has no DOT arrowhead (lossy).
+        if e.head == .circle {
+            if e.hasArrow { attrs.append("arrowhead=dot") }
+            if e.backArrow { attrs.append("arrowtail=dot") }
+        }
+        if e.length > 1 { attrs.append("minlen=\(e.length)") }
         // In a `digraph`, an edge with no `dir` is a forward arrow; only the other
         // three arrow configurations need an explicit `dir`.
         switch (e.hasArrow, e.backArrow) {

@@ -463,17 +463,29 @@ private final class DOTParserImpl {
         let dashed = style.contains("dashed") || style.contains("dotted")
         let dir = (attrs["dir"] ?? (directed ? "forward" : "none")).lowercased()
         // All four DOT directions: `back` points at the tail, `both` at both.
-        let hasArrow: Bool
-        let backArrow: Bool
+        var hasArrow: Bool
+        var backArrow: Bool
         switch dir {
         case "none": hasArrow = false; backArrow = false
         case "back": hasArrow = false; backArrow = true
         case "both": hasArrow = true;  backArrow = true
         default:     hasArrow = true;  backArrow = false   // forward / unknown
         }
+        // `arrowhead=none` / `arrowtail=none` suppress that end's mark.
+        if attrs["arrowhead"]?.lowercased() == "none" { hasArrow = false }
+        if attrs["arrowtail"]?.lowercased() == "none" { backArrow = false }
+        // A dot-family arrowhead (`dot`, `odot`, `invdot`, `dotnormal`, …; the
+        // arrowtail for a back-only edge) is a circle head. The model has one
+        // head kind per edge, so a `dir=both` edge takes its arrowhead's.
+        let endShape = (hasArrow ? attrs["arrowhead"] : attrs["arrowtail"])?.lowercased()
+        // `minlen` is the rank span, clamped like a mermaid link's length.
+        let length = min(max(Int(attrs["minlen"] ?? "") ?? 1, 1), MermaidParser.maxLinkLength)
         edges.append(Flowchart.Edge(from: from, to: to,
                                     label: (label?.isEmpty == true) ? nil : label,
-                                    dashed: dashed, hasArrow: hasArrow, backArrow: backArrow))
+                                    dashed: dashed, hasArrow: hasArrow, backArrow: backArrow,
+                                    head: endShape?.contains("dot") == true ? .circle : .arrow,
+                                    thick: style.contains("bold"), invisible: style.contains("invis"),
+                                    length: length))
         if edges.count > MermaidParser.maxEdges { aborted = true }
     }
 
@@ -613,11 +625,15 @@ private final class DOTParserImpl {
     private func shapeFrom(_ raw: String?) -> Flowchart.NodeShape {
         switch (raw ?? "").lowercased() {
         case "diamond", "mdiamond":                     return .diamond
-        case "circle", "doublecircle", "point":         return .circle
+        case "circle", "point":                         return .circle
+        case "doublecircle":                            return .doubleCircle
         case "ellipse", "oval":                         return .rounded
         case "cylinder":                                return .cylinder
         case "stadium":                                 return .stadium
         case "hexagon":                                 return .hexagon
+        case "parallelogram":                           return .parallelogram
+        case "trapezium":                               return .trapezoid
+        case "invtrapezium":                            return .trapezoidAlt
         // box/rect/square/record/Mrecord/plaintext/none and unknowns → rect.
         default:                                        return .rectangle
         }

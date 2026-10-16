@@ -110,17 +110,19 @@ extension DiagramLayoutEngine {
             reducedNodes.append(Flowchart.Node(id: childID, label: "", shape: .rectangle))
         }
         var reducedEdges: [Flowchart.Edge] = []
-        var seenEdges = Set<String>()
+        var seenEdges = Set<Flowchart.Edge>()
         for edge in ctx.chart.edges {
             guard lca(ctx, edge.from, edge.to) == scope else { continue }
             let from = rep(ctx, edge.from, scope: scope)
             let to = rep(ctx, edge.to, scope: scope)
             guard from != to else { continue }
-            let key = "\(from)\u{1}\(to)\u{1}\(edge.label ?? "")\u{1}\(edge.dashed)\u{1}\(edge.hasArrow)\u{1}\(edge.backArrow)"
-            guard seenEdges.insert(key).inserted else { continue }
-            reducedEdges.append(Flowchart.Edge(from: from, to: to, label: edge.label,
-                                               dashed: edge.dashed, hasArrow: edge.hasArrow,
-                                               backArrow: edge.backArrow))
+            let reduced = Flowchart.Edge(from: from, to: to, label: edge.label,
+                                         dashed: edge.dashed, hasArrow: edge.hasArrow,
+                                         backArrow: edge.backArrow, head: edge.head,
+                                         thick: edge.thick, invisible: edge.invisible,
+                                         length: edge.length)
+            guard seenEdges.insert(reduced).inserted else { continue }
+            reducedEdges.append(reduced)
         }
 
         let reduced = Flowchart(direction: direction, nodes: reducedNodes, edges: reducedEdges)
@@ -195,7 +197,7 @@ extension DiagramLayoutEngine {
             end: edge.end.offsetBy(dx: dx, dy: dy),
             points: edge.points.map { $0.offsetBy(dx: dx, dy: dy) },
             label: edge.label, dashed: edge.dashed, hasArrow: edge.hasArrow,
-            backArrow: edge.backArrow,
+            backArrow: edge.backArrow, head: edge.head, thick: edge.thick, invisible: edge.invisible,
             labelPoint: edge.labelPoint.map { $0.offsetBy(dx: dx, dy: dy) })
     }
 }

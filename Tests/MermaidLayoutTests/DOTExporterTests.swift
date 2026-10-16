@@ -11,7 +11,8 @@ final class DOTExporterTests: XCTestCase {
 
     func testFlatRoundTripIsExact() throws {
         let shapes: [Flowchart.NodeShape] =
-            [.rectangle, .rounded, .stadium, .diamond, .circle, .cylinder, .hexagon]
+            [.rectangle, .rounded, .stadium, .diamond, .circle, .cylinder, .hexagon,
+             .doubleCircle, .parallelogram, .trapezoid, .trapezoidAlt]
         let nodes = shapes.enumerated().map { i, s in
             // n0 carries a label distinct from its id (exercises the label attr);
             // the rest fall back to id (exercises label omission).
@@ -24,6 +25,12 @@ final class DOTExporterTests: XCTestCase {
             .init(from: "n3", to: "n4", label: "back", dashed: false, hasArrow: false, backArrow: true),  // dir=back
             .init(from: "n4", to: "n5", label: nil,    dashed: false, hasArrow: true,  backArrow: true),  // dir=both
             .init(from: "n5", to: "n6", label: "loop", dashed: true,  hasArrow: true,  backArrow: false),
+            // Thick, invisible, circle heads (DOT's `dot`) and longer links.
+            .init(from: "n6", to: "n7", label: nil, dashed: false, hasArrow: true, backArrow: false, thick: true),
+            .init(from: "n7", to: "n8", label: nil, dashed: false, hasArrow: false, backArrow: false, invisible: true),
+            .init(from: "n8", to: "n9", label: nil, dashed: false, hasArrow: true, backArrow: true, head: .circle),
+            .init(from: "n9", to: "n10", label: nil, dashed: true, hasArrow: true, backArrow: false,
+                  thick: true, length: 3),
         ]
         for dir: Flowchart.Direction in [.topDown, .leftRight, .rightLeft, .bottomTop] {
             let chart = Flowchart(direction: dir, nodes: nodes, edges: edges)
@@ -81,6 +88,8 @@ final class DOTExporterTests: XCTestCase {
     func testLossyShapesDegradeAsDocumented() throws {
         let cases: [(Flowchart.NodeShape, Flowchart.NodeShape)] = [
             (.subroutine, .rectangle),
+            (.asymmetric, .rectangle),
+            (.parallelogramAlt, .parallelogram),
             (.stateStart, .circle),
             (.stateEnd,   .circle),
         ]
@@ -94,6 +103,18 @@ final class DOTExporterTests: XCTestCase {
             XCTAssertEqual(f2.nodes.first { $0.id == "A" }?.shape, expected,
                            "\(input) should degrade to \(expected)")
         }
+    }
+
+    /// DOT has no cross arrowhead, so `--x` comes back as an arrow.
+    func testCrossHeadDegradesToAnArrow() throws {
+        let chart = Flowchart(
+            direction: .topDown,
+            nodes: [Flowchart.Node(id: "A", label: "A", shape: .rectangle),
+                    Flowchart.Node(id: "B", label: "B", shape: .rectangle)],
+            edges: [.init(from: "A", to: "B", label: nil, dashed: false, hasArrow: true,
+                          backArrow: false, head: .cross)])
+        let f2 = try XCTUnwrap(DOTParser.parse(DOTExporter.export(chart)))
+        XCTAssertEqual(f2.edges.first?.head, .arrow)
     }
 
     // MARK: - Quoting

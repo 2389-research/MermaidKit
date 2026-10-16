@@ -39,6 +39,12 @@ public struct FlowchartLayout: Sendable {
         public let hasArrow: Bool
         /// Arrowhead at the START too (`<-->`).
         public let backArrow: Bool
+        /// What `hasArrow` and `backArrow` draw: a point, a circle or a cross.
+        public let head: Flowchart.Edge.Head
+        /// A heavier line (`==>`).
+        public let thick: Bool
+        /// Laid out but not drawn (`~~~`).
+        public let invisible: Bool
         /// Where to center the label — chosen by the layout to avoid boxes and
         /// other labels. nil for an unlabeled edge; the renderer falls back to
         /// the route midpoint if it is somehow absent.
@@ -48,6 +54,7 @@ public struct FlowchartLayout: Sendable {
         /// two-point route `[start, end]`.
         public init(start: CGPoint, end: CGPoint, points: [CGPoint]? = nil,
                     label: String?, dashed: Bool, hasArrow: Bool, backArrow: Bool = false,
+                    head: Flowchart.Edge.Head = .arrow, thick: Bool = false, invisible: Bool = false,
                     labelPoint: CGPoint? = nil) {
             self.start = start
             self.end = end
@@ -56,6 +63,9 @@ public struct FlowchartLayout: Sendable {
             self.dashed = dashed
             self.hasArrow = hasArrow
             self.backArrow = backArrow
+            self.head = head
+            self.thick = thick
+            self.invisible = invisible
             self.labelPoint = labelPoint
         }
     }

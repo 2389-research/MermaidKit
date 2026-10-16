@@ -27,9 +27,10 @@ final class GridAlignmentTests: XCTestCase {
         // Measured under the geometry-only measurer above (see PRINT_GRID),
         // rounded down for a small jitter margin. These may only rise.
         // flowchart was 0.21 while the fixture's `[[diagnose…]]` and `[/Scene IR/]`
-        // parsed as rectangles with the brackets in their labels; measured again
-        // once they parsed as written (a subroutine, clean labels).
-        "flowchart": 0.16, "block": 0.08, "c4": 0.44,
+        // parsed as rectangles with the brackets in their labels, 0.16 once they
+        // parsed as a subroutine and a rectangle with clean labels, and 0.21
+        // again with `[/Scene IR/]` the parallelogram it's written as.
+        "flowchart": 0.21, "block": 0.08, "c4": 0.44,
         "architecture": 0.42, "er": 0.14, "class": 0.14, "state": 0.08,
     ]
 

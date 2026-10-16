@@ -191,11 +191,13 @@ mermaid.js, and the failure mode is deliberate:
   the generated alt text and read back via `MermaidParser.metadata(in:)`,
   never appearing as content); flowchart chained edges
   (`A --> B --> C`), `&` fan-out, inline `-- text -->` labels,
-  bidirectional `<-->`, min-length links, `--o`/`--x` heads, edge IDs,
+  bidirectional `<-->`, longer links (`--->` spans two ranks), thick `==>`
+  and invisible `~~~` links, circle `--o` and cross `--x` heads, edge IDs,
   `:::class` tolerance, nested `subgraph` group boxes (with inner
   `direction` and edges that target a group id), ids with `-` and `.`
-  (`api-gateway`, `auth.service`), the hexagon `{{ }}` and subroutine
-  `[[ ]]` node shapes, and `@{ shape: …, label: … }` shape data; the full everyday
+  (`api-gateway`, `auth.service`), the hexagon `{{ }}`, subroutine `[[ ]]`,
+  double circle `((( )))`, slanted `[/ /]` `[\ \]` `[/ \]` `[\ /]` and
+  asymmetric `> ]` node shapes, and `@{ shape: …, label: … }` shape data; the full everyday
   sequence set — combined
   fragments (`loop`/`alt`+`else`/`opt`/`par`/`critical`/`break`, nested)
   with `rect` bands, activation bars (`->>+`/`->>-`, `activate`), `box`
@@ -205,9 +207,9 @@ mermaid.js, and the failure mode is deliberate:
   directive lines (never phantom bars) and `y/M/s` durations; radar
   positional values; packet `+N` relative widths; treemap `:::class`;
   gitGraph `cherry-pick`; class generics `~T~`; ER attribute keys; state
-  composites, forks, choices. Some still doesn't (flowchart
-  parallelogram, trapezoid and asymmetric shapes draw as rectangles, with
-  their labels intact). If your diagram parses but drops
+  composites, forks, choices. Some still doesn't (mermaid's newer named
+  flowchart shapes, like `@{ shape: doc }`, draw as rectangles, with their
+  labels intact). If your diagram parses but drops
   something you wrote, that's a gap: please
   [open an issue](#reporting-a-diagram-that-renders-wrong) with the source.
 

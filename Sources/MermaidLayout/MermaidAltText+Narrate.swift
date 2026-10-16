@@ -55,13 +55,15 @@ extension MermaidAltText {
             switch shape[id] {
             case .diamond:            return "the decision \(n)"
             case .cylinder:           return "the datastore \(n)"
-            case .circle, .stadium:   return "the node \(n)"
+            case .circle, .doubleCircle, .stadium: return "the node \(n)"
             default:                  return "the step \(n)"
             }
         }
+        // Invisible links (`~~~`) only position nodes; nothing is drawn to narrate.
         let g = walk("The flowchart", begin: "begins at",
                      ids: f.nodes.map(\.id),
-                     edges: f.edges.map { Arc($0.from, $0.to, $0.label) }, noun: noun)
+                     edges: f.edges.filter { !$0.invisible }.map { Arc($0.from, $0.to, $0.label) },
+                     noun: noun)
         return g.isEmpty ? describe(.flowchart(f)) : g
     }
 
