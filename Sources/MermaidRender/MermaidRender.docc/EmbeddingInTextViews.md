@@ -1,7 +1,7 @@
 # Embedding in Text Views
 
 Put diagrams inside attributed strings — how a markdown editor inlines a
-rendered ```` ```mermaid ```` block.
+rendered `mermaid` fenced code block.
 
 ## The attachment API
 
@@ -34,7 +34,7 @@ exactly this API. Conventions that proved out:
   Mermaid I understand" — render the code block you would have rendered
   anyway.
 - **Match `canvas` to your page color** (see <doc:Theming>) and re-render on
-  appearance flips; the cache keys on (source, appearance) so this is cheap.
+  appearance flips; the cache keys on (source, theme, spacing) so this is cheap.
 
 ## Sizing
 

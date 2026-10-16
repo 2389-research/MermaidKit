@@ -8,8 +8,8 @@ rectangles. Rendering only changes for diagrams that use this syntax.
 
 > **Source compatibility.** `Flowchart.NodeShape` gains six cases. Code
 > outside the package that switches *exhaustively* over `NodeShape` stops
-> compiling until it handles them or adds an `@unknown default:` branch. This
-> follows the 1.2.0 precedent (`hexagon`, `subroutine`). Everything else is
+> compiling until it handles them; an `@unknown default:` branch turns that into
+> a warning instead. This follows the 1.2.0 precedent (`hexagon`, `subroutine`). Everything else is
 > additive: the new `Edge` and `PlacedEdge` fields have defaults, and the
 > wire format and the Android, Flutter and Windows backends are unchanged.
 
@@ -43,6 +43,20 @@ actually emit.
 
 - The docs gallery flowchart draws `Scene IR` as the parallelogram it's
   written as. (#68)
+
+### Docs
+
+- **A full documentation audit**, every claim checked against the code: the
+  README, website, DocC catalogs, API doc comments, platform READMEs and design
+  notes. Highlights: the website's lint demo used rule names that don't exist
+  and a `mermaidkit-lint` command that was never built; conformance claims now
+  say CI gates macOS, Linux, WASM and Windows (Android was verified on an
+  emulator); the terminal CLI's tier order and flowchart-only box tiers are
+  described as they behave; DOT round-trips list their lossy cases; the
+  coverage audit and dated design memos carry v2.4.0 reconciliation notes; the
+  contributor guide covers the `RenderScene` lowering and the semver rule as
+  practiced. Both DocC catalogs now build with zero warnings (nine broken
+  symbol links fixed), and the README has an install snippet.
 
 ## 2.3.0 — Flowcharts as agents write them, on a grid
 

@@ -17,7 +17,8 @@ public struct Flowchart: Hashable, Sendable {
         case rightLeft = "RL"
     }
 
-    /// Node outline, from the bracket style wrapping the label.
+    /// Node outline, from the bracket style wrapping the label (or a
+    /// `@{ shape: … }` name, or a DOT `shape=`).
     public enum NodeShape: Hashable, Sendable {
         case rectangle      // A[Label]
         case rounded        // A(Label)
@@ -55,9 +56,11 @@ public struct Flowchart: Hashable, Sendable {
         public var label: String?
         /// Dotted connectors (`-.->`, `-.-`) draw dashed.
         public var dashed: Bool
-        /// False for open links (`---`, `-.-`).
+        /// False for open links (`---`, `===`, `-.-`, `~~~`); true when the end
+        /// carries a mark (`-->`, `--o`, `--x`).
         public var hasArrow: Bool
-        /// True for bidirectional links (`<-->`): an arrowhead at BOTH ends.
+        /// True for links marked at BOTH ends (`<-->`, `o--o`, `x--x`); `head`
+        /// says which mark.
         public var backArrow: Bool = false
         /// What `hasArrow` and `backArrow` put on the line's ends: a point
         /// (`-->`), a circle (`--o`, `o--o`) or a cross (`--x`, `x--x`).
@@ -68,7 +71,9 @@ public struct Flowchart: Hashable, Sendable {
         /// so they only position their nodes.
         public var invisible: Bool = false
         /// The fewest ranks the link spans: 1 for `-->`, one more per extra
-        /// `-`, `=`, `.` or `~` (`--->` and `-..->` are 2).
+        /// `-`, `=`, `.` or `~` (`--->` and `-..->` are 2), capped at
+        /// `MermaidParser.maxLinkLength` (10). Layout honors at most 100 extra
+        /// ranks per chart.
         public var length: Int = 1
 
         /// The mark at a line's end, wherever `hasArrow` or `backArrow` asks for one.

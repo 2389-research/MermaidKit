@@ -15,10 +15,10 @@ import MermaidLayout
 /// SVG; these entry points return nil only when `source` fails to parse.
 extension MermaidRenderer {
 
-    /// Lowers Mermaid `source` to a platform-free ``RenderScene``, mapping the
-    /// theme's resolved colors into a ``RenderTheme``. Every diagram type lowers,
+    /// Lowers Mermaid `source` to a platform-free `RenderScene`, mapping the
+    /// theme's resolved colors into a `RenderTheme`. Every diagram type lowers,
     /// so this is nil only when `source` fails to parse. The top-level
-    /// ``RenderScene/from(_:theme:measure:spacing:)`` dispatcher builds the scene.
+    /// `RenderScene/from(_:theme:measure:spacing:)` dispatcher builds the scene.
     public static func renderScene(source: String, theme: DiagramTheme,
                                    spacing: DiagramSpacing = .regular) -> RenderScene? {
         guard let diagram = MermaidParser.parse(source) else { return nil }

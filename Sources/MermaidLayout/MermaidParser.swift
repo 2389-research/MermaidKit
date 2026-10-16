@@ -1,9 +1,8 @@
 import Foundation
 
-/// Parsed Mermaid diagrams: flowcharts, sequence diagrams, pie charts
-/// (D1), plus state, class, and ER diagrams (D2). State diagrams reuse the
-/// flowchart model — they are nodes and labeled transitions with two extra
-/// shapes. Anything else returns nil and the renderer keeps the
+/// A parsed diagram: one case per supported Mermaid type (30 in all), each
+/// carrying its typed model. Sources in any other dialect don't parse
+/// (`MermaidParser.parse` returns nil) and the renderer keeps the
 /// styled-source fallback.
 public enum MermaidDiagram: Hashable, Sendable {
     case flowchart(Flowchart)
@@ -115,8 +114,9 @@ public enum MermaidParser {
     public static let maxTextSize = 50_000
     public static let maxEdges = 500
 
-    /// Parses D1 diagram types; nil for unsupported types or unparseable
-    /// input (the caller falls back to styled source).
+    /// Parses any of the 30 supported diagram types; nil for an unknown
+    /// dialect, unparseable input, or a source past `maxTextSize`/`maxEdges`
+    /// (the caller falls back to styled source).
     public static func parse(_ source: String) -> MermaidDiagram? {
         parseWithMetadata(source)?.diagram
     }

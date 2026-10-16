@@ -32,7 +32,8 @@ guard let diagram = MermaidParser.parse(source) else { … }
 switch diagram {
 case .flowchart(let chart):
     let layout = DiagramLayoutEngine.layout(chart, measure: measurer)
-    // layout.nodes[i].frame, layout.edges[i].points, …
+    // layout.nodes[i].frame, layout.edges[i].points, … — skip edges whose
+    // `invisible` is true (`~~~`); `thick` and `head` say how to draw the rest.
 default: …
 }
 
@@ -50,8 +51,10 @@ This is the most-wanted contribution — see the repository's CONTRIBUTING.
 
 ## Programmatic diagrams
 
-The models are plain public value types — you can skip Mermaid text
-entirely and lay out a hand-built model:
+The models are plain public value types, and most have public initializers —
+you can skip Mermaid text entirely and lay out a hand-built model. (Flowchart
+nodes and edges don't have public initializers yet; build flowcharts from
+Mermaid or DOT text.)
 
 ```swift
 let sankey = SankeyDiagram(nodes: […], links: […])

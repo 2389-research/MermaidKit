@@ -17,7 +17,7 @@ Three ways in, from highest-level to lowest:
 
 - ``MermaidView`` — a SwiftUI view: give it Mermaid source, it renders.
 - ``MermaidRenderer/image(source:theme:spacing:)`` — one call, one native image.
-- ``MermaidRenderer/attachmentString(source:theme:)`` — the diagram as a
+- ``MermaidRenderer/attachmentString(source:theme:spacing:)`` — the diagram as a
   single-attachment `NSAttributedString` for embedding in a text view.
 
 All rendering is synchronous (every built-in diagram type renders cold in
@@ -34,10 +34,11 @@ numbers) and cached per (source, theme, spacing).
 
 ### Styling
 
+Spacing and colors come from `MermaidLayout`'s `DiagramSpacing` and
+`DiagramColor`, documented in that module.
+
 - <doc:Theming>
 - ``DiagramTheme``
-- ``MermaidLayout/DiagramSpacing``
-- ``MermaidLayout/DiagramColor``
 
 ### Embedding in text views
 

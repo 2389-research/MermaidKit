@@ -28,7 +28,7 @@ public struct FlowchartLayout: Sendable {
     public struct PlacedEdge: Sendable {
         /// Route start, on the source node's outline.
         public let start: CGPoint
-        /// Route end, on the target node's outline (arrowhead here when
+        /// Route end, on the target node's outline (its `head` mark here when
         /// `hasArrow`).
         public let end: CGPoint
         /// Full polyline route (orthogonal between offset nodes); always
@@ -37,11 +37,11 @@ public struct FlowchartLayout: Sendable {
         public let label: String?
         public let dashed: Bool
         public let hasArrow: Bool
-        /// Arrowhead at the START too (`<-->`).
+        /// A mark at the START too (`<-->`, `o--o`, `x--x`); `head` gives its kind.
         public let backArrow: Bool
         /// What `hasArrow` and `backArrow` draw: a point, a circle or a cross.
         public let head: Flowchart.Edge.Head
-        /// A heavier line (`==>`).
+        /// A heavier line (`==>`, `===`).
         public let thick: Bool
         /// Laid out but not drawn (`~~~`).
         public let invisible: Bool

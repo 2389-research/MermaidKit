@@ -21,12 +21,8 @@ import CoreGraphics
 /// `Codable` so a scene can cross a process boundary (SVG export, a plugin, a
 /// JSON bridge to Kotlin) byte-for-byte.
 ///
-/// Phase 0a lowered the flowchart family; Phase 0b-1 adds state, ER, class, and
-/// sequence; Phase 0b-2 adds c4, architecture, block, swimlane, sankey, and
-/// requirement; Phase 0b-3a adds the chart families — pie, gantt, timeline,
-/// journey, quadrant, xychart, radar, packet, and kanban (one
-/// `RenderScene.from(_:theme:measure:)` per family, dispatched by
-/// `RenderScene.from(_ diagram:theme:measure:spacing:)`).
+/// Every diagram type lowers: one `RenderScene.from(_:theme:measure:)` per
+/// family, dispatched by `RenderScene.from(_ diagram:theme:measure:spacing:)`.
 public struct RenderScene: Sendable, Codable {
 
     /// Relative typographic weight, mapped by each backend to its font system.
@@ -83,7 +79,9 @@ public struct RenderScene: Sendable, Codable {
 
     /// A connected multi-segment line — an edge route. Arrowheads at either or
     /// both ends are flags the backend realizes from the segment directions, so
-    /// the geometry stays a single point list.
+    /// the geometry stays a single point list. Other end marks (a flowchart's
+    /// `--o` circle or `--x` cross) arrive as their own `.shape` elements, and the
+    /// line stops where the mark begins.
     public struct Polyline: Sendable, Codable {
         public var points: [CGPoint]
         public var stroke: Stroke
@@ -161,8 +159,7 @@ public struct RenderScene: Sendable, Codable {
     }
 }
 
-/// The platform-free color surface a `RenderScene` lowering reads — the subset
-/// of a theme the flowchart family paints with. A renderer maps its resolved
+/// The platform-free color surface every `RenderScene` lowering reads. A renderer maps its resolved
 /// theme (`DiagramTheme.resolved`) into one of these before lowering.
 public struct RenderTheme: Sendable, Hashable {
     /// Primary text and stroke color (node borders, arrows, node labels).

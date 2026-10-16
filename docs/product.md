@@ -19,10 +19,10 @@ Feature groups are labeled **G1–G12** and referenced by shorthand throughout.
 | Repository | github.com/2389-research/MermaidKit |
 | Platforms | Rendering: Apple — macOS 14+, iOS 17+, visionOS 1+ (CoreGraphics/CoreText); Linux (Silica/Cairo); Android (Kotlin `Canvas`/Skia via JNI); Windows/.NET (SkiaSharp); WebAssembly; Flutter (Dart `CustomPainter`); plus a bare-surface RGBA raster (framebuffer/SDL). Geometry (`MermaidLayout`): platform-free — builds and tests on any swift-corelibs-foundation target. |
 | Language / runtime | Swift 6 (`swift-tools-version: 6.2`, strict concurrency; the Silica backend's transitive graph sets a Swift 6.2 / Xcode 26 floor). Drawing via CoreGraphics/CoreText on Apple, Silica/Cairo on Linux. Zero JavaScript at runtime; local-only. |
-| Rendering | Native geometry pipeline: parse → layout → common scene IR → draw. The layout core and scene IR are platform-free; each platform supplies only the draw surface (CoreGraphics, Silica/Cairo, Android/Skia `Canvas`, SkiaSharp, Flutter `Canvas`, or SVG/Canvas2D). No web view, no headless browser, no Mermaid.js. |
+| Rendering | Native geometry pipeline: parse → layout → common scene IR → draw. The layout core and scene IR are platform-free; each platform supplies only the draw surface (CoreGraphics, Silica/Cairo, Android/Skia `Canvas`, SkiaSharp, Flutter `Canvas`, or SVG). No web view, no headless browser, no Mermaid.js. |
 | Dependencies | Zero third-party packages on Apple. On Linux the render backend adds Silica (Cairo/FontConfig); `MermaidLayout` depends on nothing. |
 | Coverage | **30 distinct diagram types** (`MermaidDiagram` enum, 30-branch parser dispatch, 30-row README matrix, 30 fixtures). |
-| Verification | 443 package tests on macOS, 0 failures (3 intentionally env-gated skips). On Linux, 421 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` suite plus Silica render smoke tests (all 30 fixtures render). |
+| Verification | 443 package tests on macOS, 0 failures (3 intentionally env-gated skips). On Linux, 421 tests run in a `swift:6.2` container (1 skipped) — the `MermaidLayout` and `MermaidKitC` suites, the cross-platform `MermaidRender` tests, and the Silica render smoke tests (all 30 fixtures render). |
 | Origin | Built so that a diagram's source of truth stays the Mermaid text — parsed, laid out, and drawn natively in a Swift app — with layout judged by machine-checkable geometry rather than pixels, and with no runtime dependency on a JavaScript engine or web view. Consumed by the Quoin markdown editor as a first-party engine. |
 
 ---
@@ -55,7 +55,7 @@ per type. Support matrix in `README.md`; gallery in `docs/GALLERY.md`.
 | Charts & data | pie, xychart, quadrant, radar, sankey, packet, treemap, venn. |
 | Trees & hierarchies | mindmap, kanban, treeView, ishikawa (fishbone), cynefin, wardley. |
 | Timeline & process | gantt, timeline, journey. |
-| Per-type depth | Each type parses its real syntax, not a stub — e.g. sequence supports typed participants, `box` groups, 8 arrow-head tokens, nested combined fragments (loop/alt/opt/par/critical/break) + activation bars + create/destroy + autonumber; class supports 7 relation kinds and generics; ER supports four cardinalities and identifying/non-identifying relations. |
+| Per-type depth | Each type parses its real syntax, not a stub — e.g. sequence supports typed participants, `box` groups, 10 arrow tokens (including bidirectional `<<->>`/`<<-->>`), nested combined fragments (loop/alt/opt/par/critical/break) + activation bars + create/destroy + autonumber; class supports 7 relation kinds (generics like `Box~T~` parse but display as written, not as `Box<T>`); ER supports four cardinalities and identifying/non-identifying relations. |
 | Header nuances | `stateDiagram` matches both bare and `-v2`; `C4*` matches on the `C4` stem; `-beta` types match on their stem; `block-beta` requires its full header. |
 
 ### G2 — Flowchart layout engine (layered / Sugiyama)
@@ -90,7 +90,7 @@ Faithful parsing with a "degrade, never break" contract. Parser in
 | Degrade, never break | An unknown dialect returns `nil` (hosts show the fenced source; `diagnose` explains why). Styling/interaction directives (`%%{init}%%`, `classDef`/`style`/`click`, `:::class`, `%%` comments) are ignored, never fatal. |
 | Diagnostics | `MermaidParser.diagnose` reports empty/oversized/comment-only source, recognized-header-but-empty-body, and Levenshtein "did-you-mean" header suggestions, with correct line numbers. |
 | Adversarial safety | The full parse→layout→scene→lint pipeline is run on empty input, every header with no body, garbage bodies, RTL/Arabic/unicode, 100k-char labels, 120-level nesting, and hostile numbers (`inf`/`nan`/`1e308`/`Int.max`) — asserting it returns without crashing, hanging, or trapping. |
-| Input caps | mermaid.js-parity guards: `maxTextSize` 50,000 chars (whole source), `maxEdges` 500 (flowcharts); oversized input is rejected fast. |
+| Input caps | mermaid.js-parity guards: `maxTextSize` 50,000 chars (whole source), `maxEdges` 500 (flowcharts, including DOT/Dippin input); link length capped at 10 per link (`MermaidParser.maxLinkLength`) and 100 extra ranks per chart (`DiagramLayoutEngine.maxExtraRanks`); oversized input is rejected or clamped fast. |
 
 ### G4 — Geometry-not-pixels linting & scene diff
 
@@ -101,7 +101,7 @@ design in `SceneGeometryAndLinting.md`.
 | Feature | Specific |
 | :--- | :--- |
 | Common scene IR | Every laid-out diagram lowers to one `DiagramScene` (nodes, edges as polylines, labels, containers) via `DiagramScene.lower(_:measure:)` — the level at which invariants are checked. |
-| Linter — errors | `edge-occludes-node` (a wire crossing a box interior), `nodes-overlap`, `off-canvas`, `edge-cuts-label` (a foreign edge slicing label text), `mark-escapes-plot` (a series leaving a dominant chart plot). Measured with real (Liang–Barsky) geometry and injected text metrics, not bounding-box guesses. |
+| Linter — errors | `edge-occludes-node` (a wire crossing a box interior), `edge-endpoint-detached`, `edges-doubled`, `nodes-overlap`, `off-canvas`, `edge-cuts-label` (a foreign edge slicing label text), `label-on-fixture` and `label-crowds-edge` (edge-label placement), `mark-escapes-plot` (a series leaving a dominant chart plot). Measured with real (Liang–Barsky) geometry and injected text metrics, not bounding-box guesses. |
 | Linter — warnings | `labels-overlap`, `label-over-node`, `edge-under-label`, `edge-crossings` (beyond a `max(2, edges/3)` budget). |
 | Scene delta | `SceneDelta` reports moved/added/removed nodes (with displacement vectors), rerouted edges, and canvas resize, with a one-line human summary (e.g. `+2 nodes · 3 nodes moved (max 14pt)`). |
 | Lint delta / verdict | `LintDelta` reports which violations a change cleared vs introduced and returns a verdict — `✓ fixed`, `✗ regressed (+N errors)`, `↓ improved`, or `= no error change` — the machine-readable "did this change help?" signal, above a pixel pdiff. |
@@ -122,7 +122,7 @@ Windows/.NET, WebAssembly, and Flutter renderers.
 | PDF export | `pdfData(source:theme:spacing:)` renders resolution-independent single-page vector PDF, reusing the exact same draw plan as the raster path. |
 | SwiftUI view | `MermaidView` follows the environment color scheme, scales down (never up), degrades unparsable source to a monospaced source card, and exposes an accessibility label. |
 | Theming | One `DiagramTheme` value (ink, secondary/tertiary text, canvas, accent, hairline, a six-hue categorical palette, `prefersDark`) re-skins all 30 types; `init(prefersDark:)` presets light/dark. |
-| Spacing presets | `DiagramSpacing` density knob — `.regular`, `.compact` (0.75×), `.comfortable` (1.35×) — proven collision-free at every preset (`DiagramSpacingTests`). |
+| Spacing presets | `DiagramSpacing` density knob — `.regular`, `.compact` (0.75×), `.comfortable` (1.35×) — the tightest preset (`.compact`) is proven occlusion-free on the class and flowchart fixtures, and the presets proven to order canvas area (`DiagramSpacingTests`). |
 
 ### G6 — Accessibility
 
@@ -131,7 +131,7 @@ render path. `MermaidAltText`; `AltTextTests`, `DiagramMetadataTests`.
 
 | Feature | Specific |
 | :--- | :--- |
-| Alt text | `MermaidAltText.describe(_:)` produces one deterministic sentence per type from the models (not geometry): leads with the type, states honest counts, then names leading content (long lists truncate to 6 + "and N more"). All 30 types handled. |
+| Alt text | `MermaidAltText.describe(_:)` produces one deterministic sentence per type from the models (not geometry): leads with the type, states honest counts, then names leading content (long lists truncate — typically to 6, pie slices to 4 — + "and N more"). All 30 types handled. |
 | Narration | `MermaidAltText.narrate(_:)` gives a step-by-step *walkthrough* (a richer companion to `describe`'s one-liner): it follows a flowchart's edges through its decisions, reads a state machine from its initial state, spells out an ER schema's cardinalities, and replays a sequence message by message; every other type falls back to `describe`. Deterministic and length-bounded; mirrors `describe`'s API (`narrate(_:)`, `narrate(_:metadata:)`, `narrate(source:)`). |
 | Author words first | `describe(_:metadata:)` prepends the author's `accTitle`/front-matter `title` and `accDescr`, then the generated structural summary — author intent first, always backed by honest counts. |
 | Wired everywhere | `MermaidView`'s accessibility label, the embedded image's description, and `MermaidRenderer.altText(source:)` all use it; it survives the render-cache round-trip. |
@@ -167,9 +167,9 @@ Named properties with dedicated tests, run on every CI build.
 | Feature | Specific |
 | :--- | :--- |
 | Test suite | 443 package tests, 0 failures (3 intentionally env-gated skips: doc-image generation, single-type lint, and the cross-process determinism-signature dump). 386 layout tests, 45 render tests, 12 MermaidKitC tests. |
-| Cross-platform | 421 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` suite plus the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
+| Cross-platform | 421 tests green on Linux (`swift:6.2` container, `--traits LinuxRaster`, 1 skipped): the `MermaidLayout` and `MermaidKitC` suites, the cross-platform `MermaidRender` tests, and the Silica render smoke tests (all 30 fixtures render). `MermaidLayout` still builds on bare swift-corelibs-foundation with the default (Silica-free) graph, so the platform-free contract stays compiler-enforced. |
 | Dependency policy | The Silica/Cairo Linux render backend is behind the `LinuxRaster` package trait (default OFF). A `from:`-pinned consumer resolves a Silica-free graph on every platform — no unstable branch dependency, no Cairo/PureSwift stack fetched on Apple. Linux users opt in with `traits: ["LinuxRaster"]`. |
-| CI | `test` (macOS): `swift build` + `swift test` on Xcode 26, plus a compile-only iOS-Simulator guard (a UIKit branch with no test host that must always compile). `linux`: installs Cairo/FontConfig, then `swift build --traits LinuxRaster` + `swift test --traits LinuxRaster`, and a `swift build --target MermaidLayout` proving the default Silica-free graph builds. |
+| CI | `test` (macOS): `swift build` + `swift test` on Xcode 26, plus a compile-only iOS-Simulator guard (a UIKit branch with no test host that must always compile) and the cross-process determinism gate (`scripts/check-determinism.sh`). `linux`: installs Cairo/FontConfig, then `swift build --traits LinuxRaster` + `swift test --traits LinuxRaster`, and a `swift build --target MermaidLayout` proving the default Silica-free graph builds. Further `ci.yml` jobs build and test the Android (Kotlin renderer, emulator + JNI, release AAR), Windows/.NET (SkiaSharp + P/Invoke), pi-canvas (Linux + SDL) and Flutter (Dart renderer, FFI) backends; `conformance.yml` gates byte-identical output on macOS, Linux, WebAssembly/WASI and Windows. |
 | Parser honesty | `ParserHonestyTests` (57 tests) pins that syntax once silently dropped or mangled now parses faithfully; `AdversarialInputTests` (11) that hostile input never crashes. |
 | Benchmarks | `RenderBenchmarks` is a correctness smoke: every fixture must parse, render, and rasterize (it forces the deferred CoreGraphics draw). It makes **no wall-clock assertion** — timing gates flake under CI load, so performance never gates a merge. The per-type millisecond table is opt-in (`BENCH_TABLE=1 swift test --filter RenderBenchmarks`) and lives in `docs/notes/performance.md`. |
 | Documentation | DocC catalogs for both targets (8 articles) plus `README.md`, `docs/GALLERY.md`, and preserved design memos in `docs/notes/`. |
@@ -183,8 +183,8 @@ closes the loop. `DOTParser.swift`, `DippinParser.swift`, `SQLDDLParser.swift`,
 
 | Feature | Specific |
 | :--- | :--- |
-| Graphviz DOT in | `DOTParser.parse(_:)` turns a `.dot` source into the `Flowchart` IR — subgraphs/clusters, attribute defaults, `dir=back`, and shape mapping. |
-| DOT out (converter) | `DOTExporter.export(_:)` emits a `Flowchart` back as Graphviz DOT — a **Mermaid ⇄ DOT converter**. Flat charts round-trip exactly (`parse(export(chart)) == chart`); clustered charts round-trip structurally. `export(_ diagram:) -> String?` covers the diagram union. |
+| Graphviz DOT in | `DOTParser.parse(_:)` turns a `.dot` source into the `Flowchart` IR — subgraphs/clusters, attribute defaults, `dir=back`, shape mapping (including `doublecircle`, `parallelogram`, `trapezium`, `invtrapezium`), and edge styles: `style=bold`/`invis` → thick/invisible, dot-family arrowheads → circle heads, `arrowhead=none`/`arrowtail=none`, and `minlen` → link length. |
+| DOT out (converter) | `DOTExporter.export(_:)` emits a `Flowchart` back as Graphviz DOT — a **Mermaid ⇄ DOT converter**. Flat charts round-trip exactly (`parse(export(chart)) == chart`) except what DOT can't express — `subroutine`, `asymmetric`, `parallelogramAlt` and the state pseudo-nodes re-parse as their nearest DOT shape, and a cross head (`--x`) as an arrow; clustered charts round-trip structurally. `export(_ diagram:) -> String?` covers the diagram union. |
 | Dippin in | `DippinParser.parse(_:)` maps Dippin's eight node kinds (agent, tool, human, conditional, parallel, fan_in, subgraph, manager_loop) to flowchart shapes and collapses simple `when` equalities to concise edge labels. |
 | SQL DDL → ER | `SQLDDLParser.parse(_:)` turns a `CREATE TABLE` schema dump into the `ERDiagram` IR: typed columns; `PRIMARY`/`FOREIGN`/`UNIQUE` keys, inline and table-level, surfaced via `ERDiagram.Attribute.keys` and drawn as `PK`/`FK`/`UK` badges; `REFERENCES` mapped to one-to-many crow's-foot relationships. Handles dialect quoting (`"x"`, `` `x` ``, `[x]`) and comments; ignores unknown clauses; degrades to `nil` on malformed/oversized input. |
 | git log → gitgraph | `GitLogParser.parse(_:)` turns raw `git log` output (piped straight in) into the `GitGraph` IR. Topology is resolved in two passes, so the parse is independent of the caller's `--date-order`/`--topo-order`; branch lanes are derived from the ref decorations (`(HEAD -> main, origin/main)`) and propagated backward along first-parent ancestry so a feature branch's interior commits share the tip's lane. Renders in the terminal via `mermaidkit-term --format gitlog`. |
@@ -194,14 +194,15 @@ closes the loop. `DOTParser.swift`, `DippinParser.swift`, `SQLDDLParser.swift`,
 ### G11 — Terminal rendering
 
 A platform-free terminal renderer — the `mermaidkit-term` CLI — draws any
-Mermaid, DOT, or Dippin source straight to the terminal, no display server.
-Lives in `MermaidLayout` (`ASCIIPrototype.swift`, `Sources/mermaidkit-term/`).
+Mermaid, DOT, Dippin, or `git log` source straight to the terminal, no display server.
+The text tiers live in `MermaidLayout` (`ASCIIPrototype.swift`, `TerminalCapabilities.swift`); the CLI is the `mermaidkit-term` executable target (`Sources/mermaidkit-term/`), which also links `MermaidRender` for its raster tiers.
 
 | Feature | Specific |
 | :--- | :--- |
-| Tier selection | Picks the best tier the terminal answers to: Kitty graphics (a real inline image) → half-block truecolor (1×2 color pixels) → colored box-drawing → plain ASCII, with OSC 11 background detection and capability probing. |
-| Any front-end | Renders Mermaid, DOT, or Dippin (auto-detected by extension/header, or forced with `--format`); `--mode kitty\|halfblock\|box\|plain\|auto` and `--width COLS` are explicit overrides. |
-| Platform-free | Because it lives in `MermaidLayout` and needs no CoreGraphics/Silica surface, it runs headless on Linux and in CI. |
+| Tier selection | Auto picks the best tier the terminal answers to: Kitty graphics (a real inline image) → half-block truecolor (1×2 color pixels) → plain (uncolored) box-drawing, with OSC 11 background detection and capability probing; colored box-drawing is `--mode box`. |
+| Any front-end | Renders Mermaid, DOT, Dippin, or `git log` output (auto-detected by extension/header, or forced with `--format mermaid\|dot\|dippin\|gitlog`); the box/plain tiers draw flowcharts, other types need a raster tier; `--mode kitty\|halfblock\|box\|plain\|auto` and `--width COLS` are explicit overrides. |
+| Platform-free | The box and plain tiers need no CoreGraphics/Silica surface, so they run headless on Linux and in CI; the Kitty and half-block tiers rasterize through `MermaidRender` (CoreGraphics on Apple, Silica with `--traits LinuxRaster` on Linux) and fall back to box drawing without it. |
+| Shapes & links | The text tiers draw every flowchart shape (including double circle, parallelogram, trapezoid and flag glyphs) and skip invisible (`~~~`) links. |
 
 ### G12 — RenderScene IR & SVG export
 
@@ -262,7 +263,7 @@ regenerated by a gated test (`DocImageGeneration`, `GEN_DOC_IMAGES=1`).
 | `docs/GALLERY.md` | Every diagram type rendered, light/dark |
 | `Sources/MermaidLayout/MermaidLayout.docc/` | `MermaidLayout.md` (parse → typed models + geometry), `SceneGeometryAndLinting.md` (judge layout by geometry, machine-checked in CI), `HeadlessLayout.md` (the `DiagramTextMeasurer` seam), `AddingADiagramType.md` (each type is "five small files and three dispatch lines") |
 | `Sources/MermaidRender/MermaidRender.docc/` | `MermaidRender.md` (draw with CoreGraphics/CoreText), `GettingStarted.md`, `EmbeddingInTextViews.md` (`attachmentString`), `Theming.md` (one `DiagramTheme` re-skins all types) |
-| `docs/notes/` | Preserved design memos: `ir-compilation-targets.md` (IR beyond NSImage/UIImage), `mermaid-coverage-audit.md` (historical gap audit vs mermaid.js — roadmap, not current state), `sequence-primitives-research.md` |
+| `docs/notes/` | Preserved design memos: `ir-compilation-targets.md` (IR beyond NSImage/UIImage), `linux-rendering-via-silica.md`, `android.md`, `windows.md`, `cross-platform-conformance.md`, `terminal-rendering-capabilities.md`, `plugin-extensibility.md`, `performance.md`, `development-approach.md`, `mermaid-coverage-audit.md` (historical gap audit vs mermaid.js, with dated reconciliations), `sequence-primitives-research.md` |
 | `docs/website/BRIEF.md` | Design-context pack for a brochure site |
 
 ---
