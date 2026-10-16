@@ -1308,6 +1308,20 @@ extension DiagramLayoutEngine {
         grown(7, fontSize: nodeFontSize, measure)
     }
 
+    /// A sequence message's 10.5pt label lines — the last centered `rise`
+    /// above the arrow, the rest stacked `line` apart above it, the arrow
+    /// `arrowInset` up from its row's bottom — and a note's line pitch: 10,
+    /// 12, 14 and 13 at the default size, grown with the text. The layout,
+    /// both renderers and the lint scene place the text by them. The message
+    /// pitch is a little under a line at the default size, so it's also kept
+    /// within a point of the measured line, or larger text would overlap.
+    package static func sequenceTextMetrics(_ measure: DiagramTextMeasurer)
+        -> (rise: CGFloat, line: CGFloat, arrowInset: CGFloat, noteLine: CGFloat) {
+        let line = max(grown(12, fontSize: labelFontSize, measure), measure("Mg", labelFontSize).height - 1)
+        return (grown(10, fontSize: labelFontSize, measure), line,
+                grown(14, fontSize: labelFontSize, measure), grown(13, fontSize: labelFontSize, measure))
+    }
+
     public static func layout(_ diagram: SequenceDiagram, measure: DiagramTextMeasurer) -> SequenceLayout {
         let margin: CGFloat = 12
         let headPaddingX: CGFloat = 14
@@ -1413,10 +1427,11 @@ extension DiagramLayoutEngine {
                 let isSelf = a == b
                 let toX = isSelf ? heads[a].lifelineX + 34 : heads[b].lifelineX
                 // Multiline labels stack above the arrow: the row grows.
-                let extraLines = CGFloat(max(brLines(message.text).count - 1, 0)) * 12
+                let metrics = sequenceTextMetrics(measure)
+                let extraLines = CGFloat(max(brLines(message.text).count - 1, 0)) * metrics.line
                 arrows.append(SequenceLayout.Arrow(
                     fromX: heads[a].lifelineX, toX: toX,
-                    y: y + extraLines + rowHeight - 14,
+                    y: y + extraLines + rowHeight - metrics.arrowInset,
                     text: message.text, dashed: message.dashed,
                     isSelfMessage: isSelf, head: message.head, number: message.number))
                 widen(min(heads[a].lifelineX, toX), max(heads[a].lifelineX, toX))
@@ -1430,7 +1445,7 @@ extension DiagramLayoutEngine {
                 guard !ids.isEmpty else { y += noteRowHeight; continue }
                 let lines = brLines(noteItem.text)
                 let textWidth = lines.map { measure($0, labelFontSize).width }.max() ?? 0
-                let boxHeight = max(noteRowHeight - 10, CGFloat(lines.count) * grown(13, fontSize: labelFontSize, measure) + 9)
+                let boxHeight = max(noteRowHeight - 10, CGFloat(lines.count) * sequenceTextMetrics(measure).noteLine + 9)
                 var frame: CGRect
                 switch noteItem.position {
                 case .rightOf:

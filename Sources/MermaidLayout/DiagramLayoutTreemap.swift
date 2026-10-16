@@ -40,7 +40,12 @@ extension DiagramLayoutEngine {
             cells.append(TreemapLayout.Cell(label: node.label, value: node.value,
                                             frame: rect, colorIndex: colorIndex, isLeaf: false, depth: depth))
             let inner = rect.insetBy(dx: gap, dy: gap)
-            let reserve: CGFloat = inner.height > 44 ? headerHeight : 0
+            // Room for the header only where the renderers draw one (roomy
+            // enough, and the label fits), so children never sit under an
+            // empty strip.
+            let drawsHeader = rect.height > treemapText(measure).groupMinHeight && rect.width > 40
+                && measure(node.label, 9.5).width <= rect.width - 12
+            let reserve: CGFloat = drawsHeader ? headerHeight : 0
             let content = CGRect(x: inner.minX, y: inner.minY + reserve,
                                  width: inner.width, height: inner.height - reserve)
             for (child, childRect) in squarify(node.children, in: content) {

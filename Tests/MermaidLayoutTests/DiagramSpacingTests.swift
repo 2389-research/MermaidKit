@@ -88,6 +88,27 @@ final class DiagramSpacingTests: XCTestCase {
         XCTAssertEqual(DiagramSpacing().fingerprint, DiagramSpacing(textScale: 1).fingerprint)
     }
 
+    /// A treemap group reserves its header strip exactly where a renderer
+    /// draws the header, at every text size: no children under an empty strip.
+    func testTreemapReservesHeadersOnlyWhereDrawn() throws {
+        guard case .treemap(let treemap) = try fixture("treemap") else { return XCTFail() }
+        for k in [1.0, 1.35, 2.0, 3.0] {
+            let scaled = DiagramSpacing(textScale: k).scaling(measure)
+            let layout = DiagramLayoutEngine.layout(treemap, measure: scaled)
+            let header = DiagramLayoutEngine.grown(16, fontSize: 9.5, scaled)
+            for group in layout.cells where !group.isLeaf {
+                let children = layout.cells.filter {
+                    $0.depth == group.depth + 1 && group.frame.contains($0.frame)
+                }
+                guard let top = children.map(\.frame.minY).min() else { continue }
+                let drawn = group.frame.height > DiagramLayoutEngine.treemapText(scaled).groupMinHeight
+                    && group.frame.width > 40 && scaled(group.label, 9.5).width <= group.frame.width - 12
+                XCTAssertEqual(top, group.frame.minY + 2 + (drawn ? header : 0), accuracy: 0.01,
+                               "\(group.label) at \(k)×")
+            }
+        }
+    }
+
     /// Every fixture lints clean with its text from xSmall to an
     /// accessibility size (2 is about AX2). At 3 two routing findings remain:
     /// the flowchart's long back-edge label leaves no stub, and two of the

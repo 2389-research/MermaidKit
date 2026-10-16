@@ -279,9 +279,10 @@ extension DiagramRenderer {
                           fill: theme.categoricalColor(2).withAlphaComponent(0.18),
                           stroke: theme.categoricalColor(2), in: context)
             let lines = DiagramLayoutEngine.brLines(note.text)
-            let startY = note.frame.midY - CGFloat(lines.count - 1) * 6.5
+            let pitch = DiagramLayoutEngine.sequenceTextMetrics(layoutMeasure).noteLine
+            let startY = note.frame.midY - CGFloat(lines.count - 1) * pitch / 2
             for (i, line) in lines.enumerated() {
-                drawText(line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * 13),
+                drawText(line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * pitch),
                          size: labelSize, color: theme.ink, in: context)
             }
         }
@@ -330,7 +331,8 @@ extension DiagramRenderer {
                 if !arrow.text.isEmpty {
                     let lines = DiagramLayoutEngine.brLines(arrow.text)
                     for (i, line) in lines.enumerated() {
-                        let lineY = arrow.y - 10 - CGFloat(lines.count - 1 - i) * 12
+                        let metrics = DiagramLayoutEngine.sequenceTextMetrics(layoutMeasure)
+                        let lineY = arrow.y - metrics.rise - CGFloat(lines.count - 1 - i) * metrics.line
                         drawText(line,
                                  center: CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: lineY),
                                  size: 10.5, color: theme.secondaryTextColor, in: context)

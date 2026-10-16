@@ -83,6 +83,21 @@ final class TextScaleTests: XCTestCase {
         }
     }
 
+    /// Multi-line message labels and notes stack at a pitch that grows with
+    /// the text, in the layout's row reservation and both renderers.
+    func testMultilineSequenceTextFits() throws {
+        let source = """
+            sequenceDiagram
+              A->>B: first line<br/>second line<br/>third line
+              Note over A,B: a note<br/>on two lines
+              B-->>A: done
+            """
+        for scale in Self.scales {
+            let found = try XCTUnwrap(problems("multiline sequence", source: source, scale: scale))
+            XCTAssertTrue(found.isEmpty, "at \(scale)×: " + found.joined(separator: " ; "))
+        }
+    }
+
     /// The default size draws exactly what it did before text scaling.
     func testDefaultTextScaleIsUnchanged() throws {
         let source = "flowchart TD\n  A[Start] --> B{Choice}\n  B -->|yes| C[(Store)]"
