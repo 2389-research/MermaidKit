@@ -5,15 +5,26 @@ import CoreGraphics
 
 extension DiagramLayoutEngine {
 
+    /// How a treemap places its text, grown with it: a leaf's 10pt label 5 above
+    /// its middle and 9pt value 9 below, shown once the leaf is over 20 tall;
+    /// a group's 9.5pt header centered 10 below its top, shown once the group
+    /// is over 44 tall. Both renderers and the lint scene place text by them.
+    package static func treemapText(_ measure: DiagramTextMeasurer) -> (labelRise: CGFloat, valueDrop: CGFloat,
+        leafMinHeight: CGFloat, headerY: CGFloat, groupMinHeight: CGFloat) {
+        (grown(5, fontSize: 10, measure), grown(9, fontSize: 9, measure), grown(20, fontSize: 10, measure),
+         grown(10, fontSize: 9.5, measure), grown(44, fontSize: 9.5, measure))
+    }
+
     /// Lays out a treemap with the squarified algorithm (Bruls et al.):
     /// children fill their parent's rectangle in rows chosen to keep cells as
     /// square as possible, recursing into each internal node. Leaves are tinted
     /// by their top-level branch. Pure geometry — the renderer only draws.
     public static func layout(_ treemap: Treemap, measure: DiagramTextMeasurer) -> TreemapLayout {
         let margin: CGFloat = 14
-        let boardWidth: CGFloat = 540
-        let boardHeight: CGFloat = 340
-        let headerHeight: CGFloat = 16
+        // The board grows with the text, so cells keep room for their labels.
+        let boardWidth: CGFloat = grown(540, fontSize: 10, measure)
+        let boardHeight: CGFloat = grown(340, fontSize: 10, measure)
+        let headerHeight: CGFloat = grown(16, fontSize: 9.5, measure)
         let gap: CGFloat = 2
 
         var cells: [TreemapLayout.Cell] = []
@@ -29,7 +40,12 @@ extension DiagramLayoutEngine {
             cells.append(TreemapLayout.Cell(label: node.label, value: node.value,
                                             frame: rect, colorIndex: colorIndex, isLeaf: false, depth: depth))
             let inner = rect.insetBy(dx: gap, dy: gap)
-            let reserve: CGFloat = inner.height > 44 ? headerHeight : 0
+            // Room for the header only where the renderers draw one (roomy
+            // enough, and the label fits), so children never sit under an
+            // empty strip.
+            let drawsHeader = rect.height > treemapText(measure).groupMinHeight && rect.width > 40
+                && measure(node.label, 9.5).width <= rect.width - 12
+            let reserve: CGFloat = drawsHeader ? headerHeight : 0
             let content = CGRect(x: inner.minX, y: inner.minY + reserve,
                                  width: inner.width, height: inner.height - reserve)
             for (child, childRect) in squarify(node.children, in: content) {

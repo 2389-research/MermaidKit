@@ -19,9 +19,30 @@ extension RenderScene {
     /// completes coverage with mindmap, treemap, treeView, venn, cynefin,
     /// wardley, ishikawa, eventModeling, zenuml, and gitGraph. The switch is now
     /// exhaustive over all diagram types.
+    ///
+    /// `spacing.textScale` lays the diagram out with text measured at the
+    /// scaled size, then scales every text run's `fontSize` to match.
     public static func from(_ diagram: MermaidDiagram, theme: RenderTheme,
                             measure: DiagramTextMeasurer,
                             spacing: DiagramSpacing = .regular) -> RenderScene? {
+        let laidOut = withoutActuallyEscaping(measure) { measure in
+            Self.laidOut(diagram, theme: theme, measure: spacing.scaling(measure), spacing: spacing)
+        }
+        guard var scene = laidOut else { return nil }
+        let k = spacing.textScale
+        if k != 1 {
+            scene.elements = scene.elements.map { element in
+                guard case .text(var text) = element else { return element }
+                text.fontSize *= k
+                return .text(text)
+            }
+        }
+        return scene
+    }
+
+    private static func laidOut(_ diagram: MermaidDiagram, theme: RenderTheme,
+                                measure: DiagramTextMeasurer,
+                                spacing: DiagramSpacing) -> RenderScene? {
         switch diagram {
         case .flowchart(let chart):
             return from(DiagramLayoutEngine.layout(chart, measure: measure, spacing: spacing),

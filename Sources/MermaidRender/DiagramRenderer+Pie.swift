@@ -17,7 +17,7 @@ extension DiagramRenderer {
     static func draw(_ layout: PieLayout, theme: DiagramTheme, in context: CGContext) {
         if let title = layout.title {
             drawText(title,
-                     center: CGPoint(x: layout.center.x, y: layout.center.y - layout.radius - 16),
+                     center: CGPoint(x: layout.center.x, y: layout.center.y - layout.radius - DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, layoutMeasure)),
                      size: 12.5, weight: .semibold, color: theme.ink, in: context)
         }
 
@@ -57,7 +57,8 @@ extension DiagramRenderer {
         // Legend with value chips, vertically stacked.
         var y = layout.legendOrigin.y
         for slice in layout.slices {
-            let swatch = CGRect(x: layout.legendOrigin.x, y: y + 4, width: 10, height: 10)
+            let row = DiagramLayoutEngine.pieLegendRow(layoutMeasure)
+            let swatch = CGRect(x: layout.legendOrigin.x, y: y + (row - 10) / 2 - 1, width: 10, height: 10)
             context.saveGState()
             context.setFillColor(resolvedCGColor(theme.categoricalColor(slice.colorIndex)))
             context.addPath(CGPath(roundedRect: swatch, cornerWidth: 2, cornerHeight: 2, transform: nil))
@@ -70,7 +71,7 @@ extension DiagramRenderer {
             drawText(label,
                      center: CGPoint(x: swatch.maxX + 6 + size.width / 2, y: swatch.midY),
                      size: 10.5, color: theme.secondaryTextColor, in: context)
-            y += 20
+            y += row
         }
     }
 }

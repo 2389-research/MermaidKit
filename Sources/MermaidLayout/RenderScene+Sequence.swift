@@ -128,13 +128,13 @@ extension RenderScene {
                     .move(CGPoint(x: cx, y: top + 17)), .line(CGPoint(x: cx + 5, y: top + 24)),
                 ]), fill: nil, stroke: s)))
                 elements.append(.text(Text(
-                    string: head.label, center: CGPoint(x: cx, y: head.frame.maxY + 7),
+                    string: head.label, center: CGPoint(x: cx, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(measure)),
                     fontSize: 10.5, weight: .medium, color: theme.ink)))
             } else if head.kind != "participant" {
                 elements += participantGlyphElements(head.kind, frame: head.frame, theme: theme, stroke: stroke)
                 elements.append(.text(Text(
                     string: head.label,
-                    center: CGPoint(x: head.frame.midX, y: head.frame.maxY + 7),
+                    center: CGPoint(x: head.frame.midX, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(measure)),
                     fontSize: 10.5, weight: .medium, color: theme.ink)))
             } else {
                 elements.append(.shape(Shape(
@@ -169,10 +169,11 @@ extension RenderScene {
                 path: .roundedRect(note.frame, radius: 3),
                 fill: hue.withAlpha(0.18), stroke: Stroke(color: hue, width: 1))))
             let lines = DiagramLayoutEngine.brLines(note.text)
-            let startY = note.frame.midY - CGFloat(lines.count - 1) * 6.5
+            let pitch = DiagramLayoutEngine.sequenceTextMetrics(measure).noteLine
+            let startY = note.frame.midY - CGFloat(lines.count - 1) * pitch / 2
             for (i, line) in lines.enumerated() where !line.isEmpty {
                 elements.append(.text(Text(
-                    string: line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * 13),
+                    string: line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * pitch),
                     fontSize: 10.5, color: theme.ink)))
             }
         }
@@ -210,7 +211,8 @@ extension RenderScene {
                 if !arrow.text.isEmpty {
                     let lines = DiagramLayoutEngine.brLines(arrow.text)
                     for (i, line) in lines.enumerated() where !line.isEmpty {
-                        let lineY = arrow.y - 10 - CGFloat(lines.count - 1 - i) * 12
+                        let metrics = DiagramLayoutEngine.sequenceTextMetrics(measure)
+                        let lineY = arrow.y - metrics.rise - CGFloat(lines.count - 1 - i) * metrics.line
                         elements.append(.text(Text(
                             string: line,
                             center: CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: lineY),

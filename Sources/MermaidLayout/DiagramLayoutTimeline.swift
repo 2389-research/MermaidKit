@@ -12,17 +12,17 @@ extension DiagramLayoutEngine {
     /// first period. Pure geometry — the renderer only draws.
     public static func layout(_ timeline: Timeline, measure: DiagramTextMeasurer) -> TimelineLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = timeline.title == nil ? 0 : 26
-        let eventHeight: CGFloat = 24
+        let titleHeight: CGFloat = timeline.title == nil ? 0 : Self.titleHeight(26, measure)
+        let eventHeight: CGFloat = grown(24, fontSize: nodeFontSize, measure)
         let eventGap: CGFloat = 6
         let periodGap: CGFloat = 16
-        let sectionHeaderHeight: CGFloat = 22   // strip above a section's first period
+        let sectionHeaderHeight: CGFloat = grown(22, fontSize: 9.5, measure)   // strip above a section's first period
         let dotGap: CGFloat = 16                // spine → first event card
         let cardPadding: CGFloat = 10           // horizontal text inset inside a card
 
         // Left gutter sized to the widest period label (clamped).
         let labelWidth = timeline.periods.map { measure($0.label, labelFontSize).width }.max() ?? 40
-        let spineX = margin + min(max(labelWidth, 32), 120) + 12
+        let spineX = margin + min(max(labelWidth, 32), grown(120, fontSize: labelFontSize, measure)) + 12
         let cardX = spineX + dotGap
 
         // Card width tracks the widest event, clamped so one long event can't
@@ -31,7 +31,7 @@ extension DiagramLayoutEngine {
             .flatMap(\.events)
             .map { measure($0, nodeFontSize).width }
             .max() ?? 0
-        let cardWidth = min(max(widestEvent + cardPadding * 2, 60), 300)
+        let cardWidth = min(max(widestEvent + cardPadding * 2, 60), grown(300, fontSize: nodeFontSize, measure))
         let bandWidth = cardX + cardWidth - margin
 
         func colorIndex(for period: Timeline.Period, fallback: Int) -> Int {

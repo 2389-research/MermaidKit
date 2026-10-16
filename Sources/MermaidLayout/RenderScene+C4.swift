@@ -35,13 +35,12 @@ extension RenderScene {
     /// Any change to the drawn C4 appearance must land in both.
     public static func from(_ layout: C4Layout, theme: RenderTheme,
                             measure: DiagramTextMeasurer) -> RenderScene {
-        _ = measure
         var elements: [Element] = []
 
         // 1. Centered diagram title (drawDiagramTitle: 12.5pt semibold ink).
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 14),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.titleCenterY(measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 
@@ -75,24 +74,25 @@ extension RenderScene {
             }
 
             let midX = box.frame.midX
+            let pitch = DiagramLayoutEngine.c4LinePitches(measure)
             var y = box.frame.minY + 10                       // top padding
             elements.append(.text(Text(
-                string: box.stereotype, center: CGPoint(x: midX, y: y + 6.5),
+                string: box.stereotype, center: CGPoint(x: midX, y: y + pitch.stereotype / 2),
                 fontSize: 9.5, color: theme.secondaryText)))
-            y += 13 + 3                                        // stereoH + titleGap
+            y += pitch.stereotype + 3                          // + titleGap
             for line in box.titleLines {
                 elements.append(.text(Text(
-                    string: line, center: CGPoint(x: midX, y: y + 8),
+                    string: line, center: CGPoint(x: midX, y: y + pitch.title / 2),
                     fontSize: 12, weight: .semibold, color: theme.ink)))
-                y += 16
+                y += pitch.title
             }
             if !box.detailLines.isEmpty {
                 y += 4
                 for line in box.detailLines {
                     elements.append(.text(Text(
-                        string: line, center: CGPoint(x: midX, y: y + 6.5),
+                        string: line, center: CGPoint(x: midX, y: y + pitch.detail / 2),
                         fontSize: 10, color: theme.secondaryText)))
-                    y += 13
+                    y += pitch.detail
                 }
             }
         }

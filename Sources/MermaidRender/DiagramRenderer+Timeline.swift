@@ -24,7 +24,7 @@ extension DiagramRenderer {
             context.addPath(CGPath(roundedRect: band.frame, cornerWidth: 6, cornerHeight: 6, transform: nil))
             context.fillPath()
             context.restoreGState()
-            drawTextLeft(band.name, at: CGPoint(x: band.frame.minX + 8, y: band.frame.minY + 10),
+            drawTextLeft(band.name, at: CGPoint(x: band.frame.minX + 8, y: band.frame.minY + DiagramLayoutEngine.grown(10, fontSize: 9.5, layoutMeasure)),
                          size: 9.5, weight: .semibold, color: theme.tertiaryTextColor, in: context)
         }
 

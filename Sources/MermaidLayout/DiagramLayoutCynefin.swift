@@ -34,18 +34,27 @@ public struct CynefinLayout: Sendable {
 }
 
 extension DiagramLayoutEngine {
+
+    /// How much a Cynefin framework grows with its text: 1 at the default size.
+    /// Its quadrants, rows and heading offsets are all tuned to the text, so
+    /// they scale together; both renderers place the headings by it.
+    package static func cynefinScale(_ measure: DiagramTextMeasurer) -> CGFloat {
+        textGrowth(labelFontSize, measure)
+    }
     /// Lays out a Cynefin diagram: a fixed 2×2 (complex top-left,
     /// complicated top-right, chaotic bottom-left, clear bottom-right) with
     /// the confusion disk in the middle. Item text stacks under each domain
     /// heading; transitions run between quadrant centers, pulled toward the
     /// shared border so arrows don't cross the middle disk.
     public static func layout(_ diagram: CynefinDiagram, measure: DiagramTextMeasurer) -> CynefinLayout {
+        // Every quadrant, row and offset grows with the text (`cynefinScale`).
+        let g = cynefinScale(measure)
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = diagram.title == nil ? 0 : 26
-        let quadW: CGFloat = 250
+        let titleHeight: CGFloat = diagram.title == nil ? 0 : Self.titleHeight(26, measure)
+        let quadW: CGFloat = 250 * g
         // Height grows with the densest quadrant's item count.
         let maxItems = diagram.items.values.map(\.count).max() ?? 0
-        let quadH: CGFloat = max(150, 64 + CGFloat(maxItems) * 17)
+        let quadH: CGFloat = max(150, 64 + CGFloat(maxItems) * 17) * g
         let gap: CGFloat = 4
 
         let originY = margin + titleHeight
@@ -61,7 +70,7 @@ extension DiagramLayoutEngine {
             let items = (diagram.items[domain] ?? []).enumerated().map { i, text in
                 CynefinLayout.Item(text: text, center: CGPoint(
                     x: frame.midX,
-                    y: frame.minY + 52 + CGFloat(i) * 17))
+                    y: frame.minY + (52 + CGFloat(i) * 17) * g))
             }
             quadrants.append(.init(
                 domain: domain.rawValue, name: domain.rawValue.capitalized,
@@ -71,7 +80,7 @@ extension DiagramLayoutEngine {
 
         let full = CGRect(x: margin, y: originY,
                           width: quadW * 2 + gap, height: quadH * 2 + gap)
-        let centerRadius: CGFloat = 52
+        let centerRadius: CGFloat = 52 * g
         var center: CynefinLayout.Quadrant?
         let confusionItems = diagram.items[.confusion] ?? []
         if diagram.items.keys.contains(.confusion) || !confusionItems.isEmpty {
@@ -79,7 +88,7 @@ extension DiagramLayoutEngine {
                                width: centerRadius * 2, height: centerRadius * 2)
             let items = confusionItems.prefix(2).enumerated().map { i, text in
                 CynefinLayout.Item(text: text, center: CGPoint(
-                    x: frame.midX, y: frame.midY + 18 + CGFloat(i) * 15))
+                    x: frame.midX, y: frame.midY + (18 + CGFloat(i) * 15) * g))
             }
             center = .init(domain: "confusion", name: "Confusion",
                            heuristic: CynefinDiagram.Domain.confusion.heuristic,
@@ -117,7 +126,7 @@ extension DiagramLayoutEngine {
                 to.y += away.dy * shift
             }
             return .init(from: from, to: to, label: t.label,
-                         labelCenter: CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 10))
+                         labelCenter: CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 10 * g))
         }
 
         return CynefinLayout(

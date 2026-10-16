@@ -75,9 +75,9 @@ extension DiagramRenderer {
                 drawText(svc.label, center: CGPoint(x: f.midX, y: f.midY), size: 11.5,
                          weight: .medium, color: theme.ink, in: context)
             } else {
-                drawText(svc.label, center: CGPoint(x: f.midX, y: f.midY - 5), size: 11.5,
+                drawText(svc.label, center: CGPoint(x: f.midX, y: f.midY - DiagramLayoutEngine.architectureServiceText(layoutMeasure).labelRise), size: 11.5,
                          weight: .medium, color: theme.ink, in: context)
-                drawText(svc.icon, center: CGPoint(x: f.midX, y: f.maxY - 9), size: 8.5,
+                drawText(svc.icon, center: CGPoint(x: f.midX, y: f.maxY - DiagramLayoutEngine.architectureServiceText(layoutMeasure).iconInset), size: 8.5,
                          color: theme.tertiaryTextColor, in: context)
             }
         }

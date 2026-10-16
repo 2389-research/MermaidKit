@@ -92,13 +92,23 @@ enum DiagramRenderer {
 
     /// The per-type layout + draw plan every output backend shares: raster
     /// (attachmentString/image) and PDF both consume it, so a new diagram
-    /// type wired here reaches every format at once.
+    /// type wired here reaches every format at once. Layout runs, and the
+    /// returned `draw` runs whenever it's called, at `spacing.textScale`, so
+    /// every label is measured and drawn at its scaled size.
     static func renderPlan(
         for diagram: MermaidDiagram, theme: DiagramTheme, spacing: DiagramSpacing
     ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
-        let measure: DiagramTextMeasurer = { text, fontSize in
-            Self.measure(text, size: CGFloat(fontSize))
-        }
+        let k = spacing.textScale
+        let plan = $textScale.withValue(k) { unscaledRenderPlan(for: diagram, theme: theme, spacing: spacing) }
+        guard k != 1 else { return plan }
+        let draw = plan.draw
+        return (plan.size, plan.edgePolylines, { context in $textScale.withValue(k) { draw(context) } })
+    }
+
+    private static func unscaledRenderPlan(
+        for diagram: MermaidDiagram, theme: DiagramTheme, spacing: DiagramSpacing
+    ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
+        let measure = layoutMeasure
         let size: CGSize
         let draw: (CGContext) -> Void
         // Edge polylines whose routes or endpoint markers can reach past the
@@ -263,13 +273,26 @@ enum DiagramRenderer {
     /// format at once.
     static func captionedPlan(
         _ plan: (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void),
-        caption: String?, diagram: MermaidDiagram, theme: DiagramTheme
+        caption: String?, diagram: MermaidDiagram, theme: DiagramTheme, textScale: CGFloat
     ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
         // `caption` is the front-matter `title:` the parser already extracted
         // (threaded in via `parseWithMetadata`), not a re-scan of the source.
         guard diagram.titleText == nil, let caption
         else { return plan }
-        let band: CGFloat = 26
+        return $textScale.withValue(textScale) {
+            let captioned = captioned(plan, caption: caption, theme: theme)
+            guard textScale != 1 else { return captioned }
+            let draw = captioned.draw
+            return (captioned.size, captioned.edgePolylines,
+                    { context in $textScale.withValue(textScale) { draw(context) } })
+        }
+    }
+
+    private static func captioned(
+        _ plan: (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void),
+        caption: String, theme: DiagramTheme
+    ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
+        let band = DiagramLayoutEngine.titleHeight(26, layoutMeasure)
         let width = max(plan.size.width, measure(caption, size: 12.5, weight: .semibold).width + 16)
         let dx = (width - plan.size.width) / 2
         let size = CGSize(width: width, height: plan.size.height + band)
@@ -305,7 +328,7 @@ enum DiagramRenderer {
                             theme: DiagramTheme, spacing: DiagramSpacing = .regular) -> PlatformImage? {
         let (size, edgePolylines, draw) = captionedPlan(
             renderPlan(for: diagram, theme: theme, spacing: spacing),
-            caption: title, diagram: diagram, theme: theme)
+            caption: title, diagram: diagram, theme: theme, textScale: spacing.textScale)
         guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
         // The bitmap surface is whole pixels (ceil), so canvasSize is fractional
         // slightly smaller than the surface. Fill the FULL pixel rect, not
@@ -336,7 +359,7 @@ enum DiagramRenderer {
                       theme: DiagramTheme, spacing: DiagramSpacing = .regular) -> PlatformImage? {
         let (size, edgePolylines, draw) = captionedPlan(
             renderPlan(for: diagram, theme: theme, spacing: spacing),
-            caption: title, diagram: diagram, theme: theme)
+            caption: title, diagram: diagram, theme: theme, textScale: spacing.textScale)
         guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
         #if canImport(AppKit)
         let appearance = NSAppearance(named: theme.prefersDark ? .darkAqua : .aqua)
@@ -377,7 +400,7 @@ enum DiagramRenderer {
         do {
             let (size, edgePolylines, draw) = captionedPlan(
                 renderPlan(for: diagram, theme: theme, spacing: spacing),
-                caption: metadata.title, diagram: diagram, theme: theme)
+                caption: metadata.title, diagram: diagram, theme: theme, textScale: spacing.textScale)
             guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
 
             #if canImport(AppKit)

@@ -29,14 +29,19 @@ extension DiagramScene {
 
         // Title, centred above the disk (matches the renderer's placement).
         if let title = layout.title {
-            let w = CGFloat(max(title.count, 1)) * 7
+            // The width the layout reserved for it (measured, or the
+            // estimate when that's wider), at the renderer's center.
+            let w = max(measure(title, DiagramLayoutEngine.titleFontSize).width,
+                        DiagramScene.estimatedLabelSize(title).width)
+            let rise = DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)
+            let h = DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)
             labels.append(Label(
                 text: title,
                 frame: CGRect(
                     x: layout.center.x - w / 2,
-                    y: layout.center.y - layout.radius - 16 - 8,
+                    y: layout.center.y - layout.radius - rise - h / 2,
                     width: w,
-                    height: 16
+                    height: h
                 )
             ))
         }

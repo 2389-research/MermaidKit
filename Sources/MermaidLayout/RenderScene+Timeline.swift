@@ -19,7 +19,7 @@ extension RenderScene {
 
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 14),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.titleCenterY(measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 
@@ -30,7 +30,7 @@ extension RenderScene {
                 fill: theme.categoricalColor(band.colorIndex).withAlpha(0.10), stroke: nil)))
             if !band.name.isEmpty {
                 elements.append(.text(leftText(
-                    band.name, at: CGPoint(x: band.frame.minX + 8, y: band.frame.minY + 10),
+                    band.name, at: CGPoint(x: band.frame.minX + 8, y: band.frame.minY + DiagramLayoutEngine.grown(10, fontSize: 9.5, measure)),
                     fontSize: 9.5, weight: .semibold, color: theme.tertiaryText, measure: measure)))
             }
         }

@@ -32,7 +32,7 @@ extension DiagramLayoutEngine {
     /// full triple).
     public static func layout(_ venn: VennDiagram, measure: DiagramTextMeasurer) -> VennLayout {
         let margin: CGFloat = 22
-        let baseRadius: CGFloat = 92
+        let baseRadius: CGFloat = grown(92, fontSize: labelFontSize, measure)   // regions hold their labels at any text size
 
         // Radii: area ∝ size, normalized so the mean radius is baseRadius.
         let meanSize = venn.sets.map(\.size).reduce(0, +) / Double(venn.sets.count)

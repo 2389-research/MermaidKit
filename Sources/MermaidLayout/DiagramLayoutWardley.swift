@@ -46,10 +46,11 @@ extension DiagramLayoutEngine {
     /// evolve targets, and label collision staggering.
     public static func layout(_ map: WardleyMap, measure: DiagramTextMeasurer) -> WardleyLayout {
         let margin: CGFloat = 14
-        let axisGutter: CGFloat = 24
-        let titleHeight: CGFloat = map.title == nil ? 0 : 26
-        let plotW: CGFloat = 560
-        let plotH: CGFloat = 400
+        let axisGutter: CGFloat = grown(24, fontSize: 9.5, measure)
+        let titleHeight: CGFloat = map.title == nil ? 0 : Self.titleHeight(26, measure)
+        // The map grows with the text, so its components' labels keep room.
+        let plotW: CGFloat = grown(560, fontSize: labelFontSize, measure)
+        let plotH: CGFloat = grown(400, fontSize: labelFontSize, measure)
         let plot = CGRect(x: margin + axisGutter, y: margin + titleHeight,
                           width: plotW, height: plotH)
 

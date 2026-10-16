@@ -44,6 +44,14 @@ public struct ArchitectureLayout: Sendable {
 
 extension DiagramLayoutEngine {
 
+    /// How far an architecture service's label rises above its middle, and its
+    /// 8.5pt icon caption sits up from its bottom: 5 and 9 at the default size,
+    /// grown with the text. Both renderers place the text by them.
+    package static func architectureServiceText(_ measure: DiagramTextMeasurer)
+        -> (labelRise: CGFloat, iconInset: CGFloat) {
+        (grown(5, fontSize: 8.5, measure), grown(9, fontSize: 8.5, measure))
+    }
+
     /// Lays out an architecture diagram: group containers row-wrapped across
     /// the canvas with member services grid-packed inside each (ungrouped
     /// services form a borderless cluster), and wires routed by an
@@ -54,17 +62,17 @@ extension DiagramLayoutEngine {
         let margin = spacing.resolvedMargin(base: 16)
         let groupGap = spacing.resolvedNodeGap(base: 30)
         let groupPad: CGFloat = 16 * spacing.scale
-        let headerHeight: CGFloat = 22
+        let headerHeight: CGFloat = grown(22, fontSize: 11, measure)
         let serviceGap = spacing.resolvedNodeGap(base: 30)
-        let boxH: CGFloat = 54
+        let boxH: CGFloat = grown(54, fontSize: 11.5, measure)
         let junctionSize: CGFloat = 16
-        let maxRowWidth: CGFloat = 780
+        let maxRowWidth: CGFloat = grown(780, fontSize: 11.5, measure)
 
         // Per-service box width (junctions are fixed dots).
         func boxWidth(_ svc: ArchitectureDiagram.Service) -> CGFloat {
             if svc.isJunction { return junctionSize }
             let w = measure(svc.label, nodeFontSize).width + 22
-            return min(max(w, 68), 168)
+            return min(max(w, 68), grown(168, fontSize: 11.5, measure))
         }
 
         // Grid-place a list of services at a content origin; returns their

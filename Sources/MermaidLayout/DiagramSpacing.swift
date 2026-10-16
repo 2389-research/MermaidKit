@@ -31,15 +31,27 @@ public struct DiagramSpacing: Hashable, Sendable {
     /// this pitch (the internal `GridQuantizer`). Opt-in and off by default; 4 is
     /// the natural unit. Other diagram types ignore it today.
     public var gridSnap: CGFloat?
+    /// Multiplier on every label's point size — Dynamic Type for diagrams.
+    /// Unlike scaling the finished image, text is laid out at the larger size:
+    /// boxes, rows, the gaps labels sit in and canvases grow to fit it, while
+    /// lines and markers keep their weight. The default size (1) lays out
+    /// exactly as before. `MermaidView` sets it from the environment's Dynamic
+    /// Type size; other hosts pass their text size over the default (20/17
+    /// for body text at 20pt). Clamped to 0.5…3, about the span of Dynamic
+    /// Type's sizes.
+    public var textScale: CGFloat {
+        didSet { textScale = min(max(textScale, 0.5), 3) }
+    }
 
     public init(scale: CGFloat = 1, nodeGap: CGFloat? = nil,
                 layerGap: CGFloat? = nil, margin: CGFloat? = nil,
-                gridSnap: CGFloat? = nil) {
+                gridSnap: CGFloat? = nil, textScale: CGFloat = 1) {
         self.scale = max(scale, 0.4)   // below this, labels physically collide
         self.nodeGap = nodeGap
         self.layerGap = layerGap
         self.margin = margin
         self.gridSnap = gridSnap.map { max($0, 0) }
+        self.textScale = min(max(textScale, 0.5), 3)
     }
 
     /// The tuned defaults every fixture and benchmark runs at.
@@ -53,6 +65,15 @@ public struct DiagramSpacing: Hashable, Sendable {
     public var fingerprint: String {
         func f(_ v: CGFloat?) -> String { v.map { String(format: "%.1f", $0) } ?? "-" }
         return "s\(String(format: "%.2f", scale))|\(f(nodeGap))|\(f(layerGap))|\(f(margin))|g\(f(gridSnap))"
+            + "|t\(String(format: "%.2f", textScale))"
+    }
+
+    /// `measure`, asked for every size at `textScale` times it, so a layout
+    /// sizes its boxes for the text as drawn.
+    func scaling(_ measure: @escaping DiagramTextMeasurer) -> DiagramTextMeasurer {
+        let k = Double(textScale)
+        guard k != 1 else { return measure }
+        return { text, size in measure(text, size * k) }
     }
 
     // Engines resolve their tuned base values through these.

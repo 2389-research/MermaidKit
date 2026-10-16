@@ -87,10 +87,10 @@ extension RenderScene {
                     fontSize: 11.5, weight: .medium, color: theme.ink)))
             } else {
                 elements.append(.text(Text(
-                    string: svc.label, center: CGPoint(x: f.midX, y: f.midY - 5),
+                    string: svc.label, center: CGPoint(x: f.midX, y: f.midY - DiagramLayoutEngine.architectureServiceText(measure).labelRise),
                     fontSize: 11.5, weight: .medium, color: theme.ink)))
                 elements.append(.text(Text(
-                    string: svc.icon, center: CGPoint(x: f.midX, y: f.maxY - 9),
+                    string: svc.icon, center: CGPoint(x: f.midX, y: f.maxY - DiagramLayoutEngine.architectureServiceText(measure).iconInset),
                     fontSize: 8.5, color: theme.tertiaryText)))
             }
         }

@@ -28,7 +28,7 @@ extension RenderScene {
         // 1. Optional centered title.
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 14),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.titleCenterY(measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 
@@ -62,7 +62,7 @@ extension RenderScene {
                 if !arrow.label.isEmpty {
                     elements.append(.text(Text(
                         string: arrow.label,
-                        center: CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: arrow.y - 9),
+                        center: CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: arrow.y - DiagramLayoutEngine.zenUMLLabelRise(measure)),
                         fontSize: 10.5, color: theme.secondaryText, backing: theme.canvas)))
                 }
             }
@@ -76,10 +76,10 @@ extension RenderScene {
                 fill: color.withAlpha(0.14), stroke: Stroke(color: color.withAlpha(0.6), width: 1))))
             if let s = p.stereotype {
                 elements.append(.text(Text(
-                    string: s, center: CGPoint(x: p.frame.midX, y: p.frame.minY + 12),
+                    string: s, center: CGPoint(x: p.frame.midX, y: p.frame.minY + DiagramLayoutEngine.zenUMLBoxMetrics(measure).stereotypeY),
                     fontSize: 8.5, color: theme.tertiaryText)))
                 elements.append(.text(Text(
-                    string: p.name, center: CGPoint(x: p.frame.midX, y: p.frame.minY + 25),
+                    string: p.name, center: CGPoint(x: p.frame.midX, y: p.frame.minY + DiagramLayoutEngine.zenUMLBoxMetrics(measure).nameY),
                     fontSize: 12, weight: .medium, color: theme.ink)))
             } else {
                 elements.append(.text(Text(

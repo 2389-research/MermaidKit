@@ -30,9 +30,9 @@ extension DiagramLayoutEngine {
     /// consecutive frames connect with elbows.
     public static func layout(_ diagram: EventModelingDiagram, measure: DiagramTextMeasurer) -> EventModelingLayout {
         let margin: CGFloat = 14
-        let gutter: CGFloat = 86
+        let gutter: CGFloat = grown(86, fontSize: 9.5, measure)
         let columnGap: CGFloat = 22
-        let boxHeight: CGFloat = 34
+        let boxHeight: CGFloat = grown(34, fontSize: labelFontSize, measure)
         let lanePad: CGFloat = 14
 
         // Lane order per the method: UI, command/readmodel (interface row),

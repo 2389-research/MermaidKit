@@ -24,7 +24,7 @@ extension DiagramScene {
                 // frame; extend the node so the linter sees the text too.
                 var frame = head.frame
                 if head.isActor || head.kind != "participant" {
-                    frame.size.height += 14
+                    frame.size.height += 2 * DiagramLayoutEngine.sequenceNameDrop(measure)
                 }
                 return Node(id: head.label, frame: frame, isContainer: false)
             } + layout.notes.map { note in
@@ -88,13 +88,15 @@ extension DiagramScene {
                     )
                 }
                 // Drawn ABOVE the arrow: line i centres at
-                // y - 10 - (n-1-i)*12, so the block spans upward from the row.
-                let blockHeight = 14 + CGFloat(lines.count - 1) * 12
+                // y - rise - (n-1-i)*line, so the block spans upward from the row.
+                let metrics = DiagramLayoutEngine.sequenceTextMetrics(measure)
+                let lineHeight = metrics.arrowInset   // a 10.5pt line: 14 at the default size
+                let blockHeight = lineHeight + CGFloat(lines.count - 1) * metrics.line
                 let midX = (arrow.fromX + arrow.toX) / 2
                 return Label(
                     text: arrow.text,
                     frame: CGRect(x: midX - width / 2,
-                                  y: arrow.y - 10 - CGFloat(lines.count - 1) * 12 - 7,
+                                  y: arrow.y - metrics.rise - CGFloat(lines.count - 1) * metrics.line - lineHeight / 2,
                                   width: width, height: blockHeight),
                     anchorEdge: index
                 )

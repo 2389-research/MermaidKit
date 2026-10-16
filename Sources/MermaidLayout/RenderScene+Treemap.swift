@@ -31,26 +31,26 @@ extension RenderScene {
                     fill: tint.withAlpha(0.30),
                     stroke: Stroke(color: tint.withAlpha(0.6), width: 1))))
 
-                if cell.frame.width > 40, cell.frame.height > 20,
+                if cell.frame.width > 40, cell.frame.height > DiagramLayoutEngine.treemapText(measure).leafMinHeight,
                    measure(cell.label, 10).width <= cell.frame.width - 8 {
                     elements.append(.text(Text(
                         string: cell.label,
-                        center: CGPoint(x: cell.frame.midX, y: cell.frame.midY - 5),
+                        center: CGPoint(x: cell.frame.midX, y: cell.frame.midY - DiagramLayoutEngine.treemapText(measure).labelRise),
                         fontSize: 10, color: theme.ink)))
                     elements.append(.text(Text(
                         string: formatTreemapValue(cell.value),
-                        center: CGPoint(x: cell.frame.midX, y: cell.frame.midY + 9),
+                        center: CGPoint(x: cell.frame.midX, y: cell.frame.midY + DiagramLayoutEngine.treemapText(measure).valueDrop),
                         fontSize: 9, color: theme.secondaryText)))
                 }
             } else {
                 elements.append(.shape(Shape(
                     path: .roundedRect(cell.frame, radius: 0), fill: nil,
                     stroke: Stroke(color: tint.withAlpha(0.7), width: cell.depth == 1 ? 1.5 : 1))))
-                if cell.frame.height > 44, cell.frame.width > 40,
+                if cell.frame.height > DiagramLayoutEngine.treemapText(measure).groupMinHeight, cell.frame.width > 40,
                    measure(cell.label, 9.5).width <= cell.frame.width - 12 {
                     elements.append(.text(leftText(
                         cell.label,
-                        at: CGPoint(x: cell.frame.minX + 6, y: cell.frame.minY + 10),
+                        at: CGPoint(x: cell.frame.minX + 6, y: cell.frame.minY + DiagramLayoutEngine.treemapText(measure).headerY),
                         fontSize: 9.5, weight: .semibold, color: theme.secondaryText,
                         measure: measure)))
                 }

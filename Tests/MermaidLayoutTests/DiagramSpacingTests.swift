@@ -70,4 +70,66 @@ final class DiagramSpacingTests: XCTestCase {
         XCTAssertEqual(DiagramLayoutLinter.lint(flowScene).filter { $0.severity == .error }.count, 0,
                        "compact flowchart layout must stay occlusion-free")
     }
+
+    // MARK: Text scale
+
+    func testTextScaleDefaultsToOneAndClamps() {
+        XCTAssertEqual(DiagramSpacing().textScale, 1)
+        XCTAssertEqual(DiagramSpacing(textScale: 0.1).textScale, 0.5)
+        XCTAssertEqual(DiagramSpacing(textScale: 9).textScale, 3)
+        var spacing = DiagramSpacing()
+        spacing.textScale = 12
+        XCTAssertEqual(spacing.textScale, 3, "setting it clamps too")
+    }
+
+    /// Cached renders key on the fingerprint, so a text size must change it.
+    func testTextScaleIsInTheFingerprint() {
+        XCTAssertNotEqual(DiagramSpacing().fingerprint, DiagramSpacing(textScale: 1.35).fingerprint)
+        XCTAssertEqual(DiagramSpacing().fingerprint, DiagramSpacing(textScale: 1).fingerprint)
+    }
+
+    /// A treemap group reserves its header strip exactly where a renderer
+    /// draws the header, at every text size: no children under an empty strip.
+    func testTreemapReservesHeadersOnlyWhereDrawn() throws {
+        guard case .treemap(let treemap) = try fixture("treemap") else { return XCTFail() }
+        for k in [1.0, 1.35, 2.0, 3.0] {
+            let scaled = DiagramSpacing(textScale: k).scaling(measure)
+            let layout = DiagramLayoutEngine.layout(treemap, measure: scaled)
+            let header = DiagramLayoutEngine.grown(16, fontSize: 9.5, scaled)
+            for group in layout.cells where !group.isLeaf {
+                let children = layout.cells.filter {
+                    $0.depth == group.depth + 1 && group.frame.contains($0.frame)
+                }
+                guard let top = children.map(\.frame.minY).min() else { continue }
+                let drawn = group.frame.height > DiagramLayoutEngine.treemapText(scaled).groupMinHeight
+                    && group.frame.width > 40 && scaled(group.label, 9.5).width <= group.frame.width - 12
+                XCTAssertEqual(top, group.frame.minY + 2 + (drawn ? header : 0), accuracy: 0.01,
+                               "\(group.label) at \(k)×")
+            }
+        }
+    }
+
+    /// Every fixture lints clean with its text from xSmall to an
+    /// accessibility size (2 is about AX2). At 3 two routing findings remain:
+    /// the flowchart's long back-edge label leaves no stub, and two of the
+    /// state diagram's antiparallel edges share a run.
+    func testFixturesLintCleanAtLargerText() throws {
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/diagrams")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "mmd" }
+        for k in [0.82, 1.35, 2.0] {
+            // The geometry measurer at k: what `DiagramSpacing(textScale: k)`
+            // does to any measurer.
+            let scaled = DiagramSpacing(textScale: k).scaling(measure)
+            for url in files {
+                let name = url.deletingPathExtension().lastPathComponent
+                let diagram = try XCTUnwrap(MermaidParser.parse(try String(contentsOf: url, encoding: .utf8)), name)
+                let errors = DiagramLayoutLinter.lint(DiagramScene.lower(diagram, measure: scaled))
+                    .filter { $0.severity == .error }
+                XCTAssertTrue(errors.isEmpty, "\(name) at \(k)×: " + errors.prefix(3).map(\.detail).joined(separator: " | "))
+            }
+        }
+    }
 }

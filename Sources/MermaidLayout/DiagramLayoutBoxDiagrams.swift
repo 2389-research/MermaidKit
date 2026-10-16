@@ -31,6 +31,10 @@ extension DiagramLayoutEngine {
             }
         }
 
+        // The name strip and member rows grow with the text (the renderers draw
+        // by the layout's nameHeight and rowHeight).
+        let compartmentNameHeight = grown(Self.compartmentNameHeight, fontSize: nodeFontSize, measure)
+        let compartmentRowHeight = grown(Self.compartmentRowHeight, fontSize: labelFontSize, measure)
         var boxSizes: [String: CGSize] = [:]
         for cls in diagram.classes {
             let members = cls.attributes + cls.methods
@@ -53,7 +57,7 @@ extension DiagramLayoutEngine {
             sizes: boxSizes,
             layeringEdges: layeringEdges,
             routingEdges: diagram.relations.map { (from: $0.from, to: $0.to) },
-            layerGap: spacing.resolvedLayerGap(base: 66),
+            layerGap: spacing.resolvedLayerGap(base: grown(66, fontSize: labelFontSize, measure)),
             nodeGap: spacing.resolvedNodeGap(base: 30),
             margin: spacing.resolvedMargin(base: 14),
             edgeLabelSizes: diagram.relations.map { relation in
@@ -90,6 +94,10 @@ extension DiagramLayoutEngine {
     /// geometry — the renderer only draws.
     public static func layout(_ diagram: ERDiagram, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> ERLayout {
+        // The name strip and member rows grow with the text (the renderers draw
+        // by the layout's nameHeight and rowHeight).
+        let compartmentNameHeight = grown(Self.compartmentNameHeight, fontSize: nodeFontSize, measure)
+        let compartmentRowHeight = grown(Self.compartmentRowHeight, fontSize: labelFontSize, measure)
         var boxSizes: [String: CGSize] = [:]
         for entity in diagram.entities {
             var width = measure(entity.name, nodeFontSize).width + compartmentPadX * 2 + 8
@@ -112,7 +120,7 @@ extension DiagramLayoutEngine {
             sizes: boxSizes,
             layeringEdges: diagram.relations.map { ($0.from, $0.to) },
             routingEdges: diagram.relations.map { (from: $0.from, to: $0.to) },
-            layerGap: spacing.resolvedLayerGap(base: 66),
+            layerGap: spacing.resolvedLayerGap(base: grown(66, fontSize: labelFontSize, measure)),
             nodeGap: spacing.resolvedNodeGap(base: 30),
             margin: spacing.resolvedMargin(base: 14),
             edgeLabelSizes: diagram.relations.map { relation in
@@ -187,6 +195,7 @@ extension DiagramLayoutEngine {
     ) -> StateScopeResult {
         var sizes: [String: CGSize] = [:]
         var childResults: [String: StateScopeResult] = [:]
+        let stateTitleHeight = grown(Self.stateTitleHeight, fontSize: nodeFontSize, measure)
 
         for node in diagram.nodes {
             switch node.kind {
@@ -216,7 +225,7 @@ extension DiagramLayoutEngine {
             sizes: sizes,
             layeringEdges: diagram.edges.map { ($0.from, $0.to) },
             routingEdges: diagram.edges.map { (from: $0.from, to: $0.to) },
-            layerGap: spacing.resolvedLayerGap(base: 54),
+            layerGap: spacing.resolvedLayerGap(base: grown(54, fontSize: labelFontSize, measure)),
             nodeGap: spacing.resolvedNodeGap(base: 26),
             margin: spacing.resolvedMargin(base: 6),
             edgeLabelSizes: diagram.edges.map { edge in

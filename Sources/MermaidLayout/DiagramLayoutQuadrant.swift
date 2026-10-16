@@ -11,10 +11,10 @@ extension DiagramLayoutEngine {
     /// Coordinates are 0…1 (x left→right, y bottom→top). Pure geometry.
     public static func layout(_ chart: QuadrantChart, measure: DiagramTextMeasurer) -> QuadrantLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = chart.title == nil ? 0 : 26
-        let side: CGFloat = 460
-        let yGutter: CGFloat = 20        // left strip for rotated y-axis labels
-        let xStrip: CGFloat = 22         // bottom strip for x-axis labels
+        let titleHeight: CGFloat = chart.title == nil ? 0 : Self.titleHeight(26, measure)
+        let side: CGFloat = grown(460, fontSize: labelFontSize, measure)   // points' labels need room to spread
+        let yGutter: CGFloat = grown(20, fontSize: 9.5, measure)   // left strip for rotated y-axis labels
+        let xStrip: CGFloat = grown(22, fontSize: 9.5, measure)    // bottom strip for x-axis labels
         let dotRadius: CGFloat = 4
 
         let plotRect = CGRect(x: margin + yGutter, y: margin + titleHeight, width: side, height: side)
