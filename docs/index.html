@@ -241,7 +241,12 @@
 
   /* Install + snippet split */
   .split{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start}
-  .tsfig img{width:100%; height:auto; display:block; border-radius:var(--radius); border:1px solid var(--line); background:var(--bg)}
+  /* Both diagrams at the same pixel scale, so 2x text really is twice as tall:
+     the box is the 2x image's natural width (701px) and the 1x image is
+     497/701 of it, so they shrink together on narrow screens. */
+  .tsstack{max-width:701px; margin-top:22px; display:grid; gap:18px}
+  .tsfig img{height:auto; display:block; border-radius:var(--radius); border:1px solid var(--line); background:var(--bg)}
+  .tsfig.one img{width:70.9%} .tsfig.two img{width:100%}
   .tsfig figcaption{margin-top:8px; font-size:.83rem; color:var(--muted)}
   .tsfig figcaption b{color:var(--fg); font-weight:600}
   @media (max-width:760px){.split{grid-template-columns:1fr}}
@@ -457,9 +462,9 @@ flowchart TD
   <div class="kicker">New in 2.5 — Dynamic Type</div>
   <h2>Diagram text follows the reader's text size.</h2>
   <p class="lead">Larger text is laid out larger: boxes, rows and the gaps labels sit in grow around it, while lines, arrowheads and markers keep their weight. That's different from scaling up a finished image, which thickens every line and blurs bitmaps. <code>MermaidView</code> follows Dynamic Type, Android's <code>MermaidDiagram</code> the system font size, and <code>DiagramSpacing(textScale:)</code> sets it anywhere, Flutter and .NET included. The default size is byte-identical to a render without it.</p>
-  <div class="split" style="margin-top:22px">
-    <figure class="tsfig"><picture><source media="(prefers-color-scheme:dark)" srcset="images/textscale-1-dark.png"><img loading="lazy" src="images/textscale-1.png" alt="A flowchart at the default text size"></picture><figcaption><b>Default</b> — <code>textScale: 1</code></figcaption></figure>
-    <figure class="tsfig"><picture><source media="(prefers-color-scheme:dark)" srcset="images/textscale-2-dark.png"><img loading="lazy" src="images/textscale-2.png" alt="The same flowchart at twice the text size: the boxes grew around the text and the lines kept their weight"></picture><figcaption><b>Accessibility size</b> — <code>textScale: 2</code></figcaption></figure>
+  <div class="tsstack">
+    <figure class="tsfig one"><picture><source media="(prefers-color-scheme:dark)" srcset="images/textscale-1-dark.png"><img loading="lazy" src="images/textscale-1.png" alt="A flowchart at the default text size"></picture><figcaption><b>Default</b> — <code>textScale: 1</code></figcaption></figure>
+    <figure class="tsfig two"><picture><source media="(prefers-color-scheme:dark)" srcset="images/textscale-2-dark.png"><img loading="lazy" src="images/textscale-2.png" alt="The same flowchart at twice the text size: the boxes grew around the text and the lines kept their weight"></picture><figcaption><b>Accessibility size</b> — <code>textScale: 2</code></figcaption></figure>
   </div>
 <pre style="margin-top:22px"><span class="tt">MermaidView</span>(source)   <span class="tc">// follows Dynamic Type</span>
 
