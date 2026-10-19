@@ -31,21 +31,21 @@ extension DiagramRenderer {
             context.restoreGState()
 
             // Bit indices at the segment's top corners.
-            drawText("\(segment.startBit)", center: CGPoint(x: segment.frame.minX + 9, y: segment.frame.minY + 7),
+            drawText("\(segment.startBit)", center: CGPoint(x: segment.frame.minX + DiagramLayoutEngine.packetTextInsets(layoutMeasure).indexX, y: segment.frame.minY + DiagramLayoutEngine.packetTextInsets(layoutMeasure).indexY),
                      size: 7.5, color: theme.tertiaryTextColor, in: context)
             if segment.endBit != segment.startBit {
-                drawText("\(segment.endBit)", center: CGPoint(x: segment.frame.maxX - 9, y: segment.frame.minY + 7),
+                drawText("\(segment.endBit)", center: CGPoint(x: segment.frame.maxX - DiagramLayoutEngine.packetTextInsets(layoutMeasure).indexX, y: segment.frame.minY + DiagramLayoutEngine.packetTextInsets(layoutMeasure).indexY),
                          size: 7.5, color: theme.tertiaryTextColor, in: context)
             }
 
             switch segment.labelMode {
             case .horizontal:
-                drawText(segment.label, center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + 3),
+                drawText(segment.label, center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + DiagramLayoutEngine.packetTextInsets(layoutMeasure).labelDrop),
                          size: labelSize, color: theme.ink, in: context)
             case .vertical:
                 // Rotated label for narrow fields (e.g. TCP flags), below the
                 // bit-index strip.
-                drawTextRotated(segment.label, center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + 5),
+                drawTextRotated(segment.label, center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + DiagramLayoutEngine.packetTextInsets(layoutMeasure).labelDrop + 2),
                                 size: labelSize, color: theme.ink, in: context)
             case .none:
                 break

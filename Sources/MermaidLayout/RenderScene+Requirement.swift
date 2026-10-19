@@ -27,10 +27,8 @@ extension RenderScene {
         }
 
         let padding: CGFloat = 11
-        let stereoH: CGFloat = 14
-        let nameH: CGFloat = 20
+        let (stereoH, nameH, lineH) = DiagramLayoutEngine.requirementRows(measure)
         let sepGap: CGFloat = 8
-        let lineH: CGFloat = 15
 
         // 2. Requirement / element boxes.
         for box in layout.boxes {

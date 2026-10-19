@@ -37,10 +37,31 @@ extension DiagramRenderer {
     private static let measureCache = MeasureCache()
     #endif
 
-    /// Measures `text`, honoring `<br/>`/`\n` line breaks: the width is the
-    /// widest line, the height the sum of the line heights. Single-line labels
-    /// (the common case) skip the split via a cheap `hasLineBreak` guard.
+    /// The render's `DiagramSpacing.textScale` (``DiagramTextScale``), set by
+    /// `renderPlan` around layout and drawing. The renderer's own `measure` and
+    /// `drawText` multiply every size they're given by it, so the per-type
+    /// drawing code keeps its base sizes; the public `MermaidRenderer.textMeasurer`
+    /// does not, so headless callers get plain metrics.
+    static var textScale: CGFloat { DiagramTextScale.current }
+
+    /// Measures at exactly `size` — the public, scope-independent measurer.
+    static func measureUnscaled(_ text: String, size: CGFloat) -> CGSize {
+        measureScaled(text, size: size, weight: .regular)
+    }
+
+    /// `measure` as the layout engines take it (regular weight).
+    static var layoutMeasure: DiagramTextMeasurer { { text, size in measure(text, size: CGFloat(size)) } }
+
+    /// Measures `text` at `size` × ``textScale``, honoring `<br/>`/`\n` line
+    /// breaks: the width is the widest line, the height the sum of the line
+    /// heights.
     static func measure(_ text: String, size: CGFloat, weight: PlatformFont.Weight = .regular) -> CGSize {
+        measureScaled(text, size: size * textScale, weight: weight)
+    }
+
+    /// `measure` at a size already scaled. Single-line labels (the common
+    /// case) skip the split via a cheap `hasLineBreak` guard.
+    private static func measureScaled(_ text: String, size: CGFloat, weight: PlatformFont.Weight) -> CGSize {
         guard hasLineBreak(text) else { return measureLine(text, size: size, weight: weight) }
         let lines = DiagramLayoutEngine.brLines(text)
         switch lines.count {
@@ -102,8 +123,9 @@ extension DiagramRenderer {
     nonisolated(unsafe) static var textCaptureSuspended = false
     #endif
 
-    /// Draws `text` centered on `center`, honoring `<br/>`/`\n` line breaks:
-    /// lines stack top-to-bottom with the whole block centered on `center`.
+    /// Draws `text` at `size` × ``textScale``, centered on `center`, honoring
+    /// `<br/>`/`\n` line breaks: lines stack top-to-bottom with the whole block
+    /// centered on `center`.
     static func drawText(
         _ text: String,
         center: CGPoint,
@@ -113,11 +135,12 @@ extension DiagramRenderer {
         in context: CGContext
     ) {
         guard !text.isEmpty else { return }
+        let size = size * textScale
         #if DEBUG
         // One capture for the whole (possibly multi-line) block, so the
         // conformance test sees it against the scene label's block-sized frame.
         if let hook = textCaptureHook, !textCaptureSuspended {
-            let measured = measure(text, size: size, weight: weight)
+            let measured = measureScaled(text, size: size, weight: weight)
             hook(text, CGRect(x: center.x - measured.width / 2,
                               y: center.y - measured.height / 2,
                               width: measured.width, height: measured.height))
@@ -210,10 +233,11 @@ extension DiagramRenderer {
     }
 
     /// The standard centred diagram title — one implementation for the nine
-    /// chart types that draw one (12.5pt semibold ink, centred at y = 14).
+    /// chart types that draw one (12.5pt semibold ink, centred at y = 14, lower
+    /// for larger text — `DiagramLayoutEngine.titleCenterY`).
     static func drawDiagramTitle(_ title: String?, width: CGFloat, theme: DiagramTheme, in context: CGContext) {
         guard let title, !title.isEmpty else { return }
-        drawText(title, center: CGPoint(x: width / 2, y: 14),
+        drawText(title, center: CGPoint(x: width / 2, y: DiagramLayoutEngine.titleCenterY(layoutMeasure)),
                  size: 12.5, weight: .semibold, color: theme.ink, in: context)
     }
 

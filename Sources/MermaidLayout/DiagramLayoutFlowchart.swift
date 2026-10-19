@@ -101,6 +101,14 @@ extension DiagramLayoutEngine {
     /// renderer only draws.
     public static func layout(_ chart: Flowchart, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> FlowchartLayout {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLayout(chart, measure: measure, spacing: spacing)
+        }
+    }
+
+    /// ``layout(_:measure:spacing:)`` with `measure` already at the text scale.
+    private static func scaledLayout(_ chart: Flowchart, measure: DiagramTextMeasurer,
+                                     spacing: DiagramSpacing) -> FlowchartLayout {
         // Flat charts (the common case) take the algorithm below directly.
         // Subgraphs route through the recursive cluster wrapper, which lays
         // out each group's interior as its own sub-chart and places it as a
@@ -1396,12 +1404,52 @@ extension DiagramLayoutEngine {
                              : lines.joined(separator: " ")
     }
 
+    /// How far below its head frame an actor or typed glyph's name is centered:
+    /// 7 at the default size, grown with its 12pt text. Both renderers place
+    /// the name by it and the lint scene extends the head to cover it.
+    package static func sequenceNameDrop(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(7, fontSize: nodeFontSize, measure)
+    }
+
+    /// A sequence message's 10.5pt label lines — the last centered `rise`
+    /// above the arrow, the rest stacked `line` apart above it, the arrow
+    /// `arrowInset` up from its row's bottom — and a note's line pitch: 10,
+    /// 12, 14 and 13 at the default size, grown with the text. The layout,
+    /// both renderers and the lint scene place the text by them. The message
+    /// pitch is a little under a line at the default size, so it's also kept
+    /// within a point of the measured line, or larger text would overlap.
+    package static func sequenceTextMetrics(_ measure: DiagramTextMeasurer)
+        -> (rise: CGFloat, line: CGFloat, arrowInset: CGFloat, noteLine: CGFloat) {
+        let line = max(grown(12, fontSize: labelFontSize, measure), measure("Mg", labelFontSize).height - 1)
+        return (grown(10, fontSize: labelFontSize, measure), line,
+                grown(14, fontSize: labelFontSize, measure), grown(13, fontSize: labelFontSize, measure))
+    }
+
+    /// The strip at the top of a sequence `box` band that holds its 9pt label:
+    /// the band starts 6 above the margin, its label is centered in the strip,
+    /// and boxed heads start below it (18 at the default size, so heads sit at
+    /// margin + 12 and the label at the band's top + 9). Layout, both renderers
+    /// and the lint scene place the label by it.
+    package static func sequenceBoxStrip(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(18, fontSize: 9, measure)
+    }
+
+    /// Height of a fragment's kind tab (`loop`, `alt`, …), whose 9pt kind and
+    /// [guard] labels are centered on it: 15 at the default size.
+    package static func sequenceFragmentTab(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(15, fontSize: 9, measure)
+    }
+
     public static func layout(_ diagram: SequenceDiagram, measure: DiagramTextMeasurer) -> SequenceLayout {
         let margin: CGFloat = 12
         let headPaddingX: CGFloat = 14
-        let headHeight: CGFloat = 30
-        let rowHeight: CGFloat = 34
-        let minColumn: CGFloat = 110
+        let headHeight: CGFloat = grown(30, fontSize: nodeFontSize, measure)
+        let rowHeight: CGFloat = grown(34, fontSize: labelFontSize, measure)
+        // The room between lifelines holds message labels, so the minimum
+        // column, the gap between columns and a label's clearance grow with
+        // the text (all as before at the default size).
+        let minColumn: CGFloat = grown(110, fontSize: labelFontSize, measure)
+        let columnGap: CGFloat = grown(24, fontSize: labelFontSize, measure)
 
         // Column widths driven by head labels and message texts.
         var columnWidth: [CGFloat] = diagram.participants.map { participant in
@@ -1412,7 +1460,7 @@ extension DiagramLayoutEngine {
         for message in diagram.messages {
             guard let a = indexOf[message.from], let b = indexOf[message.to], abs(a - b) == 1 else { continue }
             let widest = brLines(message.text).map { measure($0, labelFontSize).width }.max() ?? 0
-            let needed = widest + 24
+            let needed = widest + columnGap
             let lo = min(a, b)
             columnWidth[lo] = max(columnWidth[lo], needed)
         }
@@ -1422,19 +1470,24 @@ extension DiagramLayoutEngine {
         let boxed = Set(diagram.boxes.flatMap(\.memberIDs))
         for (i, participant) in diagram.participants.enumerated() {
             let width = columnWidth[i]
-            // Boxed participants drop 12pt so the band's label has clear
-            // headroom above their head boxes.
-            let headY = boxed.contains(participant.id) ? margin + 12 : margin
+            // Boxed participants sit below their band's label strip, so the
+            // label has clear headroom above their head boxes.
+            let headY = boxed.contains(participant.id) ? margin - 6 + sequenceBoxStrip(measure) : margin
             heads.append(SequenceLayout.Head(
                 label: participant.label,
                 frame: CGRect(x: x, y: headY, width: width, height: headHeight),
                 isActor: participant.isActor,
                 kind: participant.kind.rawValue
             ))
-            x += width + 24
+            x += width + columnGap
         }
 
-        let arrowsTop = margin + headHeight + 18
+        // Room under the heads for an actor's name below its figure, grown with
+        // the text; boxed heads sit lower by however much their band's label
+        // strip grew past its default 18 (so, at the default size, exactly
+        // margin + headHeight + 18 as before).
+        let boxDrop = boxed.isEmpty ? 0 : sequenceBoxStrip(measure) - 18
+        let arrowsTop = margin + headHeight + grown(18, fontSize: labelFontSize, measure) + boxDrop
         // ROW STREAM: messages, notes, and fragment frames consume rows in
         // exact source order, each row sized to its content — the memo's
         // "typed row stream" model. Legacy diagrams (hand-built, no events)
@@ -1454,8 +1507,8 @@ extension DiagramLayoutEngine {
         }
 
         let noteRowHeight = rowHeight
-        let openRowHeight: CGFloat = 24
-        let dividerRowHeight: CGFloat = 22
+        let openRowHeight: CGFloat = grown(24, fontSize: 9.5, measure)
+        let dividerRowHeight: CGFloat = grown(22, fontSize: 9.5, measure)
         let closeRowHeight: CGFloat = 12
 
         struct OpenFrame {
@@ -1501,14 +1554,16 @@ extension DiagramLayoutEngine {
                 let isSelf = a == b
                 let toX = isSelf ? heads[a].lifelineX + 34 : heads[b].lifelineX
                 // Multiline labels stack above the arrow: the row grows.
-                let extraLines = CGFloat(max(brLines(message.text).count - 1, 0)) * 12
+                let metrics = sequenceTextMetrics(measure)
+                let extraLines = CGFloat(max(brLines(message.text).count - 1, 0)) * metrics.line
+                // One arrow height for the arrow and the activation bars it
+                // opens or closes, so a bar always meets its arrow.
+                let arrowY = y + extraLines + rowHeight - metrics.arrowInset
                 arrows.append(SequenceLayout.Arrow(
-                    fromX: heads[a].lifelineX, toX: toX,
-                    y: y + extraLines + rowHeight - 14,
+                    fromX: heads[a].lifelineX, toX: toX, y: arrowY,
                     text: message.text, dashed: message.dashed,
                     isSelfMessage: isSelf, head: message.head, number: message.number))
                 widen(min(heads[a].lifelineX, toX), max(heads[a].lifelineX, toX))
-                let arrowY = y + extraLines + rowHeight - 14
                 if message.activatesTarget { openBar(message.to, at: arrowY) }
                 if message.deactivatesSender { closeBar(message.from, at: arrowY) }
                 y += rowHeight + extraLines
@@ -1518,7 +1573,7 @@ extension DiagramLayoutEngine {
                 guard !ids.isEmpty else { y += noteRowHeight; continue }
                 let lines = brLines(noteItem.text)
                 let textWidth = lines.map { measure($0, labelFontSize).width }.max() ?? 0
-                let boxHeight = max(noteRowHeight - 10, CGFloat(lines.count) * 13 + 9)
+                let boxHeight = max(noteRowHeight - 10, CGFloat(lines.count) * sequenceTextMetrics(measure).noteLine + 9)
                 var frame: CGRect
                 switch noteItem.position {
                 case .rightOf:
@@ -1644,10 +1699,16 @@ extension DiagramLayoutEngine {
     /// from 12 o'clock), a legend column right of the disk, and left padding
     /// reserved so a title wider than the disk never clips. Pure geometry —
     /// the renderer only draws.
+    /// A pie legend row: 20 at the default size, grown with its 10.5pt text.
+    /// The layout sizes the legend with it and both renderers step by it.
+    package static func pieLegendRow(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(20, fontSize: labelFontSize, measure)
+    }
+
     public static func layout(_ pie: PieChart, measure: DiagramTextMeasurer) -> PieLayout {
         let margin: CGFloat = 14
         let radius: CGFloat = 76
-        let titleHeight: CGFloat = pie.title == nil ? 0 : 26
+        let titleHeight: CGFloat = pie.title == nil ? 0 : Self.titleHeight(26, measure)
 
         let total = pie.slices.reduce(0) { $0 + $1.value }
         var slices: [PieLayout.Slice] = []
@@ -1672,7 +1733,7 @@ extension DiagramLayoutEngine {
         let legendWidth = slices
             .map { measure("\($0.label) (0000)", labelFontSize).width + 22 }
             .max() ?? 80
-        let legendHeight = CGFloat(pie.slices.count) * 20
+        let legendHeight = CGFloat(pie.slices.count) * pieLegendRow(measure)
 
         // The title is centred horizontally on the disk's centre (the renderer
         // draws it there). A long title is far wider than the disk, so unless
@@ -1686,12 +1747,15 @@ extension DiagramLayoutEngine {
         let titleWidth: CGFloat = flatTitle.map { title in
             max(measure(title, 12.5).width, DiagramScene.estimatedLabelSize(title).width)
         } ?? 0
-        let leftPad = max(margin, titleWidth / 2 - radius + margin)
+        // The title draws semibold, a little wider than measured; the margin
+        // beside it grows with it.
+        let titleMargin = grown(margin, fontSize: titleFontSize, measure)
+        let leftPad = max(margin, titleWidth / 2 - radius + titleMargin)
         let centerX = leftPad + radius
         let legendX = centerX + radius + 28
 
         let contentRight = legendX + legendWidth + margin
-        let titleRight = centerX + titleWidth / 2 + margin
+        let titleRight = centerX + titleWidth / 2 + titleMargin
         let width = max(contentRight, titleRight)
         let height = margin + titleHeight + max(radius * 2, legendHeight) + margin
         return PieLayout(

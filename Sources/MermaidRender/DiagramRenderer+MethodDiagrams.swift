@@ -84,7 +84,8 @@ extension DiagramRenderer {
             context.setLineWidth(1)
             context.stroke(lane.band)
             drawTextLeft(lane.name,
-                         at: CGPoint(x: lane.band.minX + 6, y: lane.band.minY + 10),
+                         at: CGPoint(x: lane.band.minX + 6,
+                                     y: lane.band.minY + DiagramLayoutEngine.grown(10, fontSize: 9, layoutMeasure)),
                          size: 9, weight: .semibold, color: theme.tertiaryTextColor, in: context)
         }
         context.setStrokeColor(resolvedCGColor(theme.secondaryTextColor.withAlphaComponent(0.6)))

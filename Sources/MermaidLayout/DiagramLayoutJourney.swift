@@ -11,16 +11,16 @@ extension DiagramLayoutEngine {
     /// Pure geometry — the renderer only draws.
     public static func layout(_ journey: UserJourney, measure: DiagramTextMeasurer) -> JourneyLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = journey.title == nil ? 0 : 26
-        let rowHeight: CGFloat = 32
-        let scoreDiameter: CGFloat = 22
-        let sectionHeaderHeight: CGFloat = 22
+        let titleHeight: CGFloat = journey.title == nil ? 0 : Self.titleHeight(26, measure)
+        let rowHeight: CGFloat = grown(32, fontSize: labelFontSize, measure)
+        let scoreDiameter: CGFloat = grown(22, fontSize: 11, measure)
+        let sectionHeaderHeight: CGFloat = grown(22, fontSize: 9.5, measure)
 
-        let labelWidth = min(max(journey.tasks.map { measure($0.label, labelFontSize).width }.max() ?? 80, 60), 320)
+        let labelWidth = min(max(journey.tasks.map { measure($0.label, labelFontSize).width }.max() ?? 80, 60), grown(320, fontSize: labelFontSize, measure))
         let actorStrings = journey.tasks.map { $0.actors.joined(separator: ", ") }
         // No tight clamp: the canvas must fully contain the drawn actor list
         // (it's not truncated), so a clamp shorter than the text would clip it.
-        let actorsWidth = min(actorStrings.map { measure($0, labelFontSize).width }.max() ?? 0, 360)
+        let actorsWidth = min(actorStrings.map { measure($0, labelFontSize).width }.max() ?? 0, grown(360, fontSize: labelFontSize, measure))
 
         let scoreCenterX = margin + 8 + scoreDiameter / 2
         let labelX = scoreCenterX + scoreDiameter / 2 + 12

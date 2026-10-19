@@ -14,12 +14,11 @@ extension RenderScene {
     /// All colors are flat; nothing is approximated.
     public static func from(_ layout: PacketLayout, theme: RenderTheme,
                             measure: DiagramTextMeasurer) -> RenderScene {
-        _ = measure
         var elements: [Element] = []
 
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 14),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.titleCenterY(measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 
@@ -35,12 +34,12 @@ extension RenderScene {
             // Bit indices at the segment's top corners.
             elements.append(.text(Text(
                 string: "\(segment.startBit)",
-                center: CGPoint(x: segment.frame.minX + 9, y: segment.frame.minY + 7),
+                center: CGPoint(x: segment.frame.minX + DiagramLayoutEngine.packetTextInsets(measure).indexX, y: segment.frame.minY + DiagramLayoutEngine.packetTextInsets(measure).indexY),
                 fontSize: 7.5, color: theme.tertiaryText)))
             if segment.endBit != segment.startBit {
                 elements.append(.text(Text(
                     string: "\(segment.endBit)",
-                    center: CGPoint(x: segment.frame.maxX - 9, y: segment.frame.minY + 7),
+                    center: CGPoint(x: segment.frame.maxX - DiagramLayoutEngine.packetTextInsets(measure).indexX, y: segment.frame.minY + DiagramLayoutEngine.packetTextInsets(measure).indexY),
                     fontSize: 7.5, color: theme.tertiaryText)))
             }
 
@@ -49,14 +48,14 @@ extension RenderScene {
                 if !segment.label.isEmpty {
                     elements.append(.text(Text(
                         string: segment.label,
-                        center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + 3),
+                        center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + DiagramLayoutEngine.packetTextInsets(measure).labelDrop),
                         fontSize: labelSize, color: theme.ink)))
                 }
             case .vertical:
                 if !segment.label.isEmpty {
                     elements.append(.text(Text(
                         string: segment.label,
-                        center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + 5),
+                        center: CGPoint(x: segment.frame.midX, y: segment.frame.midY + DiagramLayoutEngine.packetTextInsets(measure).labelDrop + 2),
                         fontSize: labelSize, color: theme.ink, rotation: -.pi / 2)))
                 }
             case .none:

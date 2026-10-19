@@ -18,7 +18,7 @@ extension RenderScene {
 
         if let title = layout.title, !title.isEmpty {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 14),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.titleCenterY(measure)),
                 fontSize: 12.5, weight: .semibold, color: theme.ink)))
         }
 

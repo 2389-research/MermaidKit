@@ -41,14 +41,16 @@ extension DiagramRenderer {
             context.fill(CGRect(x: card.frame.minX, y: card.frame.minY + 4, width: 3, height: card.frame.height - 8))
             context.restoreGState()
 
-            var textY = card.frame.minY + 9 + 7
+            let metrics = DiagramLayoutEngine.kanbanCardMetrics(layoutMeasure)
+            var textY = card.frame.minY + 9 + (metrics.line - 1) / 2
             for line in card.lines {
                 drawTextLeft(line, at: CGPoint(x: card.frame.minX + 12, y: textY),
                              size: 11, color: theme.ink, in: context)
-                textY += 15
+                textY += metrics.line
             }
             if let ticket = card.ticket {
-                drawTextLeft(ticket, at: CGPoint(x: card.frame.minX + 12, y: card.frame.maxY - 9),
+                drawTextLeft(ticket, at: CGPoint(x: card.frame.minX + 12,
+                                                 y: card.frame.maxY - 9 - (metrics.ticket - 14) / 2),
                              size: 8.5, weight: .medium, color: theme.tertiaryTextColor, in: context)
             }
         }

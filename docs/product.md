@@ -123,6 +123,7 @@ Windows/.NET, WebAssembly, and Flutter renderers.
 | SwiftUI view | `MermaidView` follows the environment color scheme, scales down (never up), degrades unparsable source to a monospaced source card, and exposes an accessibility label. |
 | Theming | One `DiagramTheme` value (ink, secondary/tertiary text, canvas, accent, hairline, a six-hue categorical palette, `prefersDark`) re-skins all 30 types; `init(prefersDark:)` presets light/dark. |
 | Spacing presets | `DiagramSpacing` density knob — `.regular`, `.compact` (0.75×), `.comfortable` (1.35×) — the tightest preset (`.compact`) is proven occlusion-free on the class and flowchart fixtures, and the presets proven to order canvas area (`DiagramSpacingTests`). |
+| Text size | `DiagramSpacing.textScale` (0.5–3) lays labels out at a Dynamic Type size, growing boxes, rows, label gaps and canvases with the text; 1 is unchanged. `MermaidView` follows `dynamicTypeSize`. Every fixture fits from xSmall to AX2 (`TextScaleTests`, `DiagramSpacingTests`). |
 
 ### G6 — Accessibility
 

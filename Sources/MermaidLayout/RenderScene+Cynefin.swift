@@ -23,7 +23,7 @@ extension RenderScene {
 
         if let title = layout.title {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 16),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)),
                 fontSize: 13, weight: .semibold, color: theme.ink)))
         }
 
@@ -34,11 +34,11 @@ extension RenderScene {
                 fill: tint.withAlpha(0.14), stroke: Stroke(color: theme.hairline, width: 1))))
             elements.append(.text(Text(
                 string: quadrant.name,
-                center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 18),
+                center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 18 * DiagramLayoutEngine.cynefinScale(measure)),
                 fontSize: 12, weight: .semibold, color: theme.ink)))
             elements.append(.text(Text(
                 string: quadrant.heuristic,
-                center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 34),
+                center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 34 * DiagramLayoutEngine.cynefinScale(measure)),
                 fontSize: 9, color: theme.tertiaryText)))
             for item in quadrant.items {
                 elements.append(.text(Text(
@@ -53,11 +53,11 @@ extension RenderScene {
                 stroke: Stroke(color: theme.ink.withAlpha(0.5), width: 1.2))))
             elements.append(.text(Text(
                 string: center.name,
-                center: CGPoint(x: center.frame.midX, y: center.frame.midY - 10),
+                center: CGPoint(x: center.frame.midX, y: center.frame.midY - 10 * DiagramLayoutEngine.cynefinScale(measure)),
                 fontSize: 11, weight: .semibold, color: theme.ink)))
             elements.append(.text(Text(
                 string: center.heuristic,
-                center: CGPoint(x: center.frame.midX, y: center.frame.midY + 5),
+                center: CGPoint(x: center.frame.midX, y: center.frame.midY + 5 * DiagramLayoutEngine.cynefinScale(measure)),
                 fontSize: 8.5, color: theme.tertiaryText)))
             for item in center.items {
                 elements.append(.text(Text(

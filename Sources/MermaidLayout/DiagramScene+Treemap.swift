@@ -29,13 +29,13 @@ extension DiagramScene {
             // container cells — free-standing text the linter must see
             // (mirrors the renderer's roominess + fits-width guards).
             labels: layout.cells.compactMap { cell in
-                guard !cell.isLeaf, cell.frame.height > 44, cell.frame.width > 40 else { return nil }
+                guard !cell.isLeaf, DiagramLayoutEngine.treemapDrawsHeader(cell.label, in: cell.frame, measure)
+                else { return nil }
                 let width = measuredLabelSize(measure, cell.label).width
-                guard width <= cell.frame.width - 12 else { return nil }
                 return Label(
                     text: cell.label,
                     frame: CGRect(x: cell.frame.minX + 6, y: cell.frame.minY + 3,
-                                  width: width, height: 14))
+                                  width: width, height: DiagramLayoutEngine.grown(14, fontSize: 9.5, measure)))
             }
         )
     }

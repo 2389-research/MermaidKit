@@ -29,14 +29,19 @@ extension DiagramScene {
 
         // Title, centred above the disk (matches the renderer's placement).
         if let title = layout.title {
-            let w = CGFloat(max(title.count, 1)) * 7
+            // The width the layout reserved for it (measured, or the
+            // estimate when that's wider), at the renderer's center.
+            let w = max(measure(title, DiagramLayoutEngine.titleFontSize).width,
+                        DiagramScene.estimatedLabelSize(title).width)
+            let rise = DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)
+            let h = DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)
             labels.append(Label(
                 text: title,
                 frame: CGRect(
                     x: layout.center.x - w / 2,
-                    y: layout.center.y - layout.radius - 16 - 8,
+                    y: layout.center.y - layout.radius - rise - h / 2,
                     width: w,
-                    height: 16
+                    height: h
                 )
             ))
         }
@@ -48,16 +53,21 @@ extension DiagramScene {
             let percent = slice.fraction.isFinite ? Int((slice.fraction * 100).rounded()) : 0
             let text = "\(slice.label) (\(percent)%)"
             let textWidth = measuredLabelSize(measure, text).width
+            // The row and the label's place in it as both renderers draw them:
+            // centered on the swatch, row / 2 − 1 down (y + 2…16 in a 20pt row
+            // at the default size).
+            let row = DiagramLayoutEngine.pieLegendRow(measure)
+            let height = DiagramLayoutEngine.grown(14, fontSize: DiagramLayoutEngine.labelFontSize, measure)
             labels.append(Label(
                 text: text,
                 frame: CGRect(
                     x: layout.legendOrigin.x,
-                    y: y + 2,
+                    y: y + row / 2 - 1 - height / 2,
                     width: 10 + 6 + textWidth,
-                    height: 14
+                    height: height
                 )
             ))
-            y += 20
+            y += row
         }
 
         return DiagramScene(

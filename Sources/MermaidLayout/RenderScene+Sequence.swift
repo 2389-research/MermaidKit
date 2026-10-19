@@ -34,7 +34,8 @@ extension RenderScene {
             if let label = band.label, !label.isEmpty {
                 elements.append(.text(Text(
                     string: label,
-                    center: CGPoint(x: band.rect.midX, y: band.rect.minY + 9),
+                    center: CGPoint(x: band.rect.midX,
+                                    y: band.rect.minY + DiagramLayoutEngine.sequenceBoxStrip(measure) / 2),
                     fontSize: 9, weight: .semibold, color: theme.tertiaryText)))
             }
         }
@@ -52,7 +53,8 @@ extension RenderScene {
                 stroke: Stroke(color: hairline, width: 1))))
             // Kind tab: the classic dog-eared corner chip + guard label.
             let kindWidth = measure(frame.kind, 9).width
-            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY, width: kindWidth + 14, height: 15)
+            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY, width: kindWidth + 14,
+                             height: DiagramLayoutEngine.sequenceFragmentTab(measure))
             elements.append(.shape(Shape(path: .polygon([
                 CGPoint(x: tab.minX, y: tab.minY), CGPoint(x: tab.maxX, y: tab.minY),
                 CGPoint(x: tab.maxX - 5, y: tab.maxY), CGPoint(x: tab.minX, y: tab.maxY),
@@ -128,13 +130,13 @@ extension RenderScene {
                     .move(CGPoint(x: cx, y: top + 17)), .line(CGPoint(x: cx + 5, y: top + 24)),
                 ]), fill: nil, stroke: s)))
                 elements.append(.text(Text(
-                    string: head.label, center: CGPoint(x: cx, y: head.frame.maxY + 7),
+                    string: head.label, center: CGPoint(x: cx, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(measure)),
                     fontSize: 10.5, weight: .medium, color: theme.ink)))
             } else if head.kind != "participant" {
                 elements += participantGlyphElements(head.kind, frame: head.frame, theme: theme, stroke: stroke)
                 elements.append(.text(Text(
                     string: head.label,
-                    center: CGPoint(x: head.frame.midX, y: head.frame.maxY + 7),
+                    center: CGPoint(x: head.frame.midX, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(measure)),
                     fontSize: 10.5, weight: .medium, color: theme.ink)))
             } else {
                 elements.append(.shape(Shape(
@@ -169,10 +171,11 @@ extension RenderScene {
                 path: .roundedRect(note.frame, radius: 3),
                 fill: hue.withAlpha(0.18), stroke: Stroke(color: hue, width: 1))))
             let lines = DiagramLayoutEngine.brLines(note.text)
-            let startY = note.frame.midY - CGFloat(lines.count - 1) * 6.5
+            let pitch = DiagramLayoutEngine.sequenceTextMetrics(measure).noteLine
+            let startY = note.frame.midY - CGFloat(lines.count - 1) * pitch / 2
             for (i, line) in lines.enumerated() where !line.isEmpty {
                 elements.append(.text(Text(
-                    string: line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * 13),
+                    string: line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * pitch),
                     fontSize: 10.5, color: theme.ink)))
             }
         }
@@ -210,7 +213,8 @@ extension RenderScene {
                 if !arrow.text.isEmpty {
                     let lines = DiagramLayoutEngine.brLines(arrow.text)
                     for (i, line) in lines.enumerated() where !line.isEmpty {
-                        let lineY = arrow.y - 10 - CGFloat(lines.count - 1 - i) * 12
+                        let metrics = DiagramLayoutEngine.sequenceTextMetrics(measure)
+                        let lineY = arrow.y - metrics.rise - CGFloat(lines.count - 1 - i) * metrics.line
                         elements.append(.text(Text(
                             string: line,
                             center: CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: lineY),

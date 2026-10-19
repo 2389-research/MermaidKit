@@ -23,7 +23,7 @@ extension DiagramRenderer {
                         spacing: DiagramSpacing = .regular) -> Data? {
         guard let (diagram, metadata) = MermaidParser.parseWithMetadata(source) else { return nil }
         let plan = captionedPlan(renderPlan(for: diagram, theme: theme, spacing: spacing),
-                                 caption: metadata.title, diagram: diagram, theme: theme)
+                                 caption: metadata.title, diagram: diagram, theme: theme, textScale: spacing.textScale)
         guard let (canvasSize, originX, originY) =
                 paddedCanvas(size: plan.size, edgePolylines: plan.edgePolylines) else { return nil }
 

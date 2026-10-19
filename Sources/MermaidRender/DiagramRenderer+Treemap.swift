@@ -27,13 +27,13 @@ extension DiagramRenderer {
                 context.restoreGState()
 
                 // Label + value, only when the cell is roomy enough.
-                if cell.frame.width > 40, cell.frame.height > 20 {
+                if cell.frame.width > 40, cell.frame.height > DiagramLayoutEngine.treemapText(layoutMeasure).leafMinHeight {
                     let measured = measure(cell.label, size: 10)
                     if measured.width <= cell.frame.width - 8 {
-                        drawText(cell.label, center: CGPoint(x: cell.frame.midX, y: cell.frame.midY - 5),
+                        drawText(cell.label, center: CGPoint(x: cell.frame.midX, y: cell.frame.midY - DiagramLayoutEngine.treemapText(layoutMeasure).labelRise),
                                  size: 10, color: theme.ink, in: context)
                         drawText(formatTreemapValue(cell.value),
-                                 center: CGPoint(x: cell.frame.midX, y: cell.frame.midY + 9),
+                                 center: CGPoint(x: cell.frame.midX, y: cell.frame.midY + DiagramLayoutEngine.treemapText(layoutMeasure).valueDrop),
                                  size: 9, color: theme.secondaryTextColor, in: context)
                     }
                 }
@@ -44,11 +44,10 @@ extension DiagramRenderer {
                 context.setLineWidth(cell.depth == 1 ? 1.5 : 1)
                 context.stroke(cell.frame)
                 context.restoreGState()
-                if cell.frame.height > 44, cell.frame.width > 40,
-                   measure(cell.label, size: 9.5, weight: .semibold).width <= cell.frame.width - 12 {
+                if DiagramLayoutEngine.treemapDrawsHeader(cell.label, in: cell.frame, layoutMeasure) {
                     // Width-guarded like leaf labels: a long header once
                     // spilled across its sibling cells.
-                    drawTextLeft(cell.label, at: CGPoint(x: cell.frame.minX + 6, y: cell.frame.minY + 10),
+                    drawTextLeft(cell.label, at: CGPoint(x: cell.frame.minX + 6, y: cell.frame.minY + DiagramLayoutEngine.treemapText(layoutMeasure).headerY),
                                  size: 9.5, weight: .semibold, color: theme.secondaryTextColor, in: context)
                 }
             }

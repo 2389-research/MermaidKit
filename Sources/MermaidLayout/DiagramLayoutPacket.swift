@@ -5,15 +5,25 @@ import CoreGraphics
 
 extension DiagramLayoutEngine {
 
+    /// Where a packet segment's 7.5pt bit indices are centered in from its top
+    /// corners, and how far below its middle its label sits (clear of them): 9,
+    /// 7 and 3 at the default size, grown with the text. Both renderers place
+    /// the text by them.
+    package static func packetTextInsets(_ measure: DiagramTextMeasurer)
+        -> (indexX: CGFloat, indexY: CGFloat, labelDrop: CGFloat) {
+        (grown(9, fontSize: 7.5, measure), grown(7, fontSize: 7.5, measure), grown(3, fontSize: 7.5, measure))
+    }
+
     /// Lays out a packet diagram on a 32-bit grid: each field is a box spanning
     /// its bit range, wrapping into row segments when it crosses a 32-bit
     /// boundary. Pure geometry — the renderer only draws.
     public static func layout(_ packet: PacketDiagram, measure: DiagramTextMeasurer) -> PacketLayout {
         let bitsPerRow = 32
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = packet.title == nil ? 0 : 26
-        let bitWidth: CGFloat = 19
-        let rowHeight: CGFloat = 38
+        let titleHeight: CGFloat = packet.title == nil ? 0 : Self.titleHeight(26, measure)
+        // Cells and rows grow with the text, so indices and labels still fit.
+        let bitWidth: CGFloat = grown(19, fontSize: 7.5, measure)
+        let rowHeight: CGFloat = grown(38, fontSize: labelFontSize, measure)
         let rowGap: CGFloat = 6
         let top = margin + titleHeight
 
@@ -39,7 +49,7 @@ extension DiagramLayoutEngine {
                 let mode: PacketLayout.LabelMode
                 if frame.width >= labelWidth + 6 {
                     mode = .horizontal
-                } else if frame.width >= 13, labelWidth <= rowHeight - 11 {
+                } else if frame.width >= 13, labelWidth <= rowHeight - grown(11, fontSize: 7.5, measure) {
                     // Fits vertically in the space below the bit-index strip.
                     mode = .vertical
                 } else {

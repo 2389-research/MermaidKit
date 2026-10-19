@@ -24,7 +24,7 @@ extension DiagramScene {
                 // frame; extend the node so the linter sees the text too.
                 var frame = head.frame
                 if head.isActor || head.kind != "participant" {
-                    frame.size.height += 14
+                    frame.size.height += 2 * DiagramLayoutEngine.sequenceNameDrop(measure)
                 }
                 return Node(id: head.label, frame: frame, isContainer: false)
             } + layout.notes.map { note in
@@ -88,13 +88,15 @@ extension DiagramScene {
                     )
                 }
                 // Drawn ABOVE the arrow: line i centres at
-                // y - 10 - (n-1-i)*12, so the block spans upward from the row.
-                let blockHeight = 14 + CGFloat(lines.count - 1) * 12
+                // y - rise - (n-1-i)*line, so the block spans upward from the row.
+                let metrics = DiagramLayoutEngine.sequenceTextMetrics(measure)
+                let lineHeight = metrics.arrowInset   // a 10.5pt line: 14 at the default size
+                let blockHeight = lineHeight + CGFloat(lines.count - 1) * metrics.line
                 let midX = (arrow.fromX + arrow.toX) / 2
                 return Label(
                     text: arrow.text,
                     frame: CGRect(x: midX - width / 2,
-                                  y: arrow.y - 10 - CGFloat(lines.count - 1) * 12 - 7,
+                                  y: arrow.y - metrics.rise - CGFloat(lines.count - 1) * metrics.line - lineHeight / 2,
                                   width: width, height: blockHeight),
                     anchorEdge: index
                 )
@@ -114,17 +116,20 @@ extension DiagramScene {
                 // canvas-chipped [label].
                 var out: [Label] = []
                 let kindWidth = measuredLabelSize(measure, frame.kind).width
+                // Centered on the tab, as drawn (minY + 1…14 at the default size).
+                let tabHeight = DiagramLayoutEngine.grown(13, fontSize: 9, measure)
+                let tabTop = frame.rect.minY + DiagramLayoutEngine.sequenceFragmentTab(measure) / 2 - tabHeight / 2
                 out.append(Label(
                     text: frame.kind,
-                    frame: CGRect(x: frame.rect.minX + 5, y: frame.rect.minY + 1,
-                                  width: kindWidth, height: 13)))
+                    frame: CGRect(x: frame.rect.minX + 5, y: tabTop,
+                                  width: kindWidth, height: tabHeight)))
                 if let guardText = frame.label, !guardText.isEmpty {
                     let text = "[\(guardText)]"
                     let width = measuredLabelSize(measure, text).width
                     out.append(Label(
                         text: text,
                         frame: CGRect(x: frame.rect.minX + kindWidth + 20,
-                                      y: frame.rect.minY + 1, width: width, height: 13)))
+                                      y: tabTop, width: width, height: tabHeight)))
                 }
                 for divider in frame.dividers {
                     guard let label = divider.label, !label.isEmpty else { continue }
@@ -140,10 +145,12 @@ extension DiagramScene {
             } + layout.boxBands.compactMap { band -> Label? in
                 guard let text = band.label, !text.isEmpty else { return nil }
                 let width = measuredLabelSize(measure, text).width
+                let height = DiagramLayoutEngine.grown(14, fontSize: 9, measure)
+                let centerY = band.rect.minY + DiagramLayoutEngine.sequenceBoxStrip(measure) / 2
                 return Label(
                     text: text,
-                    frame: CGRect(x: band.rect.midX - width / 2, y: band.rect.minY + 2,
-                                  width: width, height: 14))
+                    frame: CGRect(x: band.rect.midX - width / 2, y: centerY - height / 2,
+                                  width: width, height: height))
             }
         )
     }

@@ -46,23 +46,39 @@ public struct ZenUMLLayout: Sendable {
 
 extension DiagramLayoutEngine {
 
+    /// A ZenUML participant box's text below its top — the 8.5pt stereotype
+    /// centered at 12, the 12pt name at 25 — and the box's height (38), each
+    /// grown with its text. The layout sizes boxes with them and both
+    /// renderers place the text by them.
+    package static func zenUMLBoxMetrics(_ measure: DiagramTextMeasurer)
+        -> (stereotypeY: CGFloat, nameY: CGFloat, height: CGFloat) {
+        (grown(12, fontSize: 8.5, measure), grown(25, fontSize: nodeFontSize, measure),
+         grown(38, fontSize: nodeFontSize, measure))
+    }
+
+    /// How far above its arrow a ZenUML message label is centered: 9 at the
+    /// default size.
+    package static func zenUMLLabelRise(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(9, fontSize: labelFontSize, measure)
+    }
+
     /// Lays out a ZenUML sequence diagram: participant boxes left to right
     /// (gaps widened for adjacent message labels and self-call loops), one
     /// message per row below. Pure geometry — the renderer only draws.
     public static func layout(_ d: ZenUML, measure: DiagramTextMeasurer) -> ZenUMLLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = d.title == nil ? 0 : 26
-        let boxHeight: CGFloat = 38
+        let titleHeight: CGFloat = d.title == nil ? 0 : Self.titleHeight(26, measure)
+        let boxHeight = zenUMLBoxMetrics(measure).height
         let minBoxWidth: CGFloat = 66
-        let maxBoxWidth: CGFloat = 220
+        let maxBoxWidth: CGFloat = grown(220, fontSize: nodeFontSize, measure)
         let boxPadX: CGFloat = 14
         let minGap: CGFloat = 42
         let labelPad: CGFloat = 20
         let selfLoopWidth: CGFloat = 26
-        let selfLoopHeight: CGFloat = 18
-        let rowHeight: CGFloat = 34
-        let selfRowHeight: CGFloat = 42
-        let topPad: CGFloat = 26          // box bottom → first arrow
+        let selfLoopHeight: CGFloat = grown(18, fontSize: labelFontSize, measure)
+        let rowHeight: CGFloat = grown(34, fontSize: labelFontSize, measure)
+        let selfRowHeight: CGFloat = grown(42, fontSize: labelFontSize, measure)
+        let topPad: CGFloat = grown(26, fontSize: labelFontSize, measure)   // box bottom → first arrow
 
         let n = d.participants.count
         var indexOf: [String: Int] = [:]

@@ -11,10 +11,10 @@ extension DiagramLayoutEngine {
     /// Coordinates are 0…1 (x left→right, y bottom→top). Pure geometry.
     public static func layout(_ chart: QuadrantChart, measure: DiagramTextMeasurer) -> QuadrantLayout {
         let margin: CGFloat = 14
-        let titleHeight: CGFloat = chart.title == nil ? 0 : 26
-        let side: CGFloat = 460
-        let yGutter: CGFloat = 20        // left strip for rotated y-axis labels
-        let xStrip: CGFloat = 22         // bottom strip for x-axis labels
+        let titleHeight: CGFloat = chart.title == nil ? 0 : Self.titleHeight(26, measure)
+        let side: CGFloat = grown(460, fontSize: labelFontSize, measure)   // points' labels need room to spread
+        let yGutter: CGFloat = grown(20, fontSize: 9.5, measure)   // left strip for rotated y-axis labels
+        let xStrip: CGFloat = grown(22, fontSize: 9.5, measure)    // bottom strip for x-axis labels
         let dotRadius: CGFloat = 4
 
         let plotRect = CGRect(x: margin + yGutter, y: margin + titleHeight, width: side, height: side)
@@ -49,7 +49,8 @@ extension DiagramLayoutEngine {
             // clusters that gather near the plot's center lines.
             let rect = quarters[index]
             let isBottom = index >= 2   // q3 (BL) and q4 (BR) are the bottom row
-            let cy = isBottom ? rect.maxY - 14 : rect.minY + 14
+            let inset = grown(14, fontSize: 11, measure)   // the name's center, in from the edge
+            let cy = isBottom ? rect.maxY - inset : rect.minY + inset
             quadrantLabels.append(QuadrantLayout.Label(text: flattenLines(name), center: CGPoint(x: rect.midX, y: cy)))
         }
 

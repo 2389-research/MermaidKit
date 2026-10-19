@@ -5,18 +5,27 @@ import CoreGraphics
 
 extension DiagramLayoutEngine {
 
+    /// A kanban card's line pitch (11pt text) and ticket row (8.5pt): 15 and
+    /// 14 at the default size, grown with the text. The layout sizes cards
+    /// with them and both renderers place the text by them.
+    package static func kanbanCardMetrics(_ measure: DiagramTextMeasurer) -> (line: CGFloat, ticket: CGFloat) {
+        (grown(15, fontSize: 11, measure), grown(14, fontSize: 8.5, measure))
+    }
+
     /// Lays out a kanban board: columns side by side, each a tinted header
     /// over a vertical stack of cards. Card text word-wraps to the column
     /// width (capped) so long items stay readable. Pure geometry.
     public static func layout(_ board: KanbanBoard, measure: DiagramTextMeasurer) -> KanbanLayout {
         let margin: CGFloat = 14
-        let columnWidth: CGFloat = 172
+        // Columns widen with the text, so a card wraps to the same lines.
+        let columnWidth: CGFloat = grown(172, fontSize: 11, measure)
         let columnGap: CGFloat = 12
-        let headerHeight: CGFloat = 30
+        let headerHeight: CGFloat = grown(30, fontSize: 11.5, measure)
         let cardGap: CGFloat = 8
         let cardPadding: CGFloat = 9
-        let lineHeight: CGFloat = 15
-        let ticketHeight: CGFloat = 14
+        let metrics = kanbanCardMetrics(measure)
+        let lineHeight = metrics.line
+        let ticketHeight = metrics.ticket
         let maxLines = 4
         let textWidth = columnWidth - cardPadding * 2
 

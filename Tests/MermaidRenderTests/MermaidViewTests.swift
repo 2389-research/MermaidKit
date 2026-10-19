@@ -85,5 +85,25 @@ final class MermaidViewTests: XCTestCase {
         let sankey = try XCTUnwrap(MermaidParser.parse("sankey-beta\nA,B,1"))
         XCTAssertEqual(sankey.typeName, "sankey")
     }
+
+    // MARK: Dynamic Type
+
+    /// Dynamic Type sizes map to their body text over the default's.
+    func testDynamicTypeSizesMapToTextScales() {
+        XCTAssertEqual(MermaidView.textScale(for: .large), 1)
+        XCTAssertEqual(MermaidView.textScale(for: .xSmall), 14.0 / 17, accuracy: 0.001)
+        XCTAssertEqual(MermaidView.textScale(for: .xxxLarge), 23.0 / 17, accuracy: 0.001)
+        XCTAssertEqual(MermaidView.textScale(for: .accessibility5), 53.0 / 17, accuracy: 0.001)
+    }
+
+    /// The view lays its diagram out larger at an accessibility size.
+    @MainActor
+    func testViewFollowsDynamicType() throws {
+        let source = "flowchart LR\n  A[Read the input] --> B[Write the output]"
+        let regular = try XCTUnwrap(ImageRenderer(content: MermaidView(source)).nsImage)
+        let large = try XCTUnwrap(ImageRenderer(
+            content: MermaidView(source).environment(\.dynamicTypeSize, .accessibility2)).nsImage)
+        XCTAssertGreaterThan(large.size.width, regular.size.width * 1.4)
+    }
 }
 #endif

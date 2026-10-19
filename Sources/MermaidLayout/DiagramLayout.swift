@@ -758,6 +758,36 @@ public enum DiagramLayoutEngine {
     public static let nodeFontSize: Double = 12
     /// Font size for secondary text: edge labels, detail rows, axis ticks.
     public static let labelFontSize: Double = 10.5
+    /// Font size of the title a diagram draws centered at its top.
+    package static let titleFontSize: Double = 12.5
+
+    /// How much larger than the default size the layout's text is: the text
+    /// scale of the layout in progress (``DiagramTextScale``), never under 1 —
+    /// smaller text keeps the default room. Exactly 1 at the default size and
+    /// outside a scaled layout. `fontSize` and `measure` name the text a length
+    /// is tuned for; every size of text grows by the same scale.
+    package static func textGrowth(_ fontSize: Double, _ measure: DiagramTextMeasurer) -> CGFloat {
+        max(1, DiagramTextScale.current)
+    }
+
+    /// A length tuned for `fontSize` text at the default size — a line pitch,
+    /// a row, a text column — grown with the text (``textGrowth(_:_:)``), so
+    /// it's unchanged at the default size. Layouts size with it, and renderers
+    /// that place text by the same constants use it too, so both agree.
+    package static func grown(_ base: CGFloat, fontSize: Double, _ measure: DiagramTextMeasurer) -> CGFloat {
+        base * textGrowth(fontSize, measure)
+    }
+
+    /// The room a diagram's title takes at its top: `base` (24 or 26) at the
+    /// default size.
+    package static func titleHeight(_ base: CGFloat, _ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(base, fontSize: titleFontSize, measure)
+    }
+
+    /// The y a diagram's title is centered on: 14 at the default size.
+    package static func titleCenterY(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(14, fontSize: titleFontSize, measure)
+    }
     /// Minimum separation between a pair of antiparallel box-diagram edges, and
     /// the floor `separateRuns` enforces between any two coincident box runs.
     static let boxAntiparallelSep: CGFloat = 20

@@ -135,7 +135,8 @@ extension DiagramRenderer {
             context.setLineWidth(1)
             context.stroke(band.rect)
             if let label = band.label {
-                drawText(label, center: CGPoint(x: band.rect.midX, y: band.rect.minY + 9),
+                drawText(label, center: CGPoint(x: band.rect.midX,
+                                                y: band.rect.minY + DiagramLayoutEngine.sequenceBoxStrip(layoutMeasure) / 2),
                          size: 9, weight: .semibold, color: theme.tertiaryTextColor, in: context)
             }
         }
@@ -152,8 +153,8 @@ extension DiagramRenderer {
             context.stroke(frame.rect)
             // Kind tab (the classic dog-eared corner chip) + guard label.
             let kindSize = measure(frame.kind, size: 9)
-            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY,
-                             width: kindSize.width + 14, height: 15)
+            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY, width: kindSize.width + 14,
+                             height: DiagramLayoutEngine.sequenceFragmentTab(layoutMeasure))
             context.setFillColor(resolvedCGColor(theme.hairline.withAlphaComponent(0.14)))
             context.beginPath()
             context.move(to: CGPoint(x: tab.minX, y: tab.minY))
@@ -243,12 +244,12 @@ extension DiagramRenderer {
                 context.move(to: CGPoint(x: cx, y: top + 17))
                 context.addLine(to: CGPoint(x: cx + 5, y: top + 24))
                 context.strokePath()
-                drawText(head.label, center: CGPoint(x: cx, y: head.frame.maxY + 7),
+                drawText(head.label, center: CGPoint(x: cx, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(layoutMeasure)),
                          size: 10.5, weight: .medium, color: theme.ink, in: context)
             } else if head.kind != "participant" {
                 drawParticipantGlyph(head.kind, frame: head.frame, theme: theme,
                                      stroke: stroke, in: context)
-                drawText(head.label, center: CGPoint(x: head.frame.midX, y: head.frame.maxY + 7),
+                drawText(head.label, center: CGPoint(x: head.frame.midX, y: head.frame.maxY + DiagramLayoutEngine.sequenceNameDrop(layoutMeasure)),
                          size: 10.5, weight: .medium, color: theme.ink, in: context)
             } else {
                 fillStrokeBox(head.frame, radius: 6, fill: theme.accent.withAlphaComponent(0.06), stroke: stroke, in: context)
@@ -279,9 +280,10 @@ extension DiagramRenderer {
                           fill: theme.categoricalColor(2).withAlphaComponent(0.18),
                           stroke: theme.categoricalColor(2), in: context)
             let lines = DiagramLayoutEngine.brLines(note.text)
-            let startY = note.frame.midY - CGFloat(lines.count - 1) * 6.5
+            let pitch = DiagramLayoutEngine.sequenceTextMetrics(layoutMeasure).noteLine
+            let startY = note.frame.midY - CGFloat(lines.count - 1) * pitch / 2
             for (i, line) in lines.enumerated() {
-                drawText(line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * 13),
+                drawText(line, center: CGPoint(x: note.frame.midX, y: startY + CGFloat(i) * pitch),
                          size: labelSize, color: theme.ink, in: context)
             }
         }
@@ -330,7 +332,8 @@ extension DiagramRenderer {
                 if !arrow.text.isEmpty {
                     let lines = DiagramLayoutEngine.brLines(arrow.text)
                     for (i, line) in lines.enumerated() {
-                        let lineY = arrow.y - 10 - CGFloat(lines.count - 1 - i) * 12
+                        let metrics = DiagramLayoutEngine.sequenceTextMetrics(layoutMeasure)
+                        let lineY = arrow.y - metrics.rise - CGFloat(lines.count - 1 - i) * metrics.line
                         drawText(line,
                                  center: CGPoint(x: (arrow.fromX + arrow.toX) / 2, y: lineY),
                                  size: 10.5, color: theme.secondaryTextColor, in: context)

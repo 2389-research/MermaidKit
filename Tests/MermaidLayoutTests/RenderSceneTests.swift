@@ -1305,6 +1305,82 @@ final class RenderSceneTests: XCTestCase {
         }
     }
 
+    // MARK: Text scale
+
+    /// `textScale` lays the diagram out for the larger text and draws every
+    /// run at its scaled size; 1 is the scene as it always was.
+    func testTextScaleScalesTextAndGrowsTheScene() throws {
+        let diagram = try XCTUnwrap(MermaidParser.parse(
+            "sequenceDiagram\n  A->>B: ask for the rendered diagram\n  B-->>A: here is the image"))
+        let plain = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure))
+        let one = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure,
+                                                 spacing: DiagramSpacing(textScale: 1)))
+        XCTAssertEqual(SVGRenderer.svg(plain), SVGRenderer.svg(one))
+
+        let big = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure,
+                                                 spacing: DiagramSpacing(textScale: 2)))
+        func sizes(_ scene: RenderScene) -> [CGFloat] {
+            scene.elements.compactMap { if case .text(let t) = $0 { t.fontSize } else { nil } }
+        }
+        XCTAssertEqual(sizes(big), sizes(plain).map { $0 * 2 })
+        XCTAssertGreaterThan(big.size.width, plain.size.width)
+        XCTAssertGreaterThan(big.size.height, plain.size.height)
+    }
+
+    /// Text is scaled exactly once on the scene path, for every diagram type:
+    /// each run present at both sizes is k times its default size — not k²
+    /// (scaled by the measurer and again by the dispatcher), not 1.
+    func testEveryFixtureScalesItsTextExactlyOnce() throws {
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/diagrams")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "mmd" }
+        func sizes(_ scene: RenderScene) -> [String: CGFloat] {
+            var out: [String: CGFloat] = [:]
+            for case .text(let t) in scene.elements { out[t.string] = t.fontSize }
+            return out
+        }
+        for file in files {
+            let name = file.deletingPathExtension().lastPathComponent
+            let diagram = try XCTUnwrap(MermaidParser.parse(try String(contentsOf: file, encoding: .utf8)), name)
+            let plain = sizes(try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure), name))
+            XCTAssertFalse(plain.isEmpty, name)
+            for k in [1.118, 1.353, 2.0] {
+                let scaled = sizes(try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure,
+                                                                  spacing: DiagramSpacing(textScale: k)), name))
+                var shared = 0
+                for (string, size) in scaled {
+                    guard let base = plain[string] else { continue }
+                    shared += 1
+                    XCTAssertEqual(size, base * k, accuracy: 1e-9, "\(name) at \(k)×: \"\(string)\"")
+                }
+                XCTAssertGreaterThan(shared, 0, "\(name) at \(k)×: no text in common to compare")
+            }
+        }
+    }
+
+    /// The lint scene describes the legend the renderers draw: each legend
+    /// label is centered where its text is drawn, at every text size (it used
+    /// fixed 20pt rows while the drawn rows grew).
+    func testPieLegendLintMatchesTheDrawnLegend() throws {
+        let diagram = try XCTUnwrap(MermaidParser.parse(
+            "pie title Where the time goes\n  \"Rasterize\" : 75\n  \"Layout\" : 15\n  \"Parse\" : 10"))
+        for k in [1.0, 1.353, 2.0, 3.0] {
+            let spacing = DiagramSpacing(textScale: k)
+            let scene = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure, spacing: spacing))
+            var drawn: [String: CGFloat] = [:]
+            for case .text(let t) in scene.elements { drawn[t.string] = t.center.y }
+            let lint = DiagramScene.lower(diagram, measure: measure, spacing: spacing)
+            let legend = lint.labels.filter { $0.text.hasSuffix("%)") }
+            XCTAssertEqual(legend.count, 3, "\(k)×")
+            for label in legend {
+                let y = try XCTUnwrap(drawn[label.text], "\(label.text) drawn at \(k)×")
+                XCTAssertEqual(label.frame.midY, y, accuracy: 1e-9, "\(label.text) at \(k)×")
+            }
+        }
+    }
+
     // MARK: Helpers
 
     private func countOccurrences(of needle: String, in haystack: String) -> Int {

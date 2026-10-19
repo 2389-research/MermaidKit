@@ -26,7 +26,7 @@ extension RenderScene {
 
         if let title = layout.title {
             elements.append(.text(Text(
-                string: title, center: CGPoint(x: layout.size.width / 2, y: 16),
+                string: title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, measure)),
                 fontSize: 13, weight: .semibold, color: theme.ink)))
         }
 
@@ -42,7 +42,8 @@ extension RenderScene {
         }
         for band in layout.bands {
             elements.append(.text(leftText(
-                band.name, at: CGPoint(x: band.x + 4, y: layout.plotFrame.maxY + 10),
+                band.name, at: CGPoint(x: band.x + 4,
+                                       y: layout.plotFrame.maxY + DiagramLayoutEngine.grown(10, fontSize: 9, measure)),
                 fontSize: 9, color: theme.tertiaryText, measure: measure)))
         }
         // Y axis: value chain, rotated bottom-to-top.

@@ -118,7 +118,7 @@ extension DiagramRenderer {
 
     static func draw(_ layout: CynefinLayout, theme: DiagramTheme, in context: CGContext) {
         if let title = layout.title {
-            drawText(title, center: CGPoint(x: layout.size.width / 2, y: 16),
+            drawText(title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, layoutMeasure)),
                      size: 13, weight: .semibold, color: theme.ink, in: context)
         }
         for quadrant in layout.quadrants {
@@ -129,10 +129,10 @@ extension DiagramRenderer {
             context.setLineWidth(1)
             context.stroke(quadrant.frame)
             drawText(quadrant.name,
-                     center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 18),
+                     center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 18 * DiagramLayoutEngine.cynefinScale(layoutMeasure)),
                      size: 12, weight: .semibold, color: theme.ink, in: context)
             drawText(quadrant.heuristic,
-                     center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 34),
+                     center: CGPoint(x: quadrant.frame.midX, y: quadrant.frame.minY + 34 * DiagramLayoutEngine.cynefinScale(layoutMeasure)),
                      size: 9, color: theme.tertiaryTextColor, in: context)
             for item in quadrant.items {
                 drawText(item.text, center: item.center, size: labelSize,
@@ -146,10 +146,10 @@ extension DiagramRenderer {
             context.setLineWidth(1.2)
             context.strokeEllipse(in: center.frame)
             drawText(center.name,
-                     center: CGPoint(x: center.frame.midX, y: center.frame.midY - 10),
+                     center: CGPoint(x: center.frame.midX, y: center.frame.midY - 10 * DiagramLayoutEngine.cynefinScale(layoutMeasure)),
                      size: 11, weight: .semibold, color: theme.ink, in: context)
             drawText(center.heuristic,
-                     center: CGPoint(x: center.frame.midX, y: center.frame.midY + 5),
+                     center: CGPoint(x: center.frame.midX, y: center.frame.midY + 5 * DiagramLayoutEngine.cynefinScale(layoutMeasure)),
                      size: 8.5, color: theme.tertiaryTextColor, in: context)
             for item in center.items {
                 drawText(item.text, center: item.center, size: 8.5,
@@ -176,7 +176,7 @@ extension DiagramRenderer {
 
     static func draw(_ layout: WardleyLayout, theme: DiagramTheme, in context: CGContext) {
         if let title = layout.title {
-            drawText(title, center: CGPoint(x: layout.size.width / 2, y: 16),
+            drawText(title, center: CGPoint(x: layout.size.width / 2, y: DiagramLayoutEngine.grown(16, fontSize: DiagramLayoutEngine.titleFontSize, layoutMeasure)),
                      size: 13, weight: .semibold, color: theme.ink, in: context)
         }
         // Plot frame + evolution band boundaries.
@@ -193,7 +193,8 @@ extension DiagramRenderer {
         }
         for band in layout.bands {
             drawTextLeft(band.name,
-                         at: CGPoint(x: band.x + 4, y: layout.plotFrame.maxY + 10),
+                         at: CGPoint(x: band.x + 4,
+                                     y: layout.plotFrame.maxY + DiagramLayoutEngine.grown(10, fontSize: 9, layoutMeasure)),
                          size: 9, weight: .regular, color: theme.tertiaryTextColor, in: context)
         }
         // Y axis: value chain.

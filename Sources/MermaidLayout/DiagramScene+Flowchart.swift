@@ -41,10 +41,12 @@ extension DiagramScene {
         // to a warning rather than reading as a cut.
         for container in layout.containers where !container.label.isEmpty {
             let width = measuredLabelSize(measure, container.label).width
+            let height = DiagramLayoutEngine.grown(13, fontSize: 11, measure)
+            let centerY = container.frame.minY + DiagramLayoutEngine.clusterHeader(measure) / 2 - 0.5
             labels.append(Label(
                 text: container.label,
                 frame: CGRect(x: container.frame.midX - width / 2,
-                              y: container.frame.minY + 4, width: width, height: 13),
+                              y: centerY - height / 2, width: width, height: height),
                 backed: true))
         }
         return DiagramScene(
