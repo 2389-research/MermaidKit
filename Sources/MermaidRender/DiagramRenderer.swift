@@ -99,10 +99,10 @@ enum DiagramRenderer {
         for diagram: MermaidDiagram, theme: DiagramTheme, spacing: DiagramSpacing
     ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
         let k = spacing.textScale
-        let plan = $textScale.withValue(k) { unscaledRenderPlan(for: diagram, theme: theme, spacing: spacing) }
+        let plan = DiagramTextScale.$current.withValue(k) { unscaledRenderPlan(for: diagram, theme: theme, spacing: spacing) }
         guard k != 1 else { return plan }
         let draw = plan.draw
-        return (plan.size, plan.edgePolylines, { context in $textScale.withValue(k) { draw(context) } })
+        return (plan.size, plan.edgePolylines, { context in DiagramTextScale.$current.withValue(k) { draw(context) } })
     }
 
     private static func unscaledRenderPlan(
@@ -279,12 +279,12 @@ enum DiagramRenderer {
         // (threaded in via `parseWithMetadata`), not a re-scan of the source.
         guard diagram.titleText == nil, let caption
         else { return plan }
-        return $textScale.withValue(textScale) {
+        return DiagramTextScale.$current.withValue(textScale) {
             let captioned = captioned(plan, caption: caption, theme: theme)
             guard textScale != 1 else { return captioned }
             let draw = captioned.draw
             return (captioned.size, captioned.edgePolylines,
-                    { context in $textScale.withValue(textScale) { draw(context) } })
+                    { context in DiagramTextScale.$current.withValue(textScale) { draw(context) } })
         }
     }
 

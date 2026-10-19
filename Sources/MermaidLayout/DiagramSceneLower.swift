@@ -8,7 +8,22 @@ extension DiagramScene {
     /// Lowers any parsed diagram to its scene by laying it out and delegating
     /// to the per-type `from(_:)` overload (one per `DiagramScene+<Type>.swift`).
     public static func lower(_ diagram: MermaidDiagram, measure: DiagramTextMeasurer) -> DiagramScene {
-        var scene = lowerBody(diagram, measure: measure)
+        lower(diagram, measure: measure, spacing: .regular)
+    }
+
+    /// ``lower(_:measure:)`` laid out with `spacing` — its density, grid snap and
+    /// text scale — so the linter checks the geometry a render with the same
+    /// spacing draws.
+    public static func lower(_ diagram: MermaidDiagram, measure: DiagramTextMeasurer,
+                             spacing: DiagramSpacing) -> DiagramScene {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLower(diagram, measure: measure, spacing: spacing)
+        }
+    }
+
+    private static func scaledLower(_ diagram: MermaidDiagram, measure: DiagramTextMeasurer,
+                                    spacing: DiagramSpacing) -> DiagramScene {
+        var scene = lowerBody(diagram, measure: measure, spacing: spacing)
         // Titles are drawn by the shared drawDiagramTitle at (width/2, y 14);
         // most per-type lowerings never included them, leaving the linter
         // blind to title-vs-content collisions and clipped long titles. Add
@@ -46,14 +61,15 @@ extension DiagramScene {
             accessibilityDescription: metadata.accessibilityDescription)
     }
 
-    private static func lowerBody(_ diagram: MermaidDiagram, measure: DiagramTextMeasurer) -> DiagramScene {
+    private static func lowerBody(_ diagram: MermaidDiagram, measure: DiagramTextMeasurer,
+                                  spacing: DiagramSpacing) -> DiagramScene {
         switch diagram {
-        case .flowchart(let d):   return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
+        case .flowchart(let d):   return .from(DiagramLayoutEngine.layout(d, measure: measure, spacing: spacing), measure: measure)
         case .sequence(let d):    return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .pie(let d):         return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
-        case .classDiagram(let d):return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
-        case .er(let d):          return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
-        case .state(let d):       return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
+        case .classDiagram(let d):return .from(DiagramLayoutEngine.layout(d, measure: measure, spacing: spacing), measure: measure)
+        case .er(let d):          return .from(DiagramLayoutEngine.layout(d, measure: measure, spacing: spacing), measure: measure)
+        case .state(let d):       return .from(DiagramLayoutEngine.layout(d, measure: measure, spacing: spacing), measure: measure)
         case .gantt(let d):       return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .timeline(let d):    return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .mindmap(let d):     return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
@@ -68,7 +84,7 @@ extension DiagramScene {
         case .requirement(let d): return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .sankey(let d):      return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .c4(let d):          return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
-        case .architecture(let d):return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
+        case .architecture(let d):return .from(DiagramLayoutEngine.layout(d, measure: measure, spacing: spacing), measure: measure)
         case .block(let d):       return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .zenuml(let d):      return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)
         case .treeView(let d):    return .from(DiagramLayoutEngine.layout(d, measure: measure), measure: measure)

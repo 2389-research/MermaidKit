@@ -25,8 +25,8 @@ extension RenderScene {
     public static func from(_ diagram: MermaidDiagram, theme: RenderTheme,
                             measure: DiagramTextMeasurer,
                             spacing: DiagramSpacing = .regular) -> RenderScene? {
-        let laidOut = withoutActuallyEscaping(measure) { measure in
-            Self.laidOut(diagram, theme: theme, measure: spacing.scaling(measure), spacing: spacing)
+        let laidOut = DiagramTextScale.run(spacing, measure) { measure in
+            Self.laidOut(diagram, theme: theme, measure: measure, spacing: spacing)
         }
         guard var scene = laidOut else { return nil }
         let k = spacing.textScale

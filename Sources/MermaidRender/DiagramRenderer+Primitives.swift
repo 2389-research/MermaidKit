@@ -37,11 +37,17 @@ extension DiagramRenderer {
     private static let measureCache = MeasureCache()
     #endif
 
-    /// The render's `DiagramSpacing.textScale`, set by `renderPlan` around
-    /// layout and drawing. `measure` and `drawText` multiply every size they're
-    /// given by it, so the per-type code keeps its base sizes and still lays
-    /// out and draws the scaled text.
-    @TaskLocal static var textScale: CGFloat = 1
+    /// The render's `DiagramSpacing.textScale` (``DiagramTextScale``), set by
+    /// `renderPlan` around layout and drawing. The renderer's own `measure` and
+    /// `drawText` multiply every size they're given by it, so the per-type
+    /// drawing code keeps its base sizes; the public `MermaidRenderer.textMeasurer`
+    /// does not, so headless callers get plain metrics.
+    static var textScale: CGFloat { DiagramTextScale.current }
+
+    /// Measures at exactly `size` — the public, scope-independent measurer.
+    static func measureUnscaled(_ text: String, size: CGFloat) -> CGSize {
+        measureScaled(text, size: size, weight: .regular)
+    }
 
     /// `measure` as the layout engines take it (regular weight).
     static var layoutMeasure: DiagramTextMeasurer { { text, size in measure(text, size: CGFloat(size)) } }

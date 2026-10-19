@@ -12,7 +12,7 @@ final class TextScaleTests: XCTestCase {
 
     /// xSmall, xxxLarge (the largest standard size), and two accessibility
     /// sizes (AX2 is about 2, AX5 is past 3 and clamps there).
-    private static let scales: [CGFloat] = [0.82, 1.35, 2, 3]
+    private static let scales: [CGFloat] = [0.82, 1.118, 1.235, 1.35, 2, 3]
 
     /// Problems a fixture's text has, as readable lines; nil when the diagram
     /// is past the renderer's 4000pt canvas guard at this size and isn't
@@ -26,15 +26,18 @@ final class TextScaleTests: XCTestCase {
         defer { DiagramRenderer.textCaptureHook = nil }
         let image = MermaidRenderer.image(source: source, theme: DiagramTheme(prefersDark: false),
                                           spacing: DiagramSpacing(textScale: scale))
-        _ = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)  // force the deferred draw
-
-        let measure: DiagramTextMeasurer = { MermaidRenderer.textMeasurer($0, $1 * Double(scale)) }
-        let scene = DiagramScene.lower(diagram, measure: measure)
-        guard image != nil else {
+        let scene = DiagramScene.lower(diagram, measure: MermaidRenderer.textMeasurer,
+                                       spacing: DiagramSpacing(textScale: scale))
+        guard let image else {
             XCTAssertGreaterThanOrEqual(max(scene.size.width, scene.size.height), 4000,
                                         "\(name) at \(scale)×: not drawn, yet within the canvas guard")
             return nil
         }
+        // Force the deferred draw, and require it: with no text captured, every
+        // check below would pass without checking anything.
+        XCTAssertNotNil(image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                        "\(name) at \(scale)×: not rasterized")
+        XCTAssertFalse(drawn.isEmpty, "\(name) at \(scale)×: drew no text")
         let canvas = CGRect(origin: .zero, size: scene.size).insetBy(dx: -1, dy: -1)
         // Tree view rows are invisible frames (glyph through label, measured
         // regular), and directory names draw semibold past them: not a box.

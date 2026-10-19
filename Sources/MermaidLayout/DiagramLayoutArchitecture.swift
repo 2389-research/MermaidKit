@@ -59,6 +59,14 @@ extension DiagramLayoutEngine {
     /// box. Pure geometry — the renderer only draws.
     public static func layout(_ diagram: ArchitectureDiagram, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> ArchitectureLayout {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLayout(diagram, measure: measure, spacing: spacing)
+        }
+    }
+
+    /// ``layout(_:measure:spacing:)`` with `measure` already at the text scale.
+    private static func scaledLayout(_ diagram: ArchitectureDiagram, measure: DiagramTextMeasurer,
+                                     spacing: DiagramSpacing) -> ArchitectureLayout {
         let margin = spacing.resolvedMargin(base: 16)
         let groupGap = spacing.resolvedNodeGap(base: 30)
         let groupPad: CGFloat = 16 * spacing.scale

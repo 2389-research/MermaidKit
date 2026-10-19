@@ -761,14 +761,13 @@ public enum DiagramLayoutEngine {
     /// Font size of the title a diagram draws centered at its top.
     package static let titleFontSize: Double = 12.5
 
-    /// How much larger than the default size `fontSize` text measures:
-    /// (line height − 4) / `fontSize`, and never under 1. At the default size a
-    /// line is at most `fontSize + 4` tall — exactly that in the tests' geometry
-    /// measurer, about 1.2em in the system font for any size under 21pt — so
-    /// this is 1 there; under `DiagramSpacing.textScale` k it's k in the
-    /// geometry measurer and a little over k in the system font.
+    /// How much larger than the default size the layout's text is: the text
+    /// scale of the layout in progress (``DiagramTextScale``), never under 1 —
+    /// smaller text keeps the default room. Exactly 1 at the default size and
+    /// outside a scaled layout. `fontSize` and `measure` name the text a length
+    /// is tuned for; every size of text grows by the same scale.
     package static func textGrowth(_ fontSize: Double, _ measure: DiagramTextMeasurer) -> CGFloat {
-        max(1, (measure("Mg", fontSize).height - 4) / CGFloat(fontSize))
+        max(1, DiagramTextScale.current)
     }
 
     /// A length tuned for `fontSize` text at the default size — a line pitch,

@@ -21,6 +21,14 @@ extension DiagramLayoutEngine {
     /// Pure geometry — the renderer only draws.
     public static func layout(_ diagram: ClassDiagram, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> ClassLayout {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLayout(diagram, measure: measure, spacing: spacing)
+        }
+    }
+
+    /// ``layout(_:measure:spacing:)`` with `measure` already at the text scale.
+    private static func scaledLayout(_ diagram: ClassDiagram, measure: DiagramTextMeasurer,
+                                     spacing: DiagramSpacing) -> ClassLayout {
         // Layer by the relation graph so hierarchies read top-down: for
         // inheritance/realization the parsed edge points child → parent;
         // flip those so parents sit above their children.
@@ -94,6 +102,14 @@ extension DiagramLayoutEngine {
     /// geometry — the renderer only draws.
     public static func layout(_ diagram: ERDiagram, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> ERLayout {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLayout(diagram, measure: measure, spacing: spacing)
+        }
+    }
+
+    /// ``layout(_:measure:spacing:)`` with `measure` already at the text scale.
+    private static func scaledLayout(_ diagram: ERDiagram, measure: DiagramTextMeasurer,
+                                     spacing: DiagramSpacing) -> ERLayout {
         // The name strip and member rows grow with the text (the renderers draw
         // by the layout's nameHeight and rowHeight).
         let compartmentNameHeight = grown(Self.compartmentNameHeight, fontSize: nodeFontSize, measure)
@@ -171,6 +187,14 @@ extension DiagramLayoutEngine {
     /// geometry — the renderer only draws.
     public static func layout(_ diagram: StateDiagram, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> StateLayout {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLayout(diagram, measure: measure, spacing: spacing)
+        }
+    }
+
+    /// ``layout(_:measure:spacing:)`` with `measure` already at the text scale.
+    private static func scaledLayout(_ diagram: StateDiagram, measure: DiagramTextMeasurer,
+                                     spacing: DiagramSpacing) -> StateLayout {
         let result = layoutStateScope(diagram, depth: 0, measure: measure, spacing: spacing)
         return StateLayout(
             size: result.size, nodes: result.nodes,

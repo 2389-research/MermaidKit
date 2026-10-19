@@ -388,7 +388,7 @@ public enum MermaidRenderer {
     /// `DiagramLayoutEngine.layout`/`DiagramScene.lower` so layout geometry and
     /// lint checks see the same text metrics the render does.
     public static let textMeasurer: @Sendable (String, Double) -> CGSize = { text, size in
-        DiagramRenderer.measure(text, size: CGFloat(size))
+        DiagramRenderer.measureUnscaled(text, size: CGFloat(size))
     }
 }
 #endif

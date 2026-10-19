@@ -92,8 +92,8 @@ final class DiagramSpacingTests: XCTestCase {
     /// draws the header, at every text size: no children under an empty strip.
     func testTreemapReservesHeadersOnlyWhereDrawn() throws {
         guard case .treemap(let treemap) = try fixture("treemap") else { return XCTFail() }
-        for k in [1.0, 1.35, 2.0, 3.0] {
-            let scaled = DiagramSpacing(textScale: k).scaling(measure)
+        for k in [1.0, 1.118, 1.35, 2.0, 3.0] {
+          DiagramTextScale.run(DiagramSpacing(textScale: k), measure) { scaled in
             let layout = DiagramLayoutEngine.layout(treemap, measure: scaled)
             let header = DiagramLayoutEngine.grown(16, fontSize: 9.5, scaled)
             for group in layout.cells where !group.isLeaf {
@@ -106,6 +106,7 @@ final class DiagramSpacingTests: XCTestCase {
                 XCTAssertEqual(top, group.frame.minY + 2 + (drawn ? header : 0), accuracy: 0.01,
                                "\(group.label) at \(k)×")
             }
+          }
         }
     }
 
@@ -119,17 +120,82 @@ final class DiagramSpacingTests: XCTestCase {
             .appendingPathComponent("Fixtures/diagrams")
         let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "mmd" }
-        for k in [0.82, 1.35, 2.0] {
-            // The geometry measurer at k: what `DiagramSpacing(textScale: k)`
-            // does to any measurer.
-            let scaled = DiagramSpacing(textScale: k).scaling(measure)
+        // xSmall, then xLarge, xxLarge and xxxLarge — the sizes people use most,
+        // where an estimate of the growth lagged the text — then about AX2.
+        for k in [0.82, 1.118, 1.235, 1.353, 2.0] {
             for url in files {
                 let name = url.deletingPathExtension().lastPathComponent
                 let diagram = try XCTUnwrap(MermaidParser.parse(try String(contentsOf: url, encoding: .utf8)), name)
-                let errors = DiagramLayoutLinter.lint(DiagramScene.lower(diagram, measure: scaled))
+                let errors = DiagramLayoutLinter.lint(
+                    DiagramScene.lower(diagram, measure: measure, spacing: DiagramSpacing(textScale: k)))
                     .filter { $0.severity == .error }
                 XCTAssertTrue(errors.isEmpty, "\(name) at \(k)×: " + errors.prefix(3).map(\.detail).joined(separator: " | "))
             }
         }
+    }
+
+    // MARK: Text scale reaches every entry point
+
+    /// Grown lengths track the text exactly — the old (line height − 4) /
+    /// fontSize estimate stayed at 1 at xLarge (1.118) in the system font.
+    func testGrowthIsTheTextScale() {
+        for k in [1.0, 1.118, 1.235, 1.353, 2.0, 3.0] {
+            DiagramTextScale.run(DiagramSpacing(textScale: k), measure) { _ in
+                XCTAssertEqual(DiagramLayoutEngine.grown(10, fontSize: 9.5, measure), 10 * k, accuracy: 1e-9, "\(k)")
+            }
+        }
+        XCTAssertEqual(DiagramLayoutEngine.grown(10, fontSize: 9.5, measure), 10, "outside a scaled layout")
+        DiagramTextScale.run(DiagramSpacing(textScale: 0.82), measure) { _ in
+            XCTAssertEqual(DiagramLayoutEngine.grown(10, fontSize: 9.5, measure), 10, "smaller text keeps the default room")
+        }
+    }
+
+    /// The public headless engines honor `textScale`, so headless geometry
+    /// matches the image rendered from the same spacing.
+    func testHeadlessLayoutHonorsTextScale() throws {
+        guard case .flowchart(let chart) = try fixture("flowchart") else { return XCTFail() }
+        let one = DiagramLayoutEngine.layout(chart, measure: measure, spacing: DiagramSpacing())
+        let two = DiagramLayoutEngine.layout(chart, measure: measure, spacing: DiagramSpacing(textScale: 2))
+        XCTAssertGreaterThan(two.size.width, one.size.width * 1.4)
+        // Padding keeps its size; the box grows by exactly the text's extra
+        // height (the geometry measurer's line is size + 4).
+        XCTAssertEqual(two.nodes[0].frame.height - one.nodes[0].frame.height,
+                       CGFloat(DiagramLayoutEngine.nodeFontSize), accuracy: 0.01)
+        // Laying out inside a scope that already applied the scale (the
+        // renderers' path) must not scale the text twice.
+        let nested = DiagramTextScale.run(DiagramSpacing(textScale: 2), measure) { scaled in
+            DiagramLayoutEngine.layout(chart, measure: scaled, spacing: DiagramSpacing(textScale: 2))
+        }
+        XCTAssertEqual(nested.nodes.map(\.frame), two.nodes.map(\.frame))
+    }
+
+    /// The linter sees the scaled layout through `lower(_:measure:spacing:)`.
+    func testLowerHonorsSpacing() throws {
+        let diagram = try fixture("flowchart")
+        guard case .flowchart(let chart) = diagram else { return XCTFail() }
+        let spacing = DiagramSpacing(textScale: 2)
+        let scene = DiagramScene.lower(diagram, measure: measure, spacing: spacing)
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure, spacing: spacing)
+        XCTAssertEqual(scene.size, layout.size)
+        XCTAssertEqual(DiagramScene.lower(diagram, measure: measure, spacing: DiagramSpacing()).size,
+                       DiagramScene.lower(diagram, measure: measure).size)
+    }
+
+    /// Non-finite text scales fall back to the default, never into geometry.
+    func testNonFiniteTextScaleIsTheDefault() {
+        for v in [CGFloat.nan, .infinity, -.infinity] {
+            XCTAssertEqual(DiagramSpacing(textScale: v).textScale, v.isNaN ? 1 : (v > 0 ? 3 : 0.5), "\(v)")
+            var spacing = DiagramSpacing()
+            spacing.textScale = v
+            XCTAssertTrue(spacing.textScale.isFinite, "\(v) by assignment")
+        }
+        XCTAssertEqual(DiagramSpacing(textScale: .nan).fingerprint, DiagramSpacing().fingerprint)
+    }
+
+    /// Scales closer than a hundredth still render differently, so they
+    /// can't share a cache entry.
+    func testCloseTextScalesHaveDistinctFingerprints() {
+        XCTAssertNotEqual(DiagramSpacing(textScale: 1).fingerprint, DiagramSpacing(textScale: 1.004).fingerprint)
+        XCTAssertNotEqual(DiagramSpacing(textScale: 1.351).fingerprint, DiagramSpacing(textScale: 1.353).fingerprint)
     }
 }

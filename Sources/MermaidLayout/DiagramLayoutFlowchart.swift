@@ -101,6 +101,14 @@ extension DiagramLayoutEngine {
     /// renderer only draws.
     public static func layout(_ chart: Flowchart, measure: DiagramTextMeasurer,
                               spacing: DiagramSpacing = .regular) -> FlowchartLayout {
+        DiagramTextScale.run(spacing, measure) { measure in
+            scaledLayout(chart, measure: measure, spacing: spacing)
+        }
+    }
+
+    /// ``layout(_:measure:spacing:)`` with `measure` already at the text scale.
+    private static func scaledLayout(_ chart: Flowchart, measure: DiagramTextMeasurer,
+                                     spacing: DiagramSpacing) -> FlowchartLayout {
         // Flat charts (the common case) take the algorithm below directly.
         // Subgraphs route through the recursive cluster wrapper, which lays
         // out each group's interior as its own sub-chart and places it as a
