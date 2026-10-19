@@ -14,6 +14,14 @@ final class DiagramSpacingTests: XCTestCase {
         CGSize(width: CGFloat(max(t.count, 1)) * s * 0.6, height: s + 4)
     }
 
+    /// `outer` holds `inner`, edges compared directly: swift-corelibs-foundation's
+    /// `CGRect.contains(CGRect)` is `union(r) == self`, which a last-bit rounding
+    /// difference can make false on Linux for a rect that is inside.
+    private func encloses(_ outer: CGRect, _ inner: CGRect) -> Bool {
+        inner.minX >= outer.minX - 1e-9 && inner.maxX <= outer.maxX + 1e-9
+            && inner.minY >= outer.minY - 1e-9 && inner.maxY <= outer.maxY + 1e-9
+    }
+
     private func fixture(_ name: String) throws -> MermaidDiagram {
         let dir = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -98,7 +106,7 @@ final class DiagramSpacingTests: XCTestCase {
             let header = DiagramLayoutEngine.grown(16, fontSize: 9.5, scaled)
             for group in layout.cells where !group.isLeaf {
                 let children = layout.cells.filter {
-                    $0.depth == group.depth + 1 && group.frame.contains($0.frame)
+                    $0.depth == group.depth + 1 && encloses(group.frame, $0.frame)
                 }
                 guard let top = children.map(\.frame.minY).min() else { continue }
                 let drawn = DiagramLayoutEngine.treemapDrawsHeader(group.label, in: group.frame, scaled)
@@ -215,7 +223,7 @@ final class DiagramSpacingTests: XCTestCase {
         let layout = DiagramLayoutEngine.layout(treemap, measure: measure)
         let group = try XCTUnwrap(layout.cells.first { $0.label.hasPrefix("An extraordinarily") })
         XCTAssertFalse(DiagramLayoutEngine.treemapDrawsHeader(group.label, in: group.frame, measure))
-        let top = try XCTUnwrap(layout.cells.filter { $0.depth == group.depth + 1 && group.frame.contains($0.frame) }
+        let top = try XCTUnwrap(layout.cells.filter { $0.depth == group.depth + 1 && encloses(group.frame, $0.frame) }
             .map(\.frame.minY).min())
         XCTAssertEqual(top, group.frame.minY + 2, accuracy: 0.01, "no strip above the children")
     }
@@ -247,7 +255,7 @@ final class DiagramSpacingTests: XCTestCase {
                     let size = scaled(label.text, 10)
                     let rect = CGRect(x: label.center.x - size.width / 2, y: label.center.y - size.height / 2,
                                       width: size.width, height: size.height)
-                    XCTAssertTrue(layout.quadrantRects.contains { $0.contains(rect) },
+                    XCTAssertTrue(layout.quadrantRects.contains { encloses($0, rect) },
                                   "\(label.text) at \(k)×: \(rect) not inside a quadrant")
                 }
             }
