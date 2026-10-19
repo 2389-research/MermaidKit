@@ -46,8 +46,7 @@ extension RenderScene {
                 elements.append(.shape(Shape(
                     path: .roundedRect(cell.frame, radius: 0), fill: nil,
                     stroke: Stroke(color: tint.withAlpha(0.7), width: cell.depth == 1 ? 1.5 : 1))))
-                if cell.frame.height > DiagramLayoutEngine.treemapText(measure).groupMinHeight, cell.frame.width > 40,
-                   measure(cell.label, 9.5).width <= cell.frame.width - 12 {
+                if DiagramLayoutEngine.treemapDrawsHeader(cell.label, in: cell.frame, measure) {
                     elements.append(.text(leftText(
                         cell.label,
                         at: CGPoint(x: cell.frame.minX + 6, y: cell.frame.minY + DiagramLayoutEngine.treemapText(measure).headerY),

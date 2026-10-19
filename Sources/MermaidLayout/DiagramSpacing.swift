@@ -103,9 +103,19 @@ package enum DiagramTextScale {
     /// Runs `body` with `measure` scaled for `spacing.textScale` — unless the
     /// caller is already inside a layout at that scale, whose measurer is
     /// already scaled.
+    ///
+    /// Invariant: text is scaled exactly once. Outside any layout `current` is
+    /// 1 and `measure` is plain, so `body` gets `measure` scaled by k and
+    /// `current` = k. Inside a layout at k, `measure` is already scaled by k,
+    /// so a nested entry point at the same k passes it through. A nested entry
+    /// point at a *different* scale would leave `measure` scaled by the outer
+    /// k while `current` claimed the inner one — only library code can be
+    /// nested here, so that's a bug, and it traps in debug builds.
     package static func run<T>(_ spacing: DiagramSpacing, _ measure: DiagramTextMeasurer,
                                _ body: (DiagramTextMeasurer) -> T) -> T {
         let k = spacing.textScale
+        assert(current == 1 || k == current,
+               "a layout at text scale \(k) nested inside one at \(current): pass the caller's spacing")
         return withoutActuallyEscaping(measure) { measure in
             k == current ? body(measure) : $current.withValue(k) { body(spacing.scaling(measure)) }
         }

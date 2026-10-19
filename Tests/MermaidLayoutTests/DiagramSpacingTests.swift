@@ -101,8 +101,7 @@ final class DiagramSpacingTests: XCTestCase {
                     $0.depth == group.depth + 1 && group.frame.contains($0.frame)
                 }
                 guard let top = children.map(\.frame.minY).min() else { continue }
-                let drawn = group.frame.height > DiagramLayoutEngine.treemapText(scaled).groupMinHeight
-                    && group.frame.width > 40 && scaled(group.label, 9.5).width <= group.frame.width - 12
+                let drawn = DiagramLayoutEngine.treemapDrawsHeader(group.label, in: group.frame, scaled)
                 XCTAssertEqual(top, group.frame.minY + 2 + (drawn ? header : 0), accuracy: 0.01,
                                "\(group.label) at \(k)×")
             }
@@ -197,5 +196,27 @@ final class DiagramSpacingTests: XCTestCase {
     func testCloseTextScalesHaveDistinctFingerprints() {
         XCTAssertNotEqual(DiagramSpacing(textScale: 1).fingerprint, DiagramSpacing(textScale: 1.004).fingerprint)
         XCTAssertNotEqual(DiagramSpacing(textScale: 1.351).fingerprint, DiagramSpacing(textScale: 1.353).fingerprint)
+    }
+
+    /// A group whose header label can't fit is drawn without a header, so it
+    /// reserves no strip either — at the default size too. (Before, the
+    /// layout reserved by height alone and children sat under an empty strip.)
+    func testTreemapGroupWithAnUnfittableHeaderReservesNoStrip() throws {
+        let source = """
+            treemap
+                "Root"
+                    "An extraordinarily long group label that cannot fit"
+                        "a": 10
+                        "b": 10
+                    "Big"
+                        "c": 400
+            """
+        guard case .treemap(let treemap)? = MermaidParser.parse(source) else { return XCTFail() }
+        let layout = DiagramLayoutEngine.layout(treemap, measure: measure)
+        let group = try XCTUnwrap(layout.cells.first { $0.label.hasPrefix("An extraordinarily") })
+        XCTAssertFalse(DiagramLayoutEngine.treemapDrawsHeader(group.label, in: group.frame, measure))
+        let top = try XCTUnwrap(layout.cells.filter { $0.depth == group.depth + 1 && group.frame.contains($0.frame) }
+            .map(\.frame.minY).min())
+        XCTAssertEqual(top, group.frame.minY + 2, accuracy: 0.01, "no strip above the children")
     }
 }

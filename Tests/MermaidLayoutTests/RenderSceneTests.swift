@@ -1327,6 +1327,39 @@ final class RenderSceneTests: XCTestCase {
         XCTAssertGreaterThan(big.size.height, plain.size.height)
     }
 
+    /// Text is scaled exactly once on the scene path, for every diagram type:
+    /// each run present at both sizes is k times its default size — not k²
+    /// (scaled by the measurer and again by the dispatcher), not 1.
+    func testEveryFixtureScalesItsTextExactlyOnce() throws {
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/diagrams")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "mmd" }
+        func sizes(_ scene: RenderScene) -> [String: CGFloat] {
+            var out: [String: CGFloat] = [:]
+            for case .text(let t) in scene.elements { out[t.string] = t.fontSize }
+            return out
+        }
+        for file in files {
+            let name = file.deletingPathExtension().lastPathComponent
+            let diagram = try XCTUnwrap(MermaidParser.parse(try String(contentsOf: file, encoding: .utf8)), name)
+            let plain = sizes(try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure), name))
+            XCTAssertFalse(plain.isEmpty, name)
+            for k in [1.118, 1.353, 2.0] {
+                let scaled = sizes(try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure,
+                                                                  spacing: DiagramSpacing(textScale: k)), name))
+                var shared = 0
+                for (string, size) in scaled {
+                    guard let base = plain[string] else { continue }
+                    shared += 1
+                    XCTAssertEqual(size, base * k, accuracy: 1e-9, "\(name) at \(k)×: \"\(string)\"")
+                }
+                XCTAssertGreaterThan(shared, 0, "\(name) at \(k)×: no text in common to compare")
+            }
+        }
+    }
+
     // MARK: Helpers
 
     private func countOccurrences(of needle: String, in haystack: String) -> Int {

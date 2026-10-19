@@ -44,8 +44,7 @@ extension DiagramRenderer {
                 context.setLineWidth(cell.depth == 1 ? 1.5 : 1)
                 context.stroke(cell.frame)
                 context.restoreGState()
-                if cell.frame.height > DiagramLayoutEngine.treemapText(layoutMeasure).groupMinHeight, cell.frame.width > 40,
-                   measure(cell.label, size: 9.5, weight: .semibold).width <= cell.frame.width - 12 {
+                if DiagramLayoutEngine.treemapDrawsHeader(cell.label, in: cell.frame, layoutMeasure) {
                     // Width-guarded like leaf labels: a long header once
                     // spilled across its sibling cells.
                     drawTextLeft(cell.label, at: CGPoint(x: cell.frame.minX + 6, y: cell.frame.minY + DiagramLayoutEngine.treemapText(layoutMeasure).headerY),
