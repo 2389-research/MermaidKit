@@ -57,9 +57,9 @@ extension DiagramScene {
                 text: tag,
                 frame: CGRect(
                     x: commit.center.x - w / 2,
-                    y: commit.center.y - dotRadius - 18,
+                    y: commit.center.y - dotRadius - DiagramLayoutEngine.grown(18, fontSize: 8.5, measure),
                     width: w,
-                    height: 14)))
+                    height: DiagramLayoutEngine.grown(14, fontSize: 8.5, measure))))
         }
 
         return DiagramScene(

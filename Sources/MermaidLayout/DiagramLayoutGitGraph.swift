@@ -5,6 +5,17 @@ import CoreGraphics
 
 extension DiagramLayoutEngine {
 
+
+    /// The chip a commit's 8.5pt tag sits on, above the commit: 21 over its
+    /// center and 13 tall at the default size, grown with the text so the tag
+    /// stays inside it. Both renderers draw it; the lint scene checks it.
+    package static func gitTagChip(_ tag: String, at center: CGPoint,
+                                   _ measure: DiagramTextMeasurer) -> CGRect {
+        let width = measure(tag, 8.5).width
+        return CGRect(x: center.x - width / 2 - 4, y: center.y - grown(21, fontSize: 8.5, measure),
+                      width: width + 8, height: grown(13, fontSize: 8.5, measure))
+    }
+
     /// Lays out a git graph left-to-right: commits advance along x in history
     /// order, each branch occupies a horizontal lane, and edges connect every
     /// commit to its parents (a curve when it crosses lanes — a branch point or
@@ -18,7 +29,10 @@ extension DiagramLayoutEngine {
         // Lane label gutter sized to the widest branch name.
         let labelWidth = graph.branches.map { measure($0, labelFontSize).width }.max() ?? 40
         let gutter = margin + min(max(labelWidth, 30), grown(120, fontSize: labelFontSize, measure)) + 10
-        let topMargin = margin + grown(14, fontSize: 9, measure)   // room for a tag above the first lane
+        // The first lane sits low enough for a tag chip above it (which rises
+        // grown(21) over its commit) to keep 7 clear of the canvas top: 28 at
+        // the default size, as margin (14) + 14 always was.
+        let topMargin = grown(21, fontSize: 8.5, measure) + 7
 
         func lane(_ branch: String) -> Int { graph.branches.firstIndex(of: branch) ?? 0 }
         func y(_ branch: String) -> CGFloat { topMargin + CGFloat(lane(branch)) * laneGap }

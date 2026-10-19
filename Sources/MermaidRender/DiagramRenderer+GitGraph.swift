@@ -62,9 +62,7 @@ extension DiagramRenderer {
                          color: theme.secondaryTextColor, in: context)
             }
             if let tag = commit.tag {
-                let measured = measure(tag, size: 8.5)
-                let chip = CGRect(x: commit.center.x - measured.width / 2 - 4,
-                                  y: commit.center.y - 15 - 6, width: measured.width + 8, height: 13)
+                let chip = DiagramLayoutEngine.gitTagChip(tag, at: commit.center, layoutMeasure)
                 context.saveGState()
                 context.setFillColor(resolvedCGColor(theme.accent.withAlphaComponent(0.16)))
                 context.addPath(CGPath(roundedRect: chip, cornerWidth: 3, cornerHeight: 3, transform: nil))

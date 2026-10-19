@@ -142,10 +142,12 @@ extension DiagramScene {
             } + layout.boxBands.compactMap { band -> Label? in
                 guard let text = band.label, !text.isEmpty else { return nil }
                 let width = measuredLabelSize(measure, text).width
+                let height = DiagramLayoutEngine.grown(14, fontSize: 9, measure)
+                let centerY = band.rect.minY + DiagramLayoutEngine.sequenceBoxStrip(measure) / 2
                 return Label(
                     text: text,
-                    frame: CGRect(x: band.rect.midX - width / 2, y: band.rect.minY + 2,
-                                  width: width, height: 14))
+                    frame: CGRect(x: band.rect.midX - width / 2, y: centerY - height / 2,
+                                  width: width, height: height))
             }
         )
     }

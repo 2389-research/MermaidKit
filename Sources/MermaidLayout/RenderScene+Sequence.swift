@@ -34,7 +34,8 @@ extension RenderScene {
             if let label = band.label, !label.isEmpty {
                 elements.append(.text(Text(
                     string: label,
-                    center: CGPoint(x: band.rect.midX, y: band.rect.minY + 9),
+                    center: CGPoint(x: band.rect.midX,
+                                    y: band.rect.minY + DiagramLayoutEngine.sequenceBoxStrip(measure) / 2),
                     fontSize: 9, weight: .semibold, color: theme.tertiaryText)))
             }
         }

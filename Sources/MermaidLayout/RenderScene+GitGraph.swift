@@ -69,9 +69,7 @@ extension RenderScene {
                     string: label, center: at, fontSize: 8.5, color: theme.secondaryText)))
             }
             if let tag = commit.tag {
-                let width = measure(tag, 8.5).width
-                let chip = CGRect(x: commit.center.x - width / 2 - 4,
-                                  y: commit.center.y - 15 - 6, width: width + 8, height: 13)
+                let chip = DiagramLayoutEngine.gitTagChip(tag, at: commit.center, measure)
                 elements.append(.shape(Shape(
                     path: .roundedRect(chip, radius: 3),
                     fill: theme.accent.withAlpha(0.16), stroke: nil)))

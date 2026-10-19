@@ -1425,12 +1425,25 @@ extension DiagramLayoutEngine {
                 grown(14, fontSize: labelFontSize, measure), grown(13, fontSize: labelFontSize, measure))
     }
 
+    /// The strip at the top of a sequence `box` band that holds its 9pt label:
+    /// the band starts 6 above the margin, its label is centered in the strip,
+    /// and boxed heads start below it (18 at the default size, so heads sit at
+    /// margin + 12 and the label at the band's top + 9). Layout, both renderers
+    /// and the lint scene place the label by it.
+    package static func sequenceBoxStrip(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(18, fontSize: 9, measure)
+    }
+
     public static func layout(_ diagram: SequenceDiagram, measure: DiagramTextMeasurer) -> SequenceLayout {
         let margin: CGFloat = 12
         let headPaddingX: CGFloat = 14
         let headHeight: CGFloat = grown(30, fontSize: nodeFontSize, measure)
         let rowHeight: CGFloat = grown(34, fontSize: labelFontSize, measure)
-        let minColumn: CGFloat = 110
+        // The room between lifelines holds message labels, so the minimum
+        // column, the gap between columns and a label's clearance grow with
+        // the text (all as before at the default size).
+        let minColumn: CGFloat = grown(110, fontSize: labelFontSize, measure)
+        let columnGap: CGFloat = grown(24, fontSize: labelFontSize, measure)
 
         // Column widths driven by head labels and message texts.
         var columnWidth: [CGFloat] = diagram.participants.map { participant in
@@ -1441,7 +1454,7 @@ extension DiagramLayoutEngine {
         for message in diagram.messages {
             guard let a = indexOf[message.from], let b = indexOf[message.to], abs(a - b) == 1 else { continue }
             let widest = brLines(message.text).map { measure($0, labelFontSize).width }.max() ?? 0
-            let needed = widest + 24
+            let needed = widest + columnGap
             let lo = min(a, b)
             columnWidth[lo] = max(columnWidth[lo], needed)
         }
@@ -1451,19 +1464,24 @@ extension DiagramLayoutEngine {
         let boxed = Set(diagram.boxes.flatMap(\.memberIDs))
         for (i, participant) in diagram.participants.enumerated() {
             let width = columnWidth[i]
-            // Boxed participants drop 12pt so the band's label has clear
-            // headroom above their head boxes.
-            let headY = boxed.contains(participant.id) ? margin + 12 : margin
+            // Boxed participants sit below their band's label strip, so the
+            // label has clear headroom above their head boxes.
+            let headY = boxed.contains(participant.id) ? margin - 6 + sequenceBoxStrip(measure) : margin
             heads.append(SequenceLayout.Head(
                 label: participant.label,
                 frame: CGRect(x: x, y: headY, width: width, height: headHeight),
                 isActor: participant.isActor,
                 kind: participant.kind.rawValue
             ))
-            x += width + 24
+            x += width + columnGap
         }
 
-        let arrowsTop = margin + headHeight + 18
+        // Room under the heads for an actor's name below its figure, grown with
+        // the text; boxed heads sit lower by however much their band's label
+        // strip grew past its default 18 (so, at the default size, exactly
+        // margin + headHeight + 18 as before).
+        let boxDrop = boxed.isEmpty ? 0 : sequenceBoxStrip(measure) - 18
+        let arrowsTop = margin + headHeight + grown(18, fontSize: labelFontSize, measure) + boxDrop
         // ROW STREAM: messages, notes, and fragment frames consume rows in
         // exact source order, each row sized to its content — the memo's
         // "typed row stream" model. Legacy diagrams (hand-built, no events)

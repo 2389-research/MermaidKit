@@ -135,7 +135,8 @@ extension DiagramRenderer {
             context.setLineWidth(1)
             context.stroke(band.rect)
             if let label = band.label {
-                drawText(label, center: CGPoint(x: band.rect.midX, y: band.rect.minY + 9),
+                drawText(label, center: CGPoint(x: band.rect.midX,
+                                                y: band.rect.minY + DiagramLayoutEngine.sequenceBoxStrip(layoutMeasure) / 2),
                          size: 9, weight: .semibold, color: theme.tertiaryTextColor, in: context)
             }
         }

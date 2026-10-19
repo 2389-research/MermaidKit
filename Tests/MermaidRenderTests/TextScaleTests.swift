@@ -50,9 +50,15 @@ final class TextScaleTests: XCTestCase {
         for (i, a) in ink.enumerated() {
             if !canvas.contains(drawn[i].rect) { out.append("off canvas: \"\(a.text)\"") }
             let center = CGPoint(x: drawn[i].rect.midX, y: drawn[i].rect.midY)
-            if let box = boxes.filter({ $0.contains(center) }).min(by: { $0.width * $0.height < $1.width * $1.height }),
-               !box.insetBy(dx: -1, dy: -1).contains(drawn[i].rect) {
+            let own = boxes.filter({ $0.contains(center) }).min(by: { $0.width * $0.height < $1.width * $1.height })
+            if let box = own, !box.insetBy(dx: -1, dy: -1).contains(drawn[i].rect) {
                 out.append("outside its box: \"\(a.text)\"")
+            }
+            // Nor may it run into a box it isn't in (a band label over the
+            // heads below it, a title over the first row).
+            for box in boxes where box != own && !box.contains(drawn[i].rect) && a.rect.intersects(box) {
+                out.append("crosses a box: \"\(a.text)\"")
+                break
             }
             for b in ink[(i + 1)...] where a.rect.intersects(b.rect) {
                 out.append("overlap: \"\(a.text)\" / \"\(b.text)\"")
@@ -98,6 +104,46 @@ final class TextScaleTests: XCTestCase {
         for scale in Self.scales {
             let found = try XCTUnwrap(problems("multiline sequence", source: source, scale: scale))
             XCTAssertTrue(found.isEmpty, "at \(scale)×: " + found.joined(separator: " ; "))
+        }
+    }
+
+    /// Constructs the fixtures don't exercise, each placing its own text: they
+    /// must fit at every scale as well as the fixtures do.
+    func testConstructsFitAtEveryTextScale() throws {
+        let corpus: [(String, String)] = [
+            ("sequence box", """
+                sequenceDiagram
+                  box Backend services
+                    participant A as API
+                    participant D as Database
+                  end
+                  A->>D: query
+                  D-->>A: rows
+                """),
+            ("sequence self-message", """
+                sequenceDiagram
+                  participant S as Service
+                  S->>S: retry with backoff
+                  S->>S: give up
+                """),
+            ("flowchart subgraph titles", """
+                flowchart TD
+                  subgraph ingest [Ingest pipeline]
+                    A[Read] --> B[Parse]
+                  end
+                  subgraph out [Output stage]
+                    C[Render] --> D[Export]
+                  end
+                  B --> C
+                """),
+        ]
+        for (name, source) in corpus {
+            let baseline = Set(try XCTUnwrap(problems(name, source: source, scale: 1), name))
+            for scale in Self.scales {
+                guard let found = try problems(name, source: source, scale: scale) else { continue }
+                let new = found.filter { !baseline.contains($0) }
+                XCTAssertTrue(new.isEmpty, "\(name) at \(scale)×: " + new.prefix(4).joined(separator: " ; "))
+            }
         }
     }
 
