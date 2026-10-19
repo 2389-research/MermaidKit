@@ -29,7 +29,7 @@ primitives in painter's order, exactly like the Android and SVG backends.
   polylines, and centered/rotated text with backing chips. Colors are
   `#RRGGBBAA`; text is measured with the same `SKPaint` that draws it.
 - `MermaidKit/MermaidNative.cs` — the P/Invoke bridge (`[DllImport("MermaidKitCShared")]`
-  over `mmk_scene_json` / `mmk_narrate` / `mmk_version` / `mmk_free`).
+  over `mmk_scene_json` / `mmk_scene_json_options` / `mmk_narrate` / `mmk_version` / `mmk_free`).
 - `MermaidKit.Tests/` — xUnit tests: `SceneRendererTests` (the golden JSON the
   core emits parses via the converters and renders real ink on a Skia canvas) and
   `PInvokeTests` (source → native → scene; soft-skip without the DLL unless
@@ -53,8 +53,10 @@ text there; the headless Linux Skia build draws shapes/strokes but no glyphs).
 ## Shipped
 
 - **The P/Invoke bridge** — `MermaidNative` binds `[DllImport("MermaidKitCShared")]`
-  to `mmk_scene_json` (+ `mmk_narrate` / `mmk_version` / `mmk_free`), so an app passes
-  a Mermaid *source string* and gets a `SceneWire` back. `PInvokeTests` covers it and
+  to `mmk_scene_json` and `mmk_scene_json_options` (+ `mmk_narrate` / `mmk_version` /
+  `mmk_free`), so an app passes a Mermaid *source string* and gets a `SceneWire`
+  back. `MermaidNative.Scene(source, textScale: 1.3)` lays the text out at that size
+  (Dynamic Type for diagrams; pass the system text scale factor). `PInvokeTests` covers it and
   CI runs it on `windows-latest` — mirroring Android's JNI seam.
 
 ## Not yet here (next slices)

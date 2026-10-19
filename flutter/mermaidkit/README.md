@@ -54,9 +54,13 @@ JNI and .NET's P/Invoke — `dart:ffi` calls the same `@_cdecl` C ABI directly, 
 Flutter app hands over a Mermaid **source string** and gets a scene:
 
 ```dart
-final scene = MermaidNative.scene("flowchart LR\n A[Start] --> B[End]");
+final scene = MermaidNative.scene("flowchart LR\n A[Start] --> B[End]",
+    textScale: MediaQuery.textScalerOf(context).scale(1)); // follow the user's text size
 // → CustomPaint(painter: MermaidPainter(scene!))
 ```
+
+`textScale` (0.5–3, default 1) lays the diagram's text out at that size, with the
+boxes grown around it and lines kept at their weight (`mmk_scene_json_options`).
 
 It loads `MermaidKitCShared` (the Swift core built as a shared library —
 `swift build --product MermaidKitCShared`; an app bundles the `.so`/`.dylib`/`.dll`

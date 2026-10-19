@@ -27,6 +27,10 @@ let scene = DiagramScene.lower(diagram, measure: measurer)
 let json = try JSONEncoder().encode(scene)   // Codable: diff it, store it, ship it
 ```
 
+To lint what a render with a given spacing draws (its density, grid snap and
+text scale), pass the same spacing:
+``DiagramScene/lower(_:measure:spacing:)``.
+
 Use the renderer's own measurer (`MermaidRenderer.textMeasurer` from the
 `MermaidRender` target) when you want scene geometry to match the drawn
 output exactly; any deterministic ``DiagramTextMeasurer`` works for pure
@@ -76,8 +80,9 @@ baseline the grid-snapping pass is verified against. That pass, `GridQuantizer`,
 is opt-in via ``DiagramSpacing/gridSnap`` (flowchart today): it snaps node boxes
 onto the grid and re-anchors edges inside
 `DiagramLayoutEngine.layout(_:measure:spacing:)`, so the CoreGraphics and
-`RenderScene` paths draw identical snapped geometry. ``DiagramScene/lower(_:measure:)``
-takes no spacing, so it always lints the unsnapped layout.
+`RenderScene` paths draw identical snapped geometry. Lint it with
+``DiagramScene/lower(_:measure:spacing:)`` and the same spacing to see the snapped
+layout (``DiagramScene/lower(_:measure:)`` lints the default spacing).
 
 ```swift
 if let ga = DiagramLayoutLinter.gridAlignment(scene) {
