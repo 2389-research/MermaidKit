@@ -54,4 +54,18 @@ void main() {
     if (_tryNative() == null) return;
     expect(MermaidNative.sceneJson('not a diagram at all'), isNull);
   });
+
+  test('textScale scales every text run exactly once', () {
+    if (_tryNative() == null) return;
+    expect(MermaidNative.sceneJson(source, textScale: 1), MermaidNative.sceneJson(source));
+    final one = MermaidNative.scene(source)!;
+    final two = MermaidNative.scene(source, textScale: 2)!;
+    Map<String, double> sizes(SceneWire s) => {
+          for (final t in s.elements.whereType<TextElement>()) t.string: t.fontSize,
+        };
+    final oneSizes = sizes(one), twoSizes = sizes(two);
+    expect(oneSizes, isNotEmpty);
+    oneSizes.forEach((text, size) => expect(twoSizes[text], closeTo(size * 2, 1e-9), reason: text));
+    expect(two.size.w, greaterThan(one.size.w));
+  });
 }

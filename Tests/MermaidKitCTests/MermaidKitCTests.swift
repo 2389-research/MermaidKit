@@ -194,6 +194,84 @@ final class MermaidKitCTests: XCTestCase {
                        "themed scene must use the caller's canvas color")
     }
 
+    // MARK: - Text scale (mmk_scene_json_options)
+
+    private func optionsJSON(_ source: String, theme: String? = nil, prefersDark: Int32 = 0,
+                             textScale: Double) -> String? {
+        let call: (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>? = { theme in
+            source.withCString { mmk_scene_json_options($0, theme, prefersDark, textScale, MermaidKitCTests.cMeasure, nil) }
+        }
+        guard let ptr = theme.map({ $0.withCString { call($0) } }) ?? call(nil) else { return nil }
+        defer { mmk_free(ptr) }
+        return String(cString: ptr)
+    }
+
+    private func textSizes(_ json: String) throws -> [String: Double] {
+        let scene = try JSONDecoder().decode(SceneWire.self, from: Data(json.utf8))
+        var out: [String: Double] = [:]
+        for case .text(let t) in scene.elements { out[t.string] = t.fontSize }
+        return out
+    }
+
+    /// At text scale 1 the options call is exactly `mmk_scene_json` (and a
+    /// non-finite scale is the default size, never NaN geometry).
+    func testOptionsAtDefaultScaleMatchesSceneJSON() throws {
+        for source in fixtures {
+            for dark: Int32 in [0, 1] {
+                let plain = try XCTUnwrap(sceneJSON(source, prefersDark: dark))
+                XCTAssertEqual(optionsJSON(source, prefersDark: dark, textScale: 1), plain)
+                XCTAssertEqual(optionsJSON(source, prefersDark: dark, textScale: .nan), plain)
+            }
+        }
+    }
+
+    /// The text scale reaches the scene: every run is exactly k times its
+    /// default size, and the layout grows to hold it.
+    func testOptionsScalesTheText() throws {
+        for source in fixtures {
+            let one = try textSizes(try XCTUnwrap(optionsJSON(source, textScale: 1)))
+            let twoJSON = try XCTUnwrap(optionsJSON(source, textScale: 2))
+            let two = try textSizes(twoJSON)
+            XCTAssertFalse(one.isEmpty)
+            for (string, size) in one {
+                XCTAssertEqual(two[string] ?? .nan, size * 2, accuracy: 1e-9, string)
+            }
+            let small = try JSONDecoder().decode(SceneWire.self, from: Data(try XCTUnwrap(sceneJSON(source)).utf8))
+            let big = try JSONDecoder().decode(SceneWire.self, from: Data(twoJSON.utf8))
+            XCTAssertGreaterThan(big.size.w, small.size.w)
+        }
+    }
+
+    /// The caller's measure callback is asked at the scaled size, so the host's
+    /// own font both measures and draws the larger text.
+    func testOptionsMeasuresAtTheScaledSize() throws {
+        final class Sizes { var seen: [Double] = [] }
+        let sizes = Sizes()
+        let measure: MmkMeasure = { _, size, userdata, w, h in
+            Unmanaged<Sizes>.fromOpaque(userdata!).takeUnretainedValue().seen.append(size)
+            w?.pointee = 10; h?.pointee = size + 4
+        }
+        let ptr = flowchart.withCString {
+            mmk_scene_json_options($0, nil, 0, 2, measure, Unmanaged.passUnretained(sizes).toOpaque())
+        }
+        mmk_free(ptr)
+        XCTAssertTrue(sizes.seen.contains(DiagramLayoutEngine.nodeFontSize * 2), "\(Set(sizes.seen))")
+        XCTAssertFalse(sizes.seen.contains(DiagramLayoutEngine.nodeFontSize), "nothing measured at 1×")
+    }
+
+    /// A theme and a text scale together: the caller's colors, scaled text.
+    func testOptionsThemesAndScales() throws {
+        let theme = """
+        {"ink":"#101010FF","accent":"#FF0000FF","canvas":"#123456FF",
+         "hairline":"#0000001F","secondaryText":"#1010108C","tertiaryText":"#10101061",
+         "palette":["#FF0000FF"],"prefersDark":false}
+        """
+        let json = try XCTUnwrap(optionsJSON(flowchart, theme: theme, textScale: 1.5))
+        let scene = try JSONDecoder().decode(SceneWire.self, from: Data(json.utf8))
+        XCTAssertEqual(scene.background.uppercased(), "#123456FF")
+        XCTAssertNil(optionsJSON(flowchart, theme: "{not json", textScale: 1.5), "a bad theme is a caller error")
+    }
+
     func testThemedNilFallsBackToLightPreset() throws {
         // nil theme == the light preset, i.e. equal to mmk_scene_json(prefersDark: 0).
         let themed = try XCTUnwrap(themedJSON(flowchart, theme: nil))

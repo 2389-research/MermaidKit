@@ -13,8 +13,10 @@ final class DocImageGeneration: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }
 
-    private func png(_ source: String, dark: Bool, scale: CGFloat = 2, pad: CGFloat = 20) -> Data? {
-        guard let image = MermaidRenderer.image(source: source, theme: DiagramTheme(prefersDark: dark)) else { return nil }
+    private func png(_ source: String, dark: Bool, scale: CGFloat = 2, pad: CGFloat = 20,
+                     spacing: DiagramSpacing = .regular) -> Data? {
+        guard let image = MermaidRenderer.image(source: source, theme: DiagramTheme(prefersDark: dark),
+                                                spacing: spacing) else { return nil }
         let size = NSSize(width: image.size.width * scale + pad * 2, height: image.size.height * scale + pad * 2)
         let card = NSImage(size: size)
         card.lockFocus()
@@ -51,7 +53,23 @@ final class DocImageGeneration: XCTestCase {
             try png(source, dark: false)?.write(to: types.appendingPathComponent("\(name).png"))
             try png(source, dark: true)?.write(to: types.appendingPathComponent("\(name)-dark.png"))
         }
-        print("DOCGEN wrote hero + per-type images to \(outDir.path)")
+        // Dynamic Type: one diagram at the default size, xxxLarge and an
+        // accessibility size, so the website can show text growing with the
+        // boxes around it while lines keep their weight.
+        let textScaleSource = """
+            flowchart LR
+              A[Read the source] --> B{Valid?}
+              B -->|yes| C[Lay it out]
+              B -->|no| D[Show the source]
+            """
+        for (k, tag) in [(1.0, "1"), (1.35, "1.35"), (2.0, "2")] {
+            let spacing = DiagramSpacing(textScale: CGFloat(k))
+            try png(textScaleSource, dark: false, spacing: spacing)?
+                .write(to: outDir.appendingPathComponent("textscale-\(tag).png"))
+            try png(textScaleSource, dark: true, spacing: spacing)?
+                .write(to: outDir.appendingPathComponent("textscale-\(tag)-dark.png"))
+        }
+        print("DOCGEN wrote hero + per-type + text-scale images to \(outDir.path)")
     }
 }
 #endif

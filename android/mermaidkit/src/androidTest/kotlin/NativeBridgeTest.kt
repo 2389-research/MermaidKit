@@ -143,4 +143,20 @@ class NativeBridgeTest {
         assertNotNull("throwing measurer should fall back, not fail", scene)
         assertTrue(scene!!.elements.isNotEmpty())
     }
+
+    @Test
+    fun textScaleScalesEveryTextRunExactlyOnce() {
+        val plain = MermaidNative.sceneJson(source)
+        assertEquals("textScale 1 is the default output", plain, MermaidNative.sceneJson(source, textScale = 1f))
+
+        val one = MermaidNative.scene(source)!!
+        val two = MermaidNative.scene(source, textScale = 2f)!!
+        val oneSizes = one.elements.filterIsInstance<Element.Text>().associate { it.string to it.fontSize }
+        val twoSizes = two.elements.filterIsInstance<Element.Text>().associate { it.string to it.fontSize }
+        assertTrue(oneSizes.isNotEmpty())
+        for ((text, size) in oneSizes) {
+            assertEquals("\"$text\" at 2x", size * 2, twoSizes[text]!!, 1e-9)
+        }
+        assertTrue("the layout grows with the text", two.size.w > one.size.w)
+    }
 }

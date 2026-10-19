@@ -78,4 +78,19 @@ public class PInvokeTests
         if (TryNative() is null) return;
         Assert.Null(MermaidNative.SceneJson("not a diagram at all"));
     }
+
+    [Fact]
+    public void TextScaleScalesEveryTextRunExactlyOnce()
+    {
+        if (TryNative() is null) return;
+        Assert.Equal(MermaidNative.SceneJson(Source), MermaidNative.SceneJson(Source, textScale: 1));
+        var one = MermaidNative.Scene(Source)!;
+        var two = MermaidNative.Scene(Source, textScale: 2)!;
+        var oneSizes = one.elements.OfType<TextElement>().ToDictionary(t => t.@string, t => t.fontSize);
+        var twoSizes = two.elements.OfType<TextElement>().ToDictionary(t => t.@string, t => t.fontSize);
+        Assert.NotEmpty(oneSizes);
+        foreach (var (text, size) in oneSizes)
+            Assert.Equal(size * 2, twoSizes[text], 9);
+        Assert.True(two.size.w > one.size.w, "the layout grows with the text");
+    }
 }

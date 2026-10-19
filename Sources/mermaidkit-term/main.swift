@@ -30,6 +30,7 @@ struct Options {
     var color: ColorPreference = .auto // auto | always | never
     var theme: ThemePreference = .auto // auto | dark | light
     var width: Int?                    // halfblock target columns (nil → detect)
+    var textScale: Double = 1          // Dynamic Type for the raster tiers
     var path: String?                  // nil → read stdin
     var help = false
 }
@@ -61,6 +62,9 @@ func parseArgs(_ argv: [String]) -> Options? {
         case a == "--theme" || a.hasPrefix("--theme="):
             guard let v = value(after: "--theme"), let t = ThemePreference(rawValue: v) else { return nil }
             o.theme = t
+        case a == "--text-scale" || a.hasPrefix("--text-scale="):
+            guard let v = value(after: "--text-scale"), let k = Double(v), k.isFinite, k > 0 else { return nil }
+            o.textScale = k
         case a == "--width" || a.hasPrefix("--width="):
             guard let v = value(after: "--width"), let n = Int(v), n > 0 else { return nil }
             o.width = n
@@ -80,6 +84,7 @@ mermaidkit-term — render a Mermaid flowchart to the terminal
 
 USAGE:
   mermaidkit-term [FILE] [--mode kitty|halfblock|box|plain|auto] [--width COLS]
+                  [--text-scale K]
                   [--format mermaid|dot|dippin|gitlog|auto]
                   [--color auto|always|never] [--theme auto|dark|light]
   cat diagram.mmd | mermaidkit-term --mode halfblock --width 100
@@ -105,6 +110,10 @@ MODES (capability ladder):
             pixel — a near-photographic image in any 24-bit terminal, no protocol
   box       structured Unicode box-drawing (colored per --color)
   plain     box-drawing, never colored
+
+TEXT SCALE (--text-scale): draw the diagram's text at K times its size (0.5–3)
+  with the boxes grown around it, for the kitty and halfblock tiers. Box-drawing
+  tiers draw in terminal cells, so they ignore it.
 
 WIDTH (--width): half-block target columns. Default detects the terminal width
   (TIOCGWINSZ, then $COLUMNS), falling back to 100.
@@ -210,10 +219,12 @@ func run() -> Int32 {
 
     switch mode {
     case .kitty:
-        return renderKitty(source, diagram: dotDiagram, background: background)
+        return renderKitty(source, diagram: dotDiagram, background: background,
+                           spacing: DiagramSpacing(textScale: CGFloat(opts.textScale)))
     case .halfBlock:
         return renderHalfBlock(source, diagram: dotDiagram, background: background,
-                               requestedWidth: opts.width)
+                               requestedWidth: opts.width,
+                               spacing: DiagramSpacing(textScale: CGFloat(opts.textScale)))
     case .coloredBox, .plainBox:
         // The box/plain ladder is flowchart-scoped (ASCIIRenderer draws the
         // Flowchart IR only). A git-log paste lowers to the GitGraph IR, which
@@ -317,11 +328,11 @@ func looksLikeGitLog(_ source: String) -> Bool {
 /// protocol. Falls back to a colored box render if the rasterizer is
 /// unavailable or the source doesn't render.
 func renderKitty(_ source: String, diagram: MermaidDiagram?,
-                 background: TerminalBackground) -> Int32 {
+                 background: TerminalBackground, spacing: DiagramSpacing = .regular) -> Int32 {
     #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
     let theme = DiagramTheme(prefersDark: background == .dark)
-    let png = diagram.flatMap { MermaidRenderer.pngData(diagram: $0, theme: theme) }
-        ?? MermaidRenderer.pngData(source: source, theme: theme)
+    let png = diagram.flatMap { MermaidRenderer.pngData(diagram: $0, theme: theme, spacing: spacing) }
+        ?? MermaidRenderer.pngData(source: source, theme: theme, spacing: spacing)
     if let png {
         FileHandle.standardOutput.write(Data(KittyGraphics.encode(pngData: png).utf8))
         FileHandle.standardOutput.write(Data("\n".utf8))
@@ -366,7 +377,8 @@ func terminalColumns() -> Int? {
 /// stream that can be redirected to a file). Falls back to the colored box
 /// render when the raster backend is unavailable or the source doesn't render.
 func renderHalfBlock(_ source: String, diagram: MermaidDiagram?,
-                     background: TerminalBackground, requestedWidth: Int?) -> Int32 {
+                     background: TerminalBackground, requestedWidth: Int?,
+                     spacing: DiagramSpacing = .regular) -> Int32 {
     let cols = max(10, min(requestedWidth ?? terminalColumns() ?? 100, 400))
     let prefersDark = (background == .dark)
     // The theme canvas colors from DiagramTheme(prefersDark:) — margins blend.
@@ -376,8 +388,8 @@ func renderHalfBlock(_ source: String, diagram: MermaidDiagram?,
     #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
     let theme = DiagramTheme(prefersDark: prefersDark)
     let maybeRaster = diagram.flatMap {
-        MermaidRenderer.rgbaRaster(diagram: $0, theme: theme, targetWidth: cols, background: bg)
-    } ?? MermaidRenderer.rgbaRaster(source: source, theme: theme, targetWidth: cols, background: bg)
+        MermaidRenderer.rgbaRaster(diagram: $0, theme: theme, spacing: spacing, targetWidth: cols, background: bg)
+    } ?? MermaidRenderer.rgbaRaster(source: source, theme: theme, spacing: spacing, targetWidth: cols, background: bg)
     if let raster = maybeRaster {
         var pixels = [RGBA]()
         pixels.reserveCapacity(raster.width * raster.height)

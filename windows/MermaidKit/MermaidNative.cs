@@ -26,6 +26,11 @@ public static class MermaidNative
         int prefersDark, IntPtr measure, IntPtr userdata);
 
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr mmk_scene_json_options(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string source,
+        IntPtr themeJson, int prefersDark, double textScale, IntPtr measure, IntPtr userdata);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr mmk_narrate(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string source);
 
@@ -36,10 +41,14 @@ public static class MermaidNative
     private static extern IntPtr mmk_version();
 
     /// The scene as wire JSON, or null when <paramref name="source"/> is empty or
-    /// fails to parse.
-    public static string? SceneJson(string source, bool prefersDark = false)
+    /// fails to parse. <paramref name="textScale"/> is Dynamic Type for the
+    /// diagram (e.g. the system text scale factor): text is laid out and drawn
+    /// at that multiple of its size, clamped to 0.5–3; 1 is the default size.
+    public static string? SceneJson(string source, bool prefersDark = false, double textScale = 1)
     {
-        IntPtr ptr = mmk_scene_json(source, prefersDark ? 1 : 0, IntPtr.Zero, IntPtr.Zero);
+        IntPtr ptr = textScale == 1
+            ? mmk_scene_json(source, prefersDark ? 1 : 0, IntPtr.Zero, IntPtr.Zero)
+            : mmk_scene_json_options(source, IntPtr.Zero, prefersDark ? 1 : 0, textScale, IntPtr.Zero, IntPtr.Zero);
         if (ptr == IntPtr.Zero) return null;
         try { return Marshal.PtrToStringUTF8(ptr); }
         finally { mmk_free(ptr); }
@@ -47,9 +56,9 @@ public static class MermaidNative
 
     /// Parse <paramref name="source"/> natively into a <see cref="SceneWire"/>, or
     /// null when it fails to parse.
-    public static SceneWire? Scene(string source, bool prefersDark = false)
+    public static SceneWire? Scene(string source, bool prefersDark = false, double textScale = 1)
     {
-        var json = SceneJson(source, prefersDark);
+        var json = SceneJson(source, prefersDark, textScale);
         return json is null ? null : SceneWire.Parse(json);
     }
 

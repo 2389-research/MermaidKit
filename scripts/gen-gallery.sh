@@ -10,8 +10,11 @@ cd docs/images
 for f in hero-light.png hero-dark.png; do
   magick "$f" -resize 2200 -colors 255 -define png:compression-level=9 "$f"
 done
+for f in textscale-*.png; do
+  magick "$f" -colors 255 -define png:compression-level=9 "$f"
+done
 for f in types/*.png; do
   magick "$f" -resize '2000>' -colors 255 -define png:compression-level=9 "$f"
 done
 rm -f gallery.png
-echo "docs/images: hero-light.png hero-dark.png + $(ls types/*.png | wc -l | tr -d ' ') per-type images"
+echo "docs/images: hero-light.png hero-dark.png + $(ls textscale-*.png | wc -l | tr -d ' ') text-scale + $(ls types/*.png | wc -l | tr -d ' ') per-type images"

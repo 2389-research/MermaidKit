@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import ai.mermaidkit.scene.SceneRenderer
@@ -28,17 +29,20 @@ import ai.mermaidkit.scene.SceneRenderer
  * wiring. Nothing is drawn for blank or unparseable source.
  *
  * Text is measured with the same face that draws (via [PaintMeasurer]), so
- * layout and draw agree.
+ * layout and draw agree. [textScale] defaults to the system font size
+ * (`LocalDensity.current.fontScale`), so the diagram's text follows the user's
+ * text-size setting the way the app's own text does.
  */
 @Composable
 fun MermaidDiagram(
     source: String,
     modifier: Modifier = Modifier,
     theme: MermaidTheme = MermaidTheme.fromMaterial(MaterialTheme.colorScheme),
+    textScale: Float = LocalDensity.current.fontScale,
 ) {
-    val scene = remember(source, theme) {
+    val scene = remember(source, theme, textScale) {
         source.takeIf { it.isNotBlank() }
-            ?.let { MermaidNative.scene(it, theme, PaintMeasurer()) }
+            ?.let { MermaidNative.scene(it, theme, PaintMeasurer(), textScale) }
     }
     val narration = remember(source) {
         source.takeIf { it.isNotBlank() }?.let { MermaidNative.narrate(it) }
