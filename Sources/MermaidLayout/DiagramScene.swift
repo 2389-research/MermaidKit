@@ -301,7 +301,7 @@ public enum DiagramLayoutLinter {
                 let a = boxes[i].frame, b = boxes[j].frame
                 let ov = a.intersection(b)
                 if !ov.isNull, ov.width > overlapTolerance, ov.height > overlapTolerance,
-                   !a.contains(b), !b.contains(a) {
+                   !encloses(a, b), !encloses(b, a) {
                     out.append(.init(.error, "nodes-overlap",
                         "\"\(boxes[i].id)\" and \"\(boxes[j].id)\" overlap by \(Int(ov.width))×\(Int(ov.height))pt"))
                 }
@@ -310,10 +310,10 @@ public enum DiagramLayoutLinter {
 
         // 3. Off-canvas content.
         let canvas = CGRect(origin: .zero, size: scene.size).insetBy(dx: -1, dy: -1)
-        for node in scene.nodes where !canvas.contains(node.frame) {
+        for node in scene.nodes where !encloses(canvas, node.frame) {
             out.append(.init(.error, "off-canvas", "node \"\(node.id)\" extends outside the canvas"))
         }
-        for label in scene.labels where !canvas.contains(label.frame) {
+        for label in scene.labels where !encloses(canvas, label.frame) {
             out.append(.init(.error, "off-canvas", "label \"\(label.text)\" extends outside the canvas"))
         }
 
@@ -504,7 +504,7 @@ public enum DiagramLayoutLinter {
             // design — sequence box bands, swimlane lanes — are dominant too,
             // but they never contain every non-container node.
             let bounds = container.frame.insetBy(dx: -2, dy: -2)
-            return boxes5.allSatisfy { bounds.contains($0.frame) }
+            return boxes5.allSatisfy { encloses(bounds, $0.frame) }
         }
         if dominantContainers.count == 1, let plot = dominantContainers.first {
             let bounds = plot.frame.insetBy(dx: -2, dy: -2)
@@ -587,6 +587,17 @@ public enum DiagramLayoutLinter {
             }
         }
         return max(0, t1 - t0) * hypot(dx, dy)
+    }
+
+    /// `outer` holds `inner` (edges inclusive; a null rect holds nothing and is
+    /// held by nothing), compared edge by edge. Not `CGRect.contains(CGRect)`:
+    /// swift-corelibs-foundation implements that as `union(r) == self`, and
+    /// rebuilding a fractional rect's size as `maxX − minX` loses the last bit
+    /// about three times in four, so on Linux nested boxes read as overlapping.
+    static func encloses(_ outer: CGRect, _ inner: CGRect) -> Bool {
+        guard !outer.isNull, !inner.isNull else { return false }
+        return inner.minX >= outer.minX && inner.maxX <= outer.maxX
+            && inner.minY >= outer.minY && inner.maxY <= outer.maxY
     }
 
     /// True when segment a→b has an endpoint inside rect `r` or crosses one
