@@ -35,7 +35,8 @@ extension DiagramRenderer {
             context.restoreGState()
             if !container.label.isEmpty {
                 drawText(container.label,
-                         center: CGPoint(x: container.frame.midX, y: container.frame.minY + 11),
+                         center: CGPoint(x: container.frame.midX,
+                                         y: container.frame.minY + DiagramLayoutEngine.clusterHeader(layoutMeasure) / 2),
                          size: 11, weight: .semibold,
                          color: theme.ink.withAlphaComponent(0.75), in: context)
             }

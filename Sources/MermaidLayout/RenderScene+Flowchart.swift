@@ -39,7 +39,8 @@ extension RenderScene {
             if !container.label.isEmpty {
                 elements.append(.text(Text(
                     string: container.label,
-                    center: CGPoint(x: container.frame.midX, y: container.frame.minY + 11),
+                    center: CGPoint(x: container.frame.midX,
+                                    y: container.frame.minY + DiagramLayoutEngine.clusterHeader(measure) / 2),
                     fontSize: 11, weight: .semibold,
                     color: theme.ink.withAlpha(0.75))))
             }

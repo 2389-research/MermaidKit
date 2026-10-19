@@ -42,6 +42,10 @@ final class TextScaleTests: XCTestCase {
         // Tree view rows are invisible frames (glyph through label, measured
         // regular), and directory names draw semibold past them: not a box.
         let boxes = name == "treeview" ? [] : scene.nodes.filter { !$0.isContainer }.map(\.frame)
+        // Data regions (a plot, a quadrant) hold points whose labels may run
+        // past them; only chrome — groups, bands, lanes, frames — holds titles.
+        let containers = scene.nodes.filter { $0.isContainer && $0.id != "plot" && !$0.id.hasPrefix("quadrant-") }
+            .map(\.frame)
         // Glyph bounds run a little past the measured line; overlaps under a
         // point are rounding, not a collision.
         let ink = drawn.map { (text: $0.text, rect: $0.rect.insetBy(dx: 1, dy: 1)) }
@@ -53,6 +57,13 @@ final class TextScaleTests: XCTestCase {
             let own = boxes.filter({ $0.contains(center) }).min(by: { $0.width * $0.height < $1.width * $1.height })
             if let box = own, !box.insetBy(dx: -1, dy: -1).contains(drawn[i].rect) {
                 out.append("outside its box: \"\(a.text)\"")
+            }
+            // Text in a container but no box (a group's title) stays inside
+            // the innermost container holding it.
+            if own == nil, let group = containers.filter({ $0.contains(center) })
+                .min(by: { $0.width * $0.height < $1.width * $1.height }),
+               !group.insetBy(dx: -1, dy: -1).contains(drawn[i].rect) {
+                out.append("outside its group: \"\(a.text)\"")
             }
             // Nor may it run into a box it isn't in (a band label over the
             // heads below it, a title over the first row).

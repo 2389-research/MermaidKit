@@ -13,7 +13,7 @@ import MermaidLayout
 ///
 /// With no explicit theme the view follows the environment's color scheme,
 /// re-rendering on light/dark changes. Its labels follow the environment's
-/// Dynamic Type size (``DiagramSpacing/textScale``, times the spacing's own),
+/// Dynamic Type size (`DiagramSpacing.textScale`, times the spacing's own),
 /// laid out at that size rather than scaled up; pin a size with
 /// `.dynamicTypeSize(_:)`. The diagram displays at its natural size and
 /// scales down (never up) when the container is narrower.

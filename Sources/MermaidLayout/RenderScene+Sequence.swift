@@ -53,7 +53,8 @@ extension RenderScene {
                 stroke: Stroke(color: hairline, width: 1))))
             // Kind tab: the classic dog-eared corner chip + guard label.
             let kindWidth = measure(frame.kind, 9).width
-            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY, width: kindWidth + 14, height: 15)
+            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY, width: kindWidth + 14,
+                             height: DiagramLayoutEngine.sequenceFragmentTab(measure))
             elements.append(.shape(Shape(path: .polygon([
                 CGPoint(x: tab.minX, y: tab.minY), CGPoint(x: tab.maxX, y: tab.minY),
                 CGPoint(x: tab.maxX - 5, y: tab.maxY), CGPoint(x: tab.minX, y: tab.maxY),

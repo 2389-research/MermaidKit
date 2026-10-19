@@ -48,10 +48,13 @@ extension DiagramScene {
         let edges = layout.connectors.map { Edge(polyline: $0, label: nil) }
         let labels: [Label] = layout.lanes.map { lane in
             let w = measuredLabelSize(measure, lane.name).width
+            // Centered where it's drawn, grown(10) below the lane's top.
+            let h = DiagramLayoutEngine.grown(14, fontSize: 9, measure)
             return Label(
                 text: lane.name,
-                frame: CGRect(x: lane.band.minX + 4, y: lane.band.minY + 3,
-                              width: w, height: 14))
+                frame: CGRect(x: lane.band.minX + 4,
+                              y: lane.band.minY + DiagramLayoutEngine.grown(10, fontSize: 9, measure) - h / 2,
+                              width: w, height: h))
         }
         return DiagramScene(name: "eventmodeling", size: layout.size,
                             nodes: nodes, edges: edges, labels: labels)

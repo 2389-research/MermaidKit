@@ -152,7 +152,9 @@ extension DiagramLayoutEngine {
         }
 
         return WardleyLayout(
-            size: CGSize(width: plot.maxX + margin, height: plot.maxY + margin + 20),
+            // The strip under the plot holds the evolution bands' names.
+            size: CGSize(width: plot.maxX + margin,
+                         height: plot.maxY + margin + grown(20, fontSize: 9, measure)),
             title: map.title, plotFrame: plot, bands: bands,
             nodes: nodes, links: links, evolves: evolves, notes: notes)
     }

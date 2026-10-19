@@ -49,7 +49,8 @@ extension DiagramLayoutEngine {
             // clusters that gather near the plot's center lines.
             let rect = quarters[index]
             let isBottom = index >= 2   // q3 (BL) and q4 (BR) are the bottom row
-            let cy = isBottom ? rect.maxY - 14 : rect.minY + 14
+            let inset = grown(14, fontSize: 11, measure)   // the name's center, in from the edge
+            let cy = isBottom ? rect.maxY - inset : rect.minY + inset
             quadrantLabels.append(QuadrantLayout.Label(text: flattenLines(name), center: CGPoint(x: rect.midX, y: cy)))
         }
 

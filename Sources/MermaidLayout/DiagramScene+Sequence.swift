@@ -116,17 +116,20 @@ extension DiagramScene {
                 // canvas-chipped [label].
                 var out: [Label] = []
                 let kindWidth = measuredLabelSize(measure, frame.kind).width
+                // Centered on the tab, as drawn (minY + 1…14 at the default size).
+                let tabHeight = DiagramLayoutEngine.grown(13, fontSize: 9, measure)
+                let tabTop = frame.rect.minY + DiagramLayoutEngine.sequenceFragmentTab(measure) / 2 - tabHeight / 2
                 out.append(Label(
                     text: frame.kind,
-                    frame: CGRect(x: frame.rect.minX + 5, y: frame.rect.minY + 1,
-                                  width: kindWidth, height: 13)))
+                    frame: CGRect(x: frame.rect.minX + 5, y: tabTop,
+                                  width: kindWidth, height: tabHeight)))
                 if let guardText = frame.label, !guardText.isEmpty {
                     let text = "[\(guardText)]"
                     let width = measuredLabelSize(measure, text).width
                     out.append(Label(
                         text: text,
                         frame: CGRect(x: frame.rect.minX + kindWidth + 20,
-                                      y: frame.rect.minY + 1, width: width, height: 13)))
+                                      y: tabTop, width: width, height: tabHeight)))
                 }
                 for divider in frame.dividers {
                     guard let label = divider.label, !label.isEmpty else { continue }

@@ -28,7 +28,7 @@ extension RenderScene {
                 fill: index % 2 == 1 ? theme.hairline.withAlpha(0.05) : nil,
                 stroke: Stroke(color: theme.hairline, width: 1))))
             elements.append(.text(leftText(
-                lane.name, at: CGPoint(x: lane.band.minX + 6, y: lane.band.minY + 10),
+                lane.name, at: CGPoint(x: lane.band.minX + 6, y: lane.band.minY + DiagramLayoutEngine.grown(10, fontSize: 9, measure)),
                 fontSize: 9, weight: .semibold, color: theme.tertiaryText, measure: measure)))
         }
 

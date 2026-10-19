@@ -193,7 +193,8 @@ extension DiagramRenderer {
         }
         for band in layout.bands {
             drawTextLeft(band.name,
-                         at: CGPoint(x: band.x + 4, y: layout.plotFrame.maxY + 10),
+                         at: CGPoint(x: band.x + 4,
+                                     y: layout.plotFrame.maxY + DiagramLayoutEngine.grown(10, fontSize: 9, layoutMeasure)),
                          size: 9, weight: .regular, color: theme.tertiaryTextColor, in: context)
         }
         // Y axis: value chain.

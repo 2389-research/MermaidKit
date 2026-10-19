@@ -1434,6 +1434,12 @@ extension DiagramLayoutEngine {
         grown(18, fontSize: 9, measure)
     }
 
+    /// Height of a fragment's kind tab (`loop`, `alt`, …), whose 9pt kind and
+    /// [guard] labels are centered on it: 15 at the default size.
+    package static func sequenceFragmentTab(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(15, fontSize: 9, measure)
+    }
+
     public static func layout(_ diagram: SequenceDiagram, measure: DiagramTextMeasurer) -> SequenceLayout {
         let margin: CGFloat = 12
         let headPaddingX: CGFloat = 14
@@ -1550,13 +1556,14 @@ extension DiagramLayoutEngine {
                 // Multiline labels stack above the arrow: the row grows.
                 let metrics = sequenceTextMetrics(measure)
                 let extraLines = CGFloat(max(brLines(message.text).count - 1, 0)) * metrics.line
+                // One arrow height for the arrow and the activation bars it
+                // opens or closes, so a bar always meets its arrow.
+                let arrowY = y + extraLines + rowHeight - metrics.arrowInset
                 arrows.append(SequenceLayout.Arrow(
-                    fromX: heads[a].lifelineX, toX: toX,
-                    y: y + extraLines + rowHeight - metrics.arrowInset,
+                    fromX: heads[a].lifelineX, toX: toX, y: arrowY,
                     text: message.text, dashed: message.dashed,
                     isSelfMessage: isSelf, head: message.head, number: message.number))
                 widen(min(heads[a].lifelineX, toX), max(heads[a].lifelineX, toX))
-                let arrowY = y + extraLines + rowHeight - 14
                 if message.activatesTarget { openBar(message.to, at: arrowY) }
                 if message.deactivatesSender { closeBar(message.from, at: arrowY) }
                 y += rowHeight + extraLines

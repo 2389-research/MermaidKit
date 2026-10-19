@@ -219,4 +219,38 @@ final class DiagramSpacingTests: XCTestCase {
             .map(\.frame.minY).min())
         XCTAssertEqual(top, group.frame.minY + 2, accuracy: 0.01, "no strip above the children")
     }
+
+    /// An activation bar opens and closes exactly at its message arrows, at
+    /// every text size (the bar used a fixed inset while the arrow's grew).
+    func testActivationBarsMeetTheirArrows() throws {
+        guard case .sequence(let diagram)? = MermaidParser.parse(
+            "sequenceDiagram\n  A->>+B: start the work\n  B-->>-A: done") else { return XCTFail() }
+        for k in [1.0, 1.353, 2.0, 3.0] {
+            DiagramTextScale.run(DiagramSpacing(textScale: k), measure) { scaled in
+                let layout = DiagramLayoutEngine.layout(diagram, measure: scaled)
+                guard let bar = layout.bars.first, layout.arrows.count == 2 else { return XCTFail("\(k)") }
+                XCTAssertEqual(bar.top, layout.arrows[0].y, accuracy: 1e-9, "opens at its arrow, \(k)×")
+                XCTAssertEqual(bar.bottom, layout.arrows[1].y, accuracy: 1e-9, "closes at its arrow, \(k)×")
+            }
+        }
+    }
+
+    /// Each quadrant's name stays inside its quadrant at every text size (it
+    /// was centered a fixed 14 from the edge, so large names crossed it).
+    func testQuadrantNamesStayInTheirQuadrants() throws {
+        guard case .quadrant(let chart) = try fixture("quadrant") else { return XCTFail() }
+        for k in [1.0, 1.353, 2.0, 3.0] {
+            DiagramTextScale.run(DiagramSpacing(textScale: k), measure) { scaled in
+                let layout = DiagramLayoutEngine.layout(chart, measure: scaled)
+                XCTAssertFalse(layout.quadrantLabels.isEmpty)
+                for label in layout.quadrantLabels {
+                    let size = scaled(label.text, 10)
+                    let rect = CGRect(x: label.center.x - size.width / 2, y: label.center.y - size.height / 2,
+                                      width: size.width, height: size.height)
+                    XCTAssertTrue(layout.quadrantRects.contains { $0.contains(rect) },
+                                  "\(label.text) at \(k)×: \(rect) not inside a quadrant")
+                }
+            }
+        }
+    }
 }

@@ -153,8 +153,8 @@ extension DiagramRenderer {
             context.stroke(frame.rect)
             // Kind tab (the classic dog-eared corner chip) + guard label.
             let kindSize = measure(frame.kind, size: 9)
-            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY,
-                             width: kindSize.width + 14, height: 15)
+            let tab = CGRect(x: frame.rect.minX, y: frame.rect.minY, width: kindSize.width + 14,
+                             height: DiagramLayoutEngine.sequenceFragmentTab(layoutMeasure))
             context.setFillColor(resolvedCGColor(theme.hairline.withAlphaComponent(0.14)))
             context.beginPath()
             context.move(to: CGPoint(x: tab.minX, y: tab.minY))

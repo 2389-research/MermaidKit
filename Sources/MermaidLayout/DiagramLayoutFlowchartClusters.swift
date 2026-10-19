@@ -20,8 +20,12 @@ import CoreGraphics
 /// id now resolves to the container.
 extension DiagramLayoutEngine {
 
-    /// Header strip reserved at the top of every group box for its label.
-    private static let clusterHeader: CGFloat = 22
+    /// Header strip reserved at the top of every group box for its 11pt
+    /// label, which is centered in it: 22 at the default size, grown with the
+    /// text. Layout, both renderers and the lint scene place the label by it.
+    package static func clusterHeader(_ measure: DiagramTextMeasurer) -> CGFloat {
+        grown(22, fontSize: 11, measure)
+    }
     /// Interior padding between a group's box and its contents (and the gap
     /// below the header before content starts is `clusterHeader`).
     private static let clusterPad: CGFloat = 12
@@ -97,7 +101,7 @@ extension DiagramLayoutEngine {
                 measure($0.label, nodeFontSize).width + 16
             } ?? 0
             let boxW = max(child.size.width + clusterPad * 2, labelW)
-            let boxH = child.size.height + clusterHeader + clusterPad
+            let boxH = child.size.height + clusterHeader(measure) + clusterPad
             sizeOverrides[childID] = CGSize(width: boxW, height: boxH)
         }
 
@@ -139,7 +143,7 @@ extension DiagramLayoutEngine {
                 continue
             }
             let dx = placed.frame.minX + clusterPad
-            let dy = placed.frame.minY + clusterHeader
+            let dy = placed.frame.minY + clusterHeader(measure)
             result.containers.append(FlowchartLayout.Container(
                 id: placed.id, label: ctx.subByID[placed.id]?.label ?? "",
                 frame: placed.frame, depth: depth))

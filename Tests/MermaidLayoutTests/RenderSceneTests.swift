@@ -1360,6 +1360,27 @@ final class RenderSceneTests: XCTestCase {
         }
     }
 
+    /// The lint scene describes the legend the renderers draw: each legend
+    /// label is centered where its text is drawn, at every text size (it used
+    /// fixed 20pt rows while the drawn rows grew).
+    func testPieLegendLintMatchesTheDrawnLegend() throws {
+        let diagram = try XCTUnwrap(MermaidParser.parse(
+            "pie title Where the time goes\n  \"Rasterize\" : 75\n  \"Layout\" : 15\n  \"Parse\" : 10"))
+        for k in [1.0, 1.353, 2.0, 3.0] {
+            let spacing = DiagramSpacing(textScale: k)
+            let scene = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure, spacing: spacing))
+            var drawn: [String: CGFloat] = [:]
+            for case .text(let t) in scene.elements { drawn[t.string] = t.center.y }
+            let lint = DiagramScene.lower(diagram, measure: measure, spacing: spacing)
+            let legend = lint.labels.filter { $0.text.hasSuffix("%)") }
+            XCTAssertEqual(legend.count, 3, "\(k)×")
+            for label in legend {
+                let y = try XCTUnwrap(drawn[label.text], "\(label.text) drawn at \(k)×")
+                XCTAssertEqual(label.frame.midY, y, accuracy: 1e-9, "\(label.text) at \(k)×")
+            }
+        }
+    }
+
     // MARK: Helpers
 
     private func countOccurrences(of needle: String, in haystack: String) -> Int {
