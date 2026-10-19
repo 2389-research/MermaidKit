@@ -90,7 +90,8 @@ char *mmk_scene_json_themed(const char *source,
  *                Malformed → returns NULL.
  * text_scale   : clamped to 0.5…3; a non-finite value is 1. At 1 the output
  *                is byte-identical to `mmk_scene_json` / `_themed`. Android
- *                passes `Configuration.fontScale`, Flutter its TextScaler.
+ *                passes `Configuration.fontScale`, Flutter its TextScaler's
+ *                multiplier at 12pt, .NET the system text scale factor.
  *
  * Returns a malloc'd, NUL-terminated C string the caller owns (free via
  * `mmk_free`), or NULL when `source` is NULL/unparseable or `theme_json` is

@@ -142,7 +142,8 @@ Material theming (`MermaidTheme.fromMaterial`), device-font measurement, and
 `contentDescription` from the narration; Windows the same shape via SkiaSharp.
 Every bridge takes a text scale for Dynamic Type (`textScale`, over
 `mmk_scene_json_options`): Flutter apps pass
-`MediaQuery.textScalerOf(context).scale(1)`, .NET apps their text scale factor.
+`MediaQuery.textScalerOf(context).scale(12) / 12` (the scale at the diagrams' 12pt
+base size; Flutter's scaling can be nonlinear), .NET apps their text scale factor.
 
 ## Beyond Mermaid: DOT, Dippin, SQL, and git-log front-ends
 

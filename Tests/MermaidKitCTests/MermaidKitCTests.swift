@@ -220,7 +220,9 @@ final class MermaidKitCTests: XCTestCase {
             for dark: Int32 in [0, 1] {
                 let plain = try XCTUnwrap(sceneJSON(source, prefersDark: dark))
                 XCTAssertEqual(optionsJSON(source, prefersDark: dark, textScale: 1), plain)
-                XCTAssertEqual(optionsJSON(source, prefersDark: dark, textScale: .nan), plain)
+                for v in [Double.nan, .infinity, -.infinity] {
+                    XCTAssertEqual(optionsJSON(source, prefersDark: dark, textScale: v), plain, "\(v)")
+                }
             }
         }
     }

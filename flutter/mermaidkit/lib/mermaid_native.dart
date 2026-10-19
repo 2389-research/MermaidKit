@@ -59,7 +59,8 @@ class MermaidNative {
   /// The scene as wire JSON, or null when `source` is empty or fails to parse.
   ///
   /// [textScale] is Dynamic Type for the diagram — pass
-  /// `MediaQuery.textScalerOf(context).scale(1)` to follow the user's text
+  /// `MediaQuery.textScalerOf(context).scale(12) / 12` (the scale at the
+  /// diagrams' 12pt base size; Flutter's scaling can be nonlinear) to follow the user's text
   /// size. Text is laid out and drawn at that multiple of its size (clamped to
   /// 0.5–3); 1 is the default size.
   static String? sceneJson(String source, {bool prefersDark = false, double textScale = 1}) {

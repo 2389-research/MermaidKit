@@ -24,7 +24,8 @@ line and blurs bitmaps. At the default size (1), output is byte-identical to
   - **Android:** `MermaidNative.scene(…, textScale)`. `MermaidView` and
     `MermaidDiagram` follow the system font size (`Configuration.fontScale`).
   - **Flutter:** `MermaidNative.scene(…, textScale:)`. Pass
-    `MediaQuery.textScalerOf(context).scale(1)`.
+    `MediaQuery.textScalerOf(context).scale(12) / 12` (the scale at the diagrams' 12pt base size,
+    since Flutter's text scaling can be nonlinear).
   - **Windows/.NET:** `MermaidNative.Scene(…, textScale:)`.
   - **Terminal:** `mermaidkit-term --text-scale K` for the raster tiers.
 - **`DiagramScene.lower(_:measure:spacing:)`** lints a layout with its spacing:

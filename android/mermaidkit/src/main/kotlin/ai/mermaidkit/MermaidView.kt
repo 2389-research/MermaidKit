@@ -88,8 +88,8 @@ class MermaidView @JvmOverloads constructor(
         val k = effectiveTextScale
         scene = when {
             s.isNullOrBlank() -> null
-            theme != null -> MermaidNative.scene(s, theme!!, measurer, k)
-            else -> MermaidNative.scene(s, prefersDark, measurer, k)
+            theme != null -> MermaidNative.scene(s, theme!!, measurer, textScale = k)
+            else -> MermaidNative.scene(s, prefersDark, measurer, textScale = k)
         }
         // Accessibility from the first surface (per the plan): the narration
         // walkthrough becomes the view's contentDescription.

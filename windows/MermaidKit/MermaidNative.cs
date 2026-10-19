@@ -40,15 +40,33 @@ public static class MermaidNative
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr mmk_version();
 
+    // The pre-2.5 (string, bool) entry points stay exactly as they were: C#
+    // bakes optional arguments in at the call site, so assemblies compiled
+    // against 2.4 reference these signatures. The text-scale variants are
+    // separate overloads.
+
     /// The scene as wire JSON, or null when <paramref name="source"/> is empty or
-    /// fails to parse. <paramref name="textScale"/> is Dynamic Type for the
-    /// diagram (e.g. the system text scale factor): text is laid out and drawn
-    /// at that multiple of its size, clamped to 0.5–3; 1 is the default size.
-    public static string? SceneJson(string source, bool prefersDark = false, double textScale = 1)
+    /// fails to parse.
+    public static string? SceneJson(string source, bool prefersDark = false)
     {
-        IntPtr ptr = textScale == 1
-            ? mmk_scene_json(source, prefersDark ? 1 : 0, IntPtr.Zero, IntPtr.Zero)
-            : mmk_scene_json_options(source, IntPtr.Zero, prefersDark ? 1 : 0, textScale, IntPtr.Zero, IntPtr.Zero);
+        IntPtr ptr = mmk_scene_json(source, prefersDark ? 1 : 0, IntPtr.Zero, IntPtr.Zero);
+        return TakeString(ptr);
+    }
+
+    /// The scene as wire JSON at <paramref name="textScale"/> — Dynamic Type for
+    /// the diagram: text is laid out and drawn at that multiple of its size,
+    /// clamped to 0.5–3 (a non-finite value is 1). The caller supplies it, e.g.
+    /// from the system's text scale factor.
+    public static string? SceneJson(string source, double textScale, bool prefersDark = false)
+    {
+        if (textScale == 1) return SceneJson(source, prefersDark);
+        IntPtr ptr = mmk_scene_json_options(source, IntPtr.Zero, prefersDark ? 1 : 0, textScale,
+                                            IntPtr.Zero, IntPtr.Zero);
+        return TakeString(ptr);
+    }
+
+    private static string? TakeString(IntPtr ptr)
+    {
         if (ptr == IntPtr.Zero) return null;
         try { return Marshal.PtrToStringUTF8(ptr); }
         finally { mmk_free(ptr); }
@@ -56,9 +74,16 @@ public static class MermaidNative
 
     /// Parse <paramref name="source"/> natively into a <see cref="SceneWire"/>, or
     /// null when it fails to parse.
-    public static SceneWire? Scene(string source, bool prefersDark = false, double textScale = 1)
+    public static SceneWire? Scene(string source, bool prefersDark = false)
     {
-        var json = SceneJson(source, prefersDark, textScale);
+        var json = SceneJson(source, prefersDark);
+        return json is null ? null : SceneWire.Parse(json);
+    }
+
+    /// <see cref="Scene(string, bool)"/> at <paramref name="textScale"/> (0.5–3).
+    public static SceneWire? Scene(string source, double textScale, bool prefersDark = false)
+    {
+        var json = SceneJson(source, textScale, prefersDark);
         return json is null ? null : SceneWire.Parse(json);
     }
 

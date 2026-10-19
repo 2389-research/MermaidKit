@@ -190,13 +190,15 @@ final class DiagramSpacingTests: XCTestCase {
 
     /// Non-finite text scales fall back to the default, never into geometry.
     func testNonFiniteTextScaleIsTheDefault() {
+        // Every non-finite value is the default size — the one contract the
+        // C ABI and every binding document (garbage in, default out).
         for v in [CGFloat.nan, .infinity, -.infinity] {
-            XCTAssertEqual(DiagramSpacing(textScale: v).textScale, v.isNaN ? 1 : (v > 0 ? 3 : 0.5), "\(v)")
+            XCTAssertEqual(DiagramSpacing(textScale: v).textScale, 1, "\(v)")
             var spacing = DiagramSpacing()
             spacing.textScale = v
-            XCTAssertTrue(spacing.textScale.isFinite, "\(v) by assignment")
+            XCTAssertEqual(spacing.textScale, 1, "\(v) by assignment")
+            XCTAssertEqual(DiagramSpacing(textScale: v).fingerprint, DiagramSpacing().fingerprint, "\(v)")
         }
-        XCTAssertEqual(DiagramSpacing(textScale: .nan).fingerprint, DiagramSpacing().fingerprint)
     }
 
     /// Scales closer than a hundredth still render differently, so they
