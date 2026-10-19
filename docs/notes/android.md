@@ -284,6 +284,9 @@ paints with its own colors instead of a preset; `MermaidTheme.fromMaterial(color
 maps Material 3 roles → the diagram's slots, and `MermaidDiagram` defaults its
 theme to `MaterialTheme.colorScheme` — so a diagram matches the app's theme
 (light/dark included) with zero extra wiring (all verified on the emulator).
+**The system font size is threaded too** (v2.5.0): `mmk_scene_json_options` adds a
+text scale, and `MermaidView`/`MermaidDiagram` pass `Configuration.fontScale`, so
+diagram text follows the user's font-size setting with boxes grown around it.
 *Still open — needs a C-ABI extension:* `onNodeClick(nodeId)` hit-testing
 (`SceneWire` is flattened primitives with no node identity — needs the ABI to
 also emit a node→rect hit-test map).

@@ -22,6 +22,10 @@ typedef _SceneJsonNative = Pointer<Utf8> Function(
     Pointer<Utf8> source, Int32 prefersDark, Pointer<Void> measure, Pointer<Void> userdata);
 typedef _SceneJsonDart = Pointer<Utf8> Function(
     Pointer<Utf8> source, int prefersDark, Pointer<Void> measure, Pointer<Void> userdata);
+typedef _SceneJsonOptionsNative = Pointer<Utf8> Function(Pointer<Utf8> source, Pointer<Utf8> themeJson,
+    Int32 prefersDark, Double textScale, Pointer<Void> measure, Pointer<Void> userdata);
+typedef _SceneJsonOptionsDart = Pointer<Utf8> Function(Pointer<Utf8> source, Pointer<Utf8> themeJson,
+    int prefersDark, double textScale, Pointer<Void> measure, Pointer<Void> userdata);
 typedef _NarrateNative = Pointer<Utf8> Function(Pointer<Utf8> source);
 typedef _NarrateDart = Pointer<Utf8> Function(Pointer<Utf8> source);
 typedef _FreeNative = Void Function(Pointer<Utf8> ptr);
@@ -44,6 +48,8 @@ class MermaidNative {
 
   static final _sceneJson =
       _lib.lookupFunction<_SceneJsonNative, _SceneJsonDart>('mmk_scene_json');
+  static final _sceneJsonOptions = _lib
+      .lookupFunction<_SceneJsonOptionsNative, _SceneJsonOptionsDart>('mmk_scene_json_options');
   static final _narrate =
       _lib.lookupFunction<_NarrateNative, _NarrateDart>('mmk_narrate');
   static final _free = _lib.lookupFunction<_FreeNative, _FreeDart>('mmk_free');
@@ -51,10 +57,18 @@ class MermaidNative {
       _lib.lookupFunction<_VersionNative, Pointer<Utf8> Function()>('mmk_version');
 
   /// The scene as wire JSON, or null when `source` is empty or fails to parse.
-  static String? sceneJson(String source, {bool prefersDark = false}) {
+  ///
+  /// [textScale] is Dynamic Type for the diagram — pass
+  /// `MediaQuery.textScalerOf(context).scale(12) / 12` (the scale at the
+  /// diagrams' 12pt base size; Flutter's scaling can be nonlinear) to follow the user's text
+  /// size. Text is laid out and drawn at that multiple of its size (clamped to
+  /// 0.5–3); 1 is the default size.
+  static String? sceneJson(String source, {bool prefersDark = false, double textScale = 1}) {
     final src = source.toNativeUtf8();
     try {
-      final ptr = _sceneJson(src, prefersDark ? 1 : 0, nullptr, nullptr);
+      final ptr = textScale == 1
+          ? _sceneJson(src, prefersDark ? 1 : 0, nullptr, nullptr)
+          : _sceneJsonOptions(src, nullptr, prefersDark ? 1 : 0, textScale, nullptr, nullptr);
       if (ptr == nullptr) return null;
       try {
         return ptr.toDartString();
@@ -67,8 +81,8 @@ class MermaidNative {
   }
 
   /// Parse `source` natively into a [SceneWire], or null when it fails to parse.
-  static SceneWire? scene(String source, {bool prefersDark = false}) {
-    final json = sceneJson(source, prefersDark: prefersDark);
+  static SceneWire? scene(String source, {bool prefersDark = false, double textScale = 1}) {
+    final json = sceneJson(source, prefersDark: prefersDark, textScale: textScale);
     return json == null ? null : SceneWire.parse(json);
   }
 

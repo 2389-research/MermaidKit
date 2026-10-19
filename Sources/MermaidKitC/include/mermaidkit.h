@@ -79,6 +79,32 @@ char *mmk_scene_json_themed(const char *source,
                             void *userdata);
 
 /*
+ * The general scene call: `mmk_scene_json` / `mmk_scene_json_themed` plus a
+ * text scale (Dynamic Type for diagrams). Text is laid out and drawn at
+ * `text_scale` times its size: `measure` is asked at the scaled size, every
+ * text run's `fontSize` comes back scaled, and boxes grow around the text
+ * while lines and markers keep their weight.
+ *
+ * theme_json   : NULL selects the preset for `prefers_dark`; otherwise a
+ *                ThemeWire JSON object (then `prefers_dark` is ignored).
+ *                Malformed → returns NULL.
+ * text_scale   : clamped to 0.5…3; a non-finite value is 1. At 1 the output
+ *                is byte-identical to `mmk_scene_json` / `_themed`. Android
+ *                passes `Configuration.fontScale`, Flutter its TextScaler's
+ *                multiplier at 12pt, .NET the system text scale factor.
+ *
+ * Returns a malloc'd, NUL-terminated C string the caller owns (free via
+ * `mmk_free`), or NULL when `source` is NULL/unparseable or `theme_json` is
+ * invalid.
+ */
+char *mmk_scene_json_options(const char *source,
+                             const char *theme_json,
+                             int prefers_dark,
+                             double text_scale,
+                             MmkMeasure measure,
+                             void *userdata);
+
+/*
  * Narrate a UTF-8 Mermaid `source` as an accessibility walkthrough — feeds
  * Android's `contentDescription`.
  *

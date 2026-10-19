@@ -28,7 +28,9 @@ Three measurers you might pass:
 guard let diagram = MermaidParser.parse(source) else { … }
 
 // Typed, per-type layout (frames, polylines, everything positioned).
-// The main engines also take a density knob: `spacing: .compact`.
+// The main engines also take a density knob (`spacing: .compact`), which
+// carries the text scale too: `DiagramSpacing(textScale: 1.35)` lays text out
+// at that size, as the renderers draw it.
 switch diagram {
 case .flowchart(let chart):
     let layout = DiagramLayoutEngine.layout(chart, measure: measurer)

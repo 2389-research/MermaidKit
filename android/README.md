@@ -75,9 +75,12 @@ view.source = "flowchart LR\n A[Start] --> B[End]"   // that's it — parses, si
 
 Both go source → native parse → `SceneWire` → `Canvas`, measure text with the
 drawing `Paint`, and set the diagram's accessibility narration as
-`contentDescription`. For lower-level control, `MermaidNative.scene(source,
-measurer = PaintMeasurer(paint))` returns a `SceneWire` you draw yourself with
-`SceneRenderer`.
+`contentDescription`. Both follow the system **font size**
+(`Configuration.fontScale`): text is laid out larger and the boxes grow around
+it, as Dynamic Type does on iOS. Pass `textScale` to `MermaidDiagram`, or set
+`MermaidView.textScale`, to pick a size yourself. For lower-level control,
+`MermaidNative.scene(source, measurer = PaintMeasurer(paint), textScale = 1.3f)`
+returns a `SceneWire` you draw yourself with `SceneRenderer`.
 
 ![A flowchart rendered by SceneRenderer on an android-34 emulator](docs/on-device-render.png)
 

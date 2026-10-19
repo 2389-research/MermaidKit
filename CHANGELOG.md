@@ -1,5 +1,51 @@
 # Changelog
 
+## 2.5.0 — Dynamic Type for diagrams, everywhere
+
+Diagram text can now follow the reader's text size. `DiagramSpacing.textScale`
+lays a diagram out at a larger (or smaller) text size: the boxes, rows and gaps
+that hold text grow with it, while lines, arrowheads and markers keep their
+weight. That's different from scaling a finished image, which thickens every
+line and blurs bitmaps. At the default size (1), output is byte-identical to
+2.4.0. Additive: no existing call changes.
+
+- **`DiagramSpacing.textScale`** (0.5–3; a non-finite value is the default size).
+  It's honored by every entry point that takes a spacing: `MermaidView`, the
+  `MermaidRenderer` image/PDF/SVG/attachment API, `RenderScene`, the headless
+  `DiagramLayoutEngine.layout(_:measure:spacing:)` engines, and the new
+  `DiagramScene.lower(_:measure:spacing:)`, so headless geometry and lint match
+  the image. It's part of the render-cache fingerprint. (#73)
+- **`MermaidView` follows Dynamic Type** (`dynamicTypeSize`), multiplied by any
+  `textScale` you set. (#73)
+- **Every platform:**
+  - **C ABI:** `mmk_scene_json_options(source, theme_json, prefers_dark,
+    text_scale, measure, userdata)` is the general scene call, and asks the
+    host's measure callback at the scaled size.
+  - **Android:** `MermaidNative.scene(…, textScale)`. `MermaidView` and
+    `MermaidDiagram` follow the system font size (`Configuration.fontScale`).
+  - **Flutter:** `MermaidNative.scene(…, textScale:)`. Pass
+    `MediaQuery.textScalerOf(context).scale(12) / 12` (the scale at the diagrams' 12pt base size,
+    since Flutter's text scaling can be nonlinear).
+  - **Windows/.NET:** `MermaidNative.Scene(…, textScale:)`.
+  - **Terminal:** `mermaidkit-term --text-scale K` for the raster tiers.
+- **`DiagramScene.lower(_:measure:spacing:)`** lints a layout with its spacing:
+  density, grid snap (which the linter couldn't see before) and text scale.
+
+Thanks to @hipstersmoothie, who built this for chat apps where text follows the
+user's size.
+
+### Fixed
+
+- **The geometry linter gives the same answers on Linux.**
+  swift-corelibs-foundation's `CGRect.contains(CGRect)` is `union(r) == self`,
+  which is false for about three fractional rects in four. On Linux, a box
+  nested inside another was therefore reported as `nodes-overlap`, and
+  `mark-escapes-plot` rarely found its plot, so it silently didn't run. The
+  linter now compares edges. (#74)
+- **Treemaps:** a group whose header label can't fit no longer reserves an
+  empty strip above its children. The layout and both renderers now share one
+  header rule. (#73)
+
 ## 2.4.0 — Every flowchart link, every classic shape
 
 Mermaid's full set of flowchart link styles and its classic node shapes now

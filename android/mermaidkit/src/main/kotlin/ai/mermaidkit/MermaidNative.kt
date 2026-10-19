@@ -39,8 +39,14 @@ object MermaidNative {
         source: String, prefersDark: Int, measurer: Measurer): String?
     private external fun nativeSceneJsonThemed(
         source: String, themeJson: String?, measurer: Measurer?): String?
+    private external fun nativeSceneJsonOptions(
+        source: String, themeJson: String?, prefersDark: Int, textScale: Double, measurer: Measurer?): String?
     private external fun nativeNarrate(source: String): String?
     private external fun nativeVersion(): String
+
+    // The pre-2.5 signatures stay exactly as they were (same JVM descriptors and
+    // $default helpers), so modules compiled against 2.4 keep linking; the
+    // text-scale variants below are separate overloads.
 
     /** The scene as wire JSON, or null when `source` is empty or fails to parse. */
     fun sceneJson(source: String, prefersDark: Boolean = false, measurer: Measurer? = null): String? {
@@ -49,9 +55,25 @@ object MermaidNative {
         else nativeSceneJson(source, dark)
     }
 
+    /**
+     * The scene as wire JSON at [textScale] — Dynamic Type for the diagram
+     * (e.g. `Configuration.fontScale`): text is laid out and drawn at that
+     * multiple of its size, clamped to 0.5…3; 1 is the default size.
+     */
+    fun sceneJson(source: String, prefersDark: Boolean = false, measurer: Measurer? = null,
+                  textScale: Float): String? =
+        if (textScale == 1f) sceneJson(source, prefersDark, measurer)
+        else nativeSceneJsonOptions(source, null, if (prefersDark) 1 else 0, textScale.toDouble(), measurer)
+
     /** The scene as wire JSON themed with [theme]'s colors, or null on failure. */
     fun sceneJson(source: String, theme: MermaidTheme, measurer: Measurer? = null): String? =
         nativeSceneJsonThemed(source, theme.toWireJson(), measurer)
+
+    /** Themed with [theme]'s colors, at [textScale] (see the overload above). */
+    fun sceneJson(source: String, theme: MermaidTheme, measurer: Measurer? = null,
+                  textScale: Float): String? =
+        if (textScale == 1f) sceneJson(source, theme, measurer)
+        else nativeSceneJsonOptions(source, theme.toWireJson(), 0, textScale.toDouble(), measurer)
 
     /**
      * Parse `source` natively into a [SceneWire], or null when it fails to parse.
@@ -60,12 +82,22 @@ object MermaidNative {
     fun scene(source: String, prefersDark: Boolean = false, measurer: Measurer? = null): SceneWire? =
         sceneJson(source, prefersDark, measurer)?.let { SceneWire.parse(it) }
 
+    /** [scene] at [textScale] — Dynamic Type for the diagram (0.5…3). */
+    fun scene(source: String, prefersDark: Boolean = false, measurer: Measurer? = null,
+              textScale: Float): SceneWire? =
+        sceneJson(source, prefersDark, measurer, textScale = textScale)?.let { SceneWire.parse(it) }
+
     /**
      * Parse `source` natively into a [SceneWire] painted with [theme]'s colors
      * (e.g. `MermaidTheme.fromMaterial(...)`), or null when it fails to parse.
      */
     fun scene(source: String, theme: MermaidTheme, measurer: Measurer? = null): SceneWire? =
         sceneJson(source, theme, measurer)?.let { SceneWire.parse(it) }
+
+    /** Themed [scene] at [textScale] (0.5…3). */
+    fun scene(source: String, theme: MermaidTheme, measurer: Measurer? = null,
+              textScale: Float): SceneWire? =
+        sceneJson(source, theme, measurer, textScale = textScale)?.let { SceneWire.parse(it) }
 
     /** An accessibility walkthrough of `source` for `contentDescription`, or null. */
     fun narrate(source: String): String? = nativeNarrate(source)

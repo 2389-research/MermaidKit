@@ -6,7 +6,7 @@ app's shape.
 ## Add the package
 
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.4.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.5.0")
 ```
 
 Depend on the `MermaidRender` product (it brings `MermaidLayout` with it).
@@ -46,6 +46,15 @@ preset to control density:
 
 ```swift
 MermaidView(source, theme: DiagramTheme(prefersDark: true), spacing: .compact)
+```
+
+`MermaidView` also follows Dynamic Type: at a larger text size the diagram's
+text is laid out larger, and the boxes grow around it while lines keep their
+weight. Elsewhere, set the size yourself with `textScale`:
+
+```swift
+let image = MermaidRenderer.image(source: source, theme: theme,
+                                  spacing: DiagramSpacing(textScale: 1.35))
 ```
 
 ## AppKit/UIKit: images

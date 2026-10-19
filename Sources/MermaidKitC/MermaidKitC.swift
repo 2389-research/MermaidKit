@@ -128,6 +128,7 @@ private func cString(_ string: String) -> UnsafeMutablePointer<CChar>? {
 /// malloc'd C string the caller owns, or nil on parse/encode failure.
 private func sceneJSON(source: UnsafePointer<CChar>?,
                       theme: RenderTheme,
+                      spacing: DiagramSpacing = .regular,
                       measure: MmkMeasure?,
                       userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
     guard let source else { return nil }
@@ -137,7 +138,7 @@ private func sceneJSON(source: UnsafePointer<CChar>?,
 
     let measurer = makeMeasurer(measure, userdata)
 
-    guard let scene = RenderScene.from(diagram, theme: theme, measure: measurer) else {
+    guard let scene = RenderScene.from(diagram, theme: theme, measure: measurer, spacing: spacing) else {
         return nil
     }
     // Encode the explicit wire schema (`SceneWire`), not `RenderScene`'s
@@ -182,18 +183,44 @@ public func mmk_scene_json_themed(_ source: UnsafePointer<CChar>?,
                                   _ themeJson: UnsafePointer<CChar>?,
                                   _ measure: MmkMeasure?,
                                   _ userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
-    let theme: RenderTheme
-    if let themeJson {
-        let json = String(cString: themeJson)
-        guard let wire = try? JSONDecoder().decode(ThemeWire.self, from: Data(json.utf8)),
-              let resolved = try? wire.renderTheme() else {
-            return nil // present-but-invalid theme is a caller error, not a silent fallback
-        }
-        theme = resolved
-    } else {
-        theme = defaultTheme(prefersDark: false)
+    guard let theme = callerTheme(themeJson, prefersDark: false) else {
+        return nil // present-but-invalid theme is a caller error, not a silent fallback
     }
     return sceneJSON(source: source, theme: theme, measure: measure, userdata: userdata)
+}
+
+/// The theme a caller asked for: its `ThemeWire` JSON, or the preset for
+/// `prefersDark` when `themeJson` is nil. Nil when the JSON is present but
+/// malformed (bad JSON or a bad color).
+private func callerTheme(_ themeJson: UnsafePointer<CChar>?, prefersDark: Bool) -> RenderTheme? {
+    guard let themeJson else { return defaultTheme(prefersDark: prefersDark) }
+    let json = String(cString: themeJson)
+    guard let wire = try? JSONDecoder().decode(ThemeWire.self, from: Data(json.utf8)) else { return nil }
+    return try? wire.renderTheme()
+}
+
+/// The general scene call: `mmk_scene_json` / `mmk_scene_json_themed` plus a
+/// text scale — Dynamic Type for diagrams (`DiagramSpacing.textScale`). Text is
+/// laid out and drawn at `textScale` times its size: `measure` is asked at the
+/// scaled size, every text run's `fontSize` comes back scaled, and the boxes
+/// around the text grow, while lines and markers keep their weight.
+///
+/// - `themeJson` nil → the preset for `prefersDark`; present → that theme
+///   (`prefersDark` is then ignored); malformed → nil.
+/// - `textScale` is clamped to 0.5…3; a non-finite value is 1. At 1 the output is
+///   byte-identical to `mmk_scene_json` / `mmk_scene_json_themed`.
+/// - Returns a malloc'd C string the caller owns (free via `mmk_free`), or `nil`
+///   when `source` is nil/unparseable or `themeJson` is invalid. Never traps.
+@_cdecl("mmk_scene_json_options")
+public func mmk_scene_json_options(_ source: UnsafePointer<CChar>?,
+                                   _ themeJson: UnsafePointer<CChar>?,
+                                   _ prefersDark: Int32,
+                                   _ textScale: Double,
+                                   _ measure: MmkMeasure?,
+                                   _ userdata: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>? {
+    guard let theme = callerTheme(themeJson, prefersDark: prefersDark != 0) else { return nil }
+    return sceneJSON(source: source, theme: theme, spacing: DiagramSpacing(textScale: CGFloat(textScale)),
+                     measure: measure, userdata: userdata)
 }
 
 /// Narrate `source` as an accessibility walkthrough (threaded from the first
@@ -223,7 +250,7 @@ public func mmk_free(_ ptr: UnsafeMutablePointer<CChar>?) {
 // read thereafter (an immutable, program-lifetime C string), so the shared
 // mutable-state check doesn't apply.
 nonisolated(unsafe) private let versionCString: UnsafeMutablePointer<CChar>? =
-    strdup("MermaidKitC 2.4.0")
+    strdup("MermaidKitC 2.5.0")
 
 /// The MermaidKitC ABI version. Returns a pointer to a static string that the
 /// caller MUST NOT free (unlike the `mmk_scene_json` / `mmk_narrate` returns).

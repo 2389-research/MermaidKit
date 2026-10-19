@@ -1,6 +1,7 @@
 package ai.mermaidkit
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.AttributeSet
@@ -20,7 +21,8 @@ import ai.mermaidkit.scene.SceneWire
  *
  * This class has **no Compose dependency** — Compose apps use [MermaidDiagram].
  * Text is measured with the same [Paint] that draws (via [PaintMeasurer]) so
- * on-device layout and draw agree.
+ * on-device layout and draw agree, and follows the system font size
+ * (`Configuration.fontScale`) unless [textScale] is set.
  */
 class MermaidView @JvmOverloads constructor(
     context: Context,
@@ -61,12 +63,33 @@ class MermaidView @JvmOverloads constructor(
             reparse()
         }
 
+    /**
+     * Dynamic Type for the diagram: text is laid out and drawn at this multiple
+     * of its size (0.5…3). Null (the default) follows the system font size,
+     * `Configuration.fontScale`. Re-parses the scene.
+     */
+    var textScale: Float? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            reparse()
+        }
+
+    private val effectiveTextScale: Float
+        get() = textScale ?: resources.configuration.fontScale
+
+    override fun onConfigurationChanged(newConfig: Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        if (textScale == null) reparse()   // the system font size may have changed
+    }
+
     private fun reparse() {
         val s = source
+        val k = effectiveTextScale
         scene = when {
             s.isNullOrBlank() -> null
-            theme != null -> MermaidNative.scene(s, theme!!, measurer)
-            else -> MermaidNative.scene(s, prefersDark, measurer)
+            theme != null -> MermaidNative.scene(s, theme!!, measurer, textScale = k)
+            else -> MermaidNative.scene(s, prefersDark, measurer, textScale = k)
         }
         // Accessibility from the first surface (per the plan): the narration
         // walkthrough becomes the view's contentDescription.

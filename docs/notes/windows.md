@@ -40,8 +40,9 @@ same `SceneWire` JSON contract; a C# `SceneRenderer` over SkiaSharp paints it.
   JSON the core emits and rendering real ink. Verified on Linux SkiaSharp locally
   and on `windows-latest` in CI (where system fonts render text too).
 - **Done + verified:** the **P/Invoke bridge** — `MermaidNative` binds
-  `[DllImport("MermaidKitCShared")]` to `mmk_scene_json` / `mmk_narrate` /
-  `mmk_version` / `mmk_free`, so an app passes a Mermaid *source string* and gets a
+  `[DllImport("MermaidKitCShared")]` to `mmk_scene_json` / `mmk_scene_json_options` /
+  `mmk_narrate` / `mmk_version` / `mmk_free` (the options call carries a text scale,
+  v2.5.0), so an app passes a Mermaid *source string* and gets a
   `SceneWire` scene back. `PInvokeTests` drives it end-to-end; CI builds and runs it
   on `windows-latest` against the native library.
 - **Still open:** threading a **device-font measure callback** through P/Invoke (the

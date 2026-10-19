@@ -48,7 +48,7 @@ public struct DiagramSpacing: Hashable, Sendable {
     }
 
     static func clampedTextScale(_ value: CGFloat) -> CGFloat {
-        value.isFinite ? min(max(value, 0.5), 3) : (value.isNaN ? 1 : (value > 0 ? 3 : 0.5))
+        value.isFinite ? min(max(value, 0.5), 3) : 1   // NaN and ±∞ alike: the default size
     }
 
     public init(scale: CGFloat = 1, nodeGap: CGFloat? = nil,

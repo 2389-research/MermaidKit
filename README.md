@@ -32,7 +32,7 @@ Add the package with SwiftPM, then depend on the `MermaidRender` product (or
 `MermaidLayout` alone for headless parsing and layout):
 
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.4.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.5.0")
 ```
 
 ```swift
@@ -118,7 +118,8 @@ Pi framebuffer (`/dev/fb0`), an SDL2 window, a GPU texture. See
 [`tools/pi-canvas`](tools/pi-canvas) for an infinite, pannable canvas composited
 into a framebuffer.
 
-On Android, the whole integration is one line — and it themes itself to the app:
+On Android, the whole integration is one line — and it themes itself to the app
+and follows the system font size:
 
 ```kotlin
 MermaidDiagram("flowchart LR\n A[Start] --> B[End]", Modifier.fillMaxWidth())
@@ -139,6 +140,10 @@ Both go **source string → native Swift core → `SceneWire` → native rendere
 with no Swift toolchain or scene-building on the consumer's side. Android adds
 Material theming (`MermaidTheme.fromMaterial`), device-font measurement, and
 `contentDescription` from the narration; Windows the same shape via SkiaSharp.
+Every bridge takes a text scale for Dynamic Type (`textScale`, over
+`mmk_scene_json_options`): Flutter apps pass
+`MediaQuery.textScalerOf(context).scale(12) / 12` (the scale at the diagrams' 12pt
+base size; Flutter's scaling can be nonlinear), .NET apps their text scale factor.
 
 ## Beyond Mermaid: DOT, Dippin, SQL, and git-log front-ends
 
@@ -293,6 +298,23 @@ embedded image, and `MermaidRenderer.altText(source:)` hands it to hosts
 directly. Descriptions are generated from the parsed model — type, honest
 counts, leading names — deterministically, for all 30 types.
 
+Diagram text also follows the reader's **text size**. `MermaidView` tracks
+Dynamic Type (`dynamicTypeSize`), and `DiagramSpacing(textScale:)` sets it
+anywhere else. Text is laid out at the larger size, so boxes, rows and the gaps
+labels sit in grow around it, while lines, arrowheads and markers keep their
+weight. A scaled-up image would thicken every line and soften bitmaps instead.
+The default size is byte-identical to a render without it. Android's
+`MermaidDiagram`/`MermaidView` follow the system font size the same way.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/textscale-1-dark.png">
+  <img alt="A flowchart at the default text size" src="docs/images/textscale-1.png" width="420">
+</picture>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/textscale-2-dark.png">
+  <img alt="The same flowchart at twice the text size: boxes grew around the text, lines kept their weight" src="docs/images/textscale-2.png" width="420">
+</picture>
+
 Beyond that one-liner, `MermaidAltText.narrate(_:)` produces a step-by-step
 *walkthrough* — a richer companion to `describe`'s summary. It follows a
 flowchart's edges through its decisions, reads a state machine from its initial
@@ -325,6 +347,7 @@ box-drawing tiers are flowchart-only and come from the platform-free
 ```
 swift run mermaidkit-term flowchart.mmd
 cat pipeline.dot | mermaidkit-term --format dot --mode plain
+swift run mermaidkit-term flowchart.mmd --mode kitty --text-scale 1.5   # larger text
 ```
 
 ## SVG export and the RenderScene IR
@@ -379,7 +402,7 @@ CLI:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "2.4.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.5.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
@@ -422,7 +445,7 @@ the WebAssembly build
 ## API
 
 - `MermaidView(source, theme:spacing:)` — SwiftUI drop-in; theme defaults
-  to the environment color scheme; `spacing` is the density knob
+  to the environment color scheme, text size follows Dynamic Type; `spacing` is the density knob
   (`.compact` / `.regular` / `.comfortable`, or custom gaps — consulted by
   flowchart, class, ER, state, and architecture layouts; `DiagramSpacing(gridSnap: 4)`
   additionally snaps flowchart geometry onto a 4pt grid).
@@ -460,9 +483,13 @@ the WebAssembly build
 - `MermaidRenderer.altText(source:)` — a VoiceOver-ready description of
   the diagram's content, and `MermaidAltText.narrate(source:)` a step-by-step
   walkthrough (see Accessibility above).
+- `DiagramSpacing(textScale:)` — Dynamic Type for diagrams (0.5–3): text laid
+  out at that multiple of its size, the boxes around it grown to fit. Every
+  entry point that takes a spacing honors it, including the headless engines.
 - `MermaidRenderer.textMeasurer` — the renderer's own CoreText measurer;
-  pass it to `DiagramLayoutEngine.layout` / `DiagramScene.lower` when you
-  want layout or lint geometry to match the render exactly.
+  pass it to `DiagramLayoutEngine.layout(_:measure:spacing:)` /
+  `DiagramScene.lower(_:measure:spacing:)` with the same spacing when you want
+  layout or lint geometry to match the render exactly.
 - `MermaidParser.parse(_:)`, `MermaidDiagram.typeName`, and the per-type
   layout engines are public for hosts that want geometry without pixels.
 - `MermaidParser.diagnose(_:)` — why a source failed to parse, with line
