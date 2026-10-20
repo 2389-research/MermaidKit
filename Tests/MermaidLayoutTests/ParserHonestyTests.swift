@@ -320,6 +320,190 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(Set(c.nodes.map(\.label)), ["a", "Flag", "Input", "b", "c"])
     }
 
+    /// `;` ends a statement, as in mermaid. A one-line chart parsed to
+    /// nothing (its direction read as `LR;`), and `graph LR;` alone was laid
+    /// out top-down.
+    func testSemicolonsSeparateStatements() throws {
+        guard case .flowchart(let c)? = MermaidParser.parse("graph LR; A --> B; B --> C") else {
+            return XCTFail("a one-line chart should parse")
+        }
+        XCTAssertEqual(c.direction, .leftRight)
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C"])
+
+        guard case .flowchart(let d)? = MermaidParser.parse("graph LR;\n  A --> B") else { return XCTFail() }
+        XCTAssertEqual(d.direction, .leftRight)
+    }
+
+    /// A `;` in quotes, in brackets or ending an entity stays in the text.
+    func testSemicolonsInLabelsAndEntitiesStay() throws {
+        let c = try flow("A[\"a; b\"] --> B(c;d); B --> C{e;f}; C --> D[\"#quot;q#quot;\"]")
+        XCTAssertEqual(c.nodes.map(\.label), ["a; b", "c;d", "e;f", "\"q\""])
+        XCTAssertEqual(c.edges.count, 3)
+    }
+
+    /// Entities in labels, mermaid's and HTML's. They were drawn as written.
+    func testEntitiesAreDecoded() throws {
+        let c = try flow("""
+            A["Say #quot;hi#quot; &amp; wave"] --> B["x #35; y #9829; &#x2665; &#169; &lt;tag&gt;"]
+            subgraph S [Tom &amp; Jerry]
+              C -->|a &lt; b| D
+            end
+            C -- #quot;quoted#quot; --> E
+            """)
+        XCTAssertEqual(c.nodes.first { $0.id == "A" }?.label, "Say \"hi\" & wave")
+        XCTAssertEqual(c.nodes.first { $0.id == "B" }?.label, "x # y ♥ ♥ © <tag>")
+        XCTAssertEqual(c.subgraphs.first?.label, "Tom & Jerry")
+        XCTAssertEqual(c.edges.map(\.label), [nil, "a < b", "\"quoted\""])
+    }
+
+    /// Control characters and unknown HTML names stay as written; an
+    /// unknown `#name;` reads `&name;`, as mermaid shows it.
+    func testUnknownEntitiesStay() throws {
+        let c = try flow("A[\"#nosuch; and #12; and &bogus;\"]")
+        XCTAssertEqual(c.nodes.first?.label, "&nosuch; and #12; and &bogus;")
+    }
+
+    /// Numeric references read as a browser reads them: 0x80–0x9F as
+    /// Windows-1252. A C1 control, a noncharacter or a non-scalar stays as
+    /// written, never reaching SVG or a terminal.
+    func testNumericReferencesReadAsBrowsersDo() throws {
+        let c = try oneLine("flowchart LR; A[\"#133; #150; &#x80; | #129; #65535; &#xFDD0; &#xD800; #1114112;\"]")
+        XCTAssertEqual(c.nodes.first?.label, "… – € | #129; #65535; &#xFDD0; &#xD800; #1114112;")
+    }
+
+    /// Every label form keeps its `;`, as mermaid's lexer does: pipes, the
+    /// flag shape, each inline link text, `{{…}}`, `((…))` and
+    /// `@{ label }`. Splitting them broke charts that read before.
+    func testSemicolonsInEveryLabelFormStay() throws {
+        let c = try oneLine("""
+            flowchart LR; A -->|wait; retry| B; B>Flag; here] --> C; C -- wait; then --> D; \
+            D == heavy; load ==> E; E -. maybe; later .-> F; F --> G; \
+            G{{a; b}} --> H((c; d)); H@{ shape: rect, label: "e; f" } --> I
+            """)
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.label ?? "")" },
+                       ["A>B wait; retry", "B>C ", "C>D wait; then", "D>E heavy; load", "E>F maybe; later",
+                        "F>G ", "G>H ", "H>I "])
+        XCTAssertEqual(c.nodes.first { $0.id == "B" }?.label, "Flag; here")
+        XCTAssertEqual(c.nodes.first { $0.id == "H" }?.label, "e; f")
+        XCTAssertEqual(c.nodes.first { $0.id == "G" }?.label, "a; b")
+    }
+
+    /// Arrowless links (`---`, `===`) are whole links, so they neither open
+    /// inline text nor fail to close it.
+    func testArrowlessLinksBetweenStatements() throws {
+        let c = try oneLine("graph LR; A --- B; C === D; E -- solid; text --- F; G == thick; text === H; I --> J")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.label ?? "")" },
+                       ["A>B ", "C>D ", "E>F solid; text", "G>H thick; text", "I>J "])
+    }
+
+    /// A node's text ends at its shape's own closer, the first one, as
+    /// mermaid's lexer reads it: `)`, `(` or another `[` inside `[…]` is
+    /// text, so its `;` is too; `[[…]]` ends at `]]`, `[(…)]` at `)]`.
+    func testOnlyTheShapesOwnDelimiterEndsNodeText() throws {
+        let c = try oneLine("graph LR; A[option A); retry] --> B; B{a] b; c} --> C; C[Status (pending; retry] --> D; D[[x; y]] --> E((p; q)); E --> F[Array[index; retry]; F --> G[(db; x)]")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C", "C>D", "D>E", "E>F", "F>G"])
+        XCTAssertEqual(c.nodes.first { $0.id == "A" }?.label, "option A); retry")
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "Status (pending; retry")
+    }
+
+    /// Deciding whether an entity spells a break never recurses: a run of
+    /// `&lt;` once made decoding exponential (40 never finished).
+    func testManyEscapedAngleBracketsDecodeQuickly() throws {
+        let start = Date()
+        let run = String(repeating: "&lt;#lt;#60;&#60;", count: 1_000)
+        let c = try flow("A[\"\(run)br&gt;\"]")
+        // Every `<` decodes but the last, which spells `<br>` and stays as written.
+        XCTAssertEqual(c.nodes.first?.label, String(repeating: "<", count: 3_999) + "&#60;br>")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "decoding a long run of < entities should be linear")
+    }
+
+    /// A long run of dots in dotted link text splits in linear time (each
+    /// dot once rescanned the rest of the run).
+    func testLongDottedLinkTextSplitsQuickly() {
+        let start = Date()
+        _ = MermaidParser.parse("graph LR\nA -. " + String(repeating: ".", count: 45_000))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "dotted link text should split in linear time")
+    }
+
+    /// `direction` is a statement only before one word, as mermaid lexes it:
+    /// `direction --> B` is an edge from a node named `direction`.
+    func testDirectionBeforeALinkIsANode() throws {
+        let c = try oneLine("flowchart LR\n  direction --> B")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["direction>B"])
+    }
+
+    /// A flag after a Unicode id is still a flag, as any id is.
+    func testFlagAfterAUnicodeID() throws {
+        let c = try oneLine("flowchart LR; café>Flag; retry] --> B; C --> D")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["café>B", "C>D"])
+    }
+
+    /// An entity spelling a line break (`&lt;br&gt;`, `#92;n`) shows as
+    /// written instead of breaking the label: layout reads `<br>` and `\n` as
+    /// breaks. A real `<br>` still breaks.
+    func testEscapedLineBreaksDontBreak() throws {
+        let c = try flow("A[\"show &lt;br&gt; and #lt;BR/#gt; and #92;n literally\"] --> B[\"a<br>b\"] --> C[\"&lt;brilliant&gt;\"]")
+        let label = try XCTUnwrap(c.nodes.first { $0.id == "A" }?.label)
+        XCTAssertEqual(DiagramLayoutEngine.brLines(label).count, 1, label)
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "<brilliant>", "only a break tag stays encoded")
+        XCTAssertEqual(DiagramLayoutEngine.brLines(c.nodes.first { $0.id == "B" }?.label ?? "").count, 2)
+    }
+
+    /// Splitting is linear: a long run of blanks after a `;` once rescanned
+    /// itself at every character (quadratic within `maxTextSize`).
+    func testLongBlankRunsSplitInLinearTime() throws {
+        let start = Date()
+        // Blanks, then a statement of `#word;` entities: each `;` once
+        // rescanned the blanks too.
+        let c = try oneLine("graph LR; A --> B;" + String(repeating: " ", count: 30_000) + String(repeating: "#a;", count: 5_000))
+        XCTAssertEqual(c.edges.count, 1)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "a long blank run should split in well under 2s")
+    }
+
+    /// In `style`, `classDef` and `linkStyle` a `;` ends the statement, so a
+    /// color (`#f96;`) isn't read as an entity that swallows the next one.
+    func testStylingSemicolonsEndStatements() throws {
+        for source in ["graph LR; classDef hot fill:#f96; A:::hot --> B",
+                       "graph LR; style A fill:#f96; A --> B",
+                       "graph LR; linkStyle 0 stroke:#f00; A --> B"] {
+            XCTAssertEqual(try oneLine(source).edges.map { "\($0.from)>\($0.to)" }, ["A>B"], source)
+        }
+    }
+
+    /// A `%%` comment after a `;` runs to the end of the line, as one on a
+    /// line of its own does; what follows it isn't drawn.
+    func testCommentAfterASemicolonEndsTheLine() throws {
+        let c = try oneLine("graph LR; A --> B; %% disabled; C --> D")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B"])
+    }
+
+    /// Keywords are whole words, as in mermaid: `styleguide`, `subgraphs`,
+    /// `ending`… are node ids. `styleguide --> B` was skipped as styling.
+    func testKeywordsAreWholeWords() throws {
+        for id in ["styleguide", "subgraphs", "classDefault", "classy", "linkStyles", "clicks", "directions", "ending"] {
+            let c = try oneLine("flowchart LR\n  \(id) --> B")
+            XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["\(id)>B"], id)
+        }
+    }
+
+    private func oneLine(_ source: String) throws -> Flowchart {
+        guard case .flowchart(let c)? = MermaidParser.parse(source) else {
+            XCTFail("should parse: \(source)")
+            throw CancellationError()
+        }
+        return c
+    }
+
+    /// Inline formatting tags give way to their text (the renderers can't
+    /// style it). `<br>` breaks and angle brackets that aren't formatting
+    /// stay.
+    func testFormattingTagsAreDropped() throws {
+        let c = try flow("""
+            A["<b>bold</b> <i>it</i> <code>x</code> <span style='c'>s</span>"] --> B["p<0.05, List<String>, a<br/>b"]
+            """)
+        XCTAssertEqual(c.nodes.map(\.label), ["bold it x s", "p<0.05, List<String>, a<br/>b"])
+    }
+
     // MARK: flowchart subgraphs
 
     /// Deterministic fake measurer for the layout-geometry assertions below.

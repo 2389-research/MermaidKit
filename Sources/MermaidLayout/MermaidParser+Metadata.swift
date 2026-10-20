@@ -48,8 +48,17 @@ extension MermaidParser {
     /// indentation-significant parsers (mindmap, kanban, treemap, …) re-read
     /// this body raw.
     static func stripMetadata(from source: String) -> (body: String, metadata: DiagramMetadata) {
+        let (kept, metadata) = strippingMetadata(from: source)
+        return (kept.map(\.text).joined(separator: "\n"), metadata)
+    }
+
+    /// `stripMetadata`'s body as its lines, each with its 1-based line number
+    /// in `source`, so a note about a body line can point at the source.
+    static func strippingMetadata(from source: String)
+        -> (lines: [(text: Substring, line: Int)], metadata: DiagramMetadata) {
         var metadata = DiagramMetadata()
         var lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+        var numbers = Array(1...lines.count)
 
         // YAML front-matter: a leading `---` fence closed by another `---`.
         // Only a top-level (unindented) `title:` is read; nested keys like
@@ -64,12 +73,13 @@ extension MermaidParser {
                     }
                 }
                 lines.removeSubrange(0...close)
+                numbers.removeSubrange(0...close)
             }
         }
 
         // accTitle / accDescr statements anywhere in the body. Later
         // occurrences overwrite earlier ones, matching mermaid.js.
-        var kept: [Substring] = []
+        var kept: [(text: Substring, line: Int)] = []
         var index = 0
         while index < lines.count {
             let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
@@ -102,11 +112,11 @@ extension MermaidParser {
                 index += 1
                 continue
             }
-            kept.append(lines[index])
+            kept.append((lines[index], numbers[index]))
             index += 1
         }
 
-        return (kept.joined(separator: "\n"), metadata)
+        return (kept, metadata)
     }
 
     /// `keyword: value` (keyword case-insensitive, mermaid-style) → value,

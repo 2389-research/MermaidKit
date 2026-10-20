@@ -5,3 +5,4 @@ DerivedData/
 .DS_Store
 Package.resolved
 scratchpad/
+tools/mermaid-oracle/node_modules/

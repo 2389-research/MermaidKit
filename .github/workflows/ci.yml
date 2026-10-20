@@ -36,6 +36,17 @@ jobs:
       - name: Cross-process determinism
         run: ./scripts/check-determinism.sh
 
+      # Fidelity to mermaid.js itself: parse a fixed + generated flowchart
+      # corpus with mermaid's own parser and with MermaidKit, and compare what a
+      # reader sees. Fails on any divergence not in
+      # tools/mermaid-oracle/known-divergences.json (which may only shrink), so
+      # a parser change can't quietly break syntax that used to read right.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Mermaid.js oracle (flowchart fidelity)
+        run: ./scripts/check-mermaid-oracle.sh
+
       # The UIKit render branch has no test host, but it must always COMPILE —
       # v0.1.0 shipped an iOS-only build break precisely because nothing
       # exercised this branch.

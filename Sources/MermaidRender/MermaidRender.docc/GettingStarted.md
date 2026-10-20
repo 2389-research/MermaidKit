@@ -6,7 +6,7 @@ app's shape.
 ## Add the package
 
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.5.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.6.0")
 ```
 
 Depend on the `MermaidRender` product (it brings `MermaidLayout` with it).
@@ -80,6 +80,10 @@ if MermaidRenderer.image(source: source, theme: theme) == nil {
     }
 }
 ```
+
+A flowchart can render with a line left out — one the parser couldn't read.
+`diagnose` reports each as a `.note` at its line, so a host that would rather
+show the source than a diagram with parts missing can check for them.
 
 ## What parses, what doesn't
 

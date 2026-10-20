@@ -32,7 +32,7 @@ Add the package with SwiftPM, then depend on the `MermaidRender` product (or
 `MermaidLayout` alone for headless parsing and layout):
 
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.5.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.6.0")
 ```
 
 ```swift
@@ -198,6 +198,9 @@ mermaid.js, and the failure mode is deliberate:
 - **Unknown diagram dialects** → `MermaidParser.parse` returns `nil`; hosts
   show the fenced source (that's what `MermaidView` does), and
   `MermaidParser.diagnose` explains why — with a did-you-mean for typos.
+- **Flowchart statements it can't read** → left out of the diagram, and
+  `MermaidParser.diagnose` returns a `.note` for each, at its line, so a host
+  can show the source instead of a diagram with parts missing.
 - **Styling/interaction directives** (`%%{init:}%%`, `classDef`/`class`,
   `style`, `linkStyle`, `click`) → **ignored, not fatal**: the diagram still
   parses and renders with MermaidKit's own theme. Ditto comments (`%%`).
@@ -206,7 +209,9 @@ mermaid.js, and the failure mode is deliberate:
   centred caption, other keys like `config:` are tolerated and ignored);
   `accTitle:`/`accDescr:` accessibility statements (all types — they feed
   the generated alt text and read back via `MermaidParser.metadata(in:)`,
-  never appearing as content); flowchart chained edges
+  never appearing as content); flowchart `;`-separated statements
+  (`graph LR; A --> B; B --> C`), entities in labels (`#quot;`, `#35;`,
+  `&amp;`, `&#x2665;`), chained edges
   (`A --> B --> C`), `&` fan-out, inline `-- text -->` labels,
   bidirectional `<-->`, longer links (`--->` spans two ranks), thick `==>`
   and invisible `~~~` links, circle `--o` and cross `--x` heads, edge IDs,
@@ -233,8 +238,9 @@ mermaid.js, and the failure mode is deliberate:
 
 Not supported anywhere: HTML in labels other than `<br/>` line breaks (the
 CoreGraphics/Silica raster backends honor `<br/>` in every label; the
-SVG/`SceneWire` path honors it in sequence messages and notes only; other tags
-render as text),
+SVG/`SceneWire` path honors it in sequence messages and notes only; flowchart
+labels drop inline formatting tags like `<b>` and `<code>` for their text,
+other types render tags as text),
 FontAwesome icons, click callbacks, animations, and mermaid.js theming
 directives (theming is `DiagramTheme`'s job).
 
@@ -402,7 +408,7 @@ CLI:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "2.5.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.6.0", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
@@ -494,7 +500,8 @@ the WebAssembly build
 - `MermaidParser.parse(_:)`, `MermaidDiagram.typeName`, and the per-type
   layout engines are public for hosts that want geometry without pixels.
 - `MermaidParser.diagnose(_:)` — why a source failed to parse, with line
-  numbers and did-you-mean suggestions for typo'd headers.
+  numbers and did-you-mean suggestions for typo'd headers; for a flowchart
+  that parses, a `.note` for each statement it left out.
 
 ## Documentation
 
