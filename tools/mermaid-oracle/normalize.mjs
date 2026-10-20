@@ -77,9 +77,20 @@ export function normalizeMermaid(db, document, source = '') {
            edges: db.getEdges().map(e => edgeOf(e, document)), subgraphs };
 }
 
-/** Whether `source` names `id` in a `subgraph` statement itself (so it's not synthesized). */
+/**
+ * Whether `source` names `id` in a `subgraph` statement itself (so it's not
+ * synthesized). Text that can't be a statement — comments, quoted strings,
+ * and label contents in brackets or pipes — is blanked first, so a label
+ * mentioning `subgraph subGraph0` doesn't count.
+ */
 function declares(source, id) {
-  return new RegExp(`(^|[\\n;])\\s*subgraph\\s+${id}(?![\\w-])`).test(source);
+  const code = source
+    .replace(/%%[^\n]*/g, '')
+    .replace(/"[^"\n]*"/g, '""')
+    .replace(/\|[^|\n]*\|/g, '||')
+    .replace(/\[[^\]\n]*\]|\([^)\n]*\)|\{[^}\n]*\}/g, '[]');
+  return code.split(/[\n;]/).some(statement =>
+    new RegExp(`^\\s*subgraph\\s+${id}(?![\\w-])`).test(statement));
 }
 
 /**
