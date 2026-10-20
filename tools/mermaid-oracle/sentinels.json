@@ -1,0 +1,5 @@
+[
+  "flowchart LR\n  A[Start] --> B(Next)\n  B -->|yes| C{Decide}\n  C -.-> D((Done))",
+  "graph TD\n  A & B --> C\n  C ==> D[(Store)]\n  subgraph S [Group]\n    E --- F\n  end",
+  "flowchart RL\n  A[\"Say hi\"] -- note --> B>Flag]\n  B --o C{{Hex}}"
+]
