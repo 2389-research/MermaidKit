@@ -8,7 +8,8 @@
 //   rejects     mermaid draws, MermaidKit returns nothing          (divergence)
 //   differs     both draw, but something a reader sees differs     (divergence)
 // Each divergence has a cost: how many things a reader sees differently
-// (a rejected chart costs everything mermaid drew, plus its direction).
+// (a rejected chart costs everything mermaid drew, plus its direction), and
+// a rejection is worse than any wrong drawing.
 // With --baseline the run fails (exit 1) if a chart diverges that the
 // baseline doesn't list, or a listed chart costs more than recorded: the
 // baseline only ever shrinks. --update records improvements (fixed charts
@@ -103,12 +104,17 @@ if (accept) { write(Object.entries(divergent)); process.exit(0); }
 const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
 const inCorpus = new Set(corpus.map(hash));
 const fresh = Object.entries(divergent).filter(([h]) => !baseline[h]);
-const worse = Object.entries(divergent).filter(([h, d]) => baseline[h] && d.cost > baseline[h].cost);
-const better = Object.entries(divergent).filter(([h, d]) => baseline[h] && d.cost < baseline[h].cost);
+// Worse is (kind, cost) in order: drawing nothing is worse than any wrong
+// drawing, so differs → rejects is worse whatever the costs; within a kind,
+// a higher cost is.
+const rank = d => [d.kind === 'rejects' ? 1 : 0, d.cost];
+const order = (a, b) => { const [x, y] = [rank(a), rank(b)]; return x[0] - y[0] || x[1] - y[1]; };
+const worse = Object.entries(divergent).filter(([h, d]) => baseline[h] && order(d, baseline[h]) > 0);
+const better = Object.entries(divergent).filter(([h, d]) => baseline[h] && order(d, baseline[h]) < 0);
 const fixed = Object.keys(baseline).filter(h => inCorpus.has(h) && !divergent[h]);
 const gone = Object.keys(baseline).filter(h => !inCorpus.has(h));
 for (const [, d] of fresh) show('NEW ', d);
-for (const [h, d] of worse) show(`WORSE (was cost ${baseline[h].cost}) `, d);
+for (const [h, d] of worse) show(`WORSE (was ${baseline[h].kind}, cost ${baseline[h].cost}) `, d);
 // A known chart leaving the corpus is lost coverage, not a fix.
 for (const h of gone) console.log(`\nGONE ${h} (${baseline[h].kind} #${baseline[h].index}): no longer in the corpus`);
 const failed = fresh.length + worse.length + gone.length > 0;

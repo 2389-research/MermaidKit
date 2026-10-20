@@ -38,8 +38,10 @@ ends the run.
 divergences by the hash of the chart, with its **cost**: how many things a
 reader sees differently (a missing node, a wrong label, each missing or extra
 edge, parallel copies counted one by one, the direction). A rejected chart
-costs everything mermaid drew plus its direction, so turning a reject into a
-nearly right drawing counts as progress.
+costs everything mermaid drew plus its direction. Drawing nothing is worse
+than any wrong drawing: a chart that turns from a wrong drawing into a
+rejection is worse whatever the costs, and turning a reject into a drawing is
+progress.
 
 CI fails when a chart diverges that the baseline doesn't list, or when a
 listed chart costs more than recorded, or a listed chart has left the corpus
