@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Bold draws bold on Linux.** Titles, headers and other emphasis were
+  always set in regular DejaVu Sans: Silica reads a `Family-Bold` name, and
+  took FontConfig's `Family:bold` as a family that doesn't exist. Linux
+  renders with emphasis change (boxes grow to fit the bold text);
+  Apple platforms are unaffected. (#81)
+
 ## 2.7.0 — Diagrams in your app's font
 
 Diagram labels can now be set in the font the rest of your app uses. A new
