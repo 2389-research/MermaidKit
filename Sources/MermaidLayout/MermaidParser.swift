@@ -339,7 +339,15 @@ public enum MermaidParser {
                 } else if closer == ".", c == "." {
                     var j = i
                     while j < chars.count, chars[j] == "." { j += 1 }
-                    if j < chars.count, chars[j] == "-" { end = j + 1 }
+                    if j < chars.count, chars[j] == "-" {
+                        end = j + 1
+                    } else {
+                        // The run can't close the text; take it whole so no
+                        // later dot in it rescans it (linear, not quadratic).
+                        current += String(chars[i..<j])
+                        i = j
+                        continue
+                    }
                 }
                 if end > i {
                     current += String(chars[i..<end])
@@ -619,7 +627,11 @@ public enum MermaidParser {
                 if stack.isEmpty { setAside(index, "'end' with no subgraph open") } else { stack.removeLast() }
                 continue
             }
-            if startsWithKeyword(line, "direction") {
+            // `direction` and one word, as mermaid lexes it; `direction --> B`
+            // is an edge from a node named `direction`.
+            if startsWithKeyword(line, "direction"),
+               line.dropFirst("direction".count).trimmingCharacters(in: .whitespaces).allSatisfy(\.isLetter),
+               line.count > "direction ".count {
                 // Scoped to the innermost open subgraph. A top-level direction
                 // line is dropped, as mermaid drops it (the header sets the
                 // chart's flow); either way it never leaks in as a phantom node.

@@ -417,6 +417,21 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(start), 2, "decoding a long run of < entities should be linear")
     }
 
+    /// A long run of dots in dotted link text splits in linear time (each
+    /// dot once rescanned the rest of the run).
+    func testLongDottedLinkTextSplitsQuickly() {
+        let start = Date()
+        _ = MermaidParser.parse("graph LR\nA -. " + String(repeating: ".", count: 45_000))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "dotted link text should split in linear time")
+    }
+
+    /// `direction` is a statement only before one word, as mermaid lexes it:
+    /// `direction --> B` is an edge from a node named `direction`.
+    func testDirectionBeforeALinkIsANode() throws {
+        let c = try oneLine("flowchart LR\n  direction --> B")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["direction>B"])
+    }
+
     /// A flag after a Unicode id is still a flag, as any id is.
     func testFlagAfterAUnicodeID() throws {
         let c = try oneLine("flowchart LR; café>Flag; retry] --> B; C --> D")
