@@ -592,6 +592,8 @@ public enum MermaidParser {
         var stack: [String] = []
         var membership: [String: String] = [:]
         var anonCount = 0
+        // Subgraphs a later block reopened: their first direction stands.
+        var reopened: Set<String> = []
 
         func note(_ node: Flowchart.Node) {
             if let existing = nodes[node.id] {
@@ -615,9 +617,11 @@ public enum MermaidParser {
 
         for (index, line) in body.enumerated() {
             if startsWithKeyword(line, "subgraph") {
+                let known = subgraphOrder.count
                 let id = openSubgraph(line, into: &subgraphs, order: &subgraphOrder,
                                       stack: stack, anonCount: &anonCount)
-                if let parent = stack.last, subgraphs[parent] != nil {
+                if subgraphOrder.count == known { reopened.insert(id) }
+                if let parent = stack.last, subgraphs[parent] != nil, !subgraphs[parent]!.childIDs.contains(id) {
                     subgraphs[parent]!.childIDs.append(id)
                 }
                 stack.append(id)
@@ -642,7 +646,7 @@ public enum MermaidParser {
                     setAside(index, "unknown direction '\(written)'")
                 }
                 if let top = stack.last, subgraphs[top] != nil {
-                    subgraphs[top]!.direction = parsed
+                    if !reopened.contains(top) || subgraphs[top]!.direction == nil { subgraphs[top]!.direction = parsed }
                 } else if parsed != nil {
                     setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow")
                 }
@@ -732,8 +736,13 @@ public enum MermaidParser {
         } else {
             id = rest; label = rest
         }
-        // Guard against a duplicate/reused id clobbering an open block.
-        if subgraphs[id] != nil { id = "\u{a7}sub\(anonCount)"; anonCount += 1 }
+        // A closed subgraph's id, used again, reopens it, as in mermaid: its
+        // first title and direction stand and the block adds members. An id
+        // still open (a subgraph inside itself) gets a fresh one instead.
+        if subgraphs[id] != nil {
+            if !stack.contains(id) { return id }
+            id = "\u{a7}sub\(anonCount)"; anonCount += 1
+        }
         subgraphs[id] = Flowchart.Subgraph(id: id, label: labelText(label))
         order.append(id)
         return id

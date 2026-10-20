@@ -506,6 +506,28 @@ final class ParserHonestyTests: XCTestCase {
 
     // MARK: flowchart subgraphs
 
+    /// A subgraph id used again after its block closed is the same subgraph,
+    /// as in mermaid: the first title and direction stand and the second block
+    /// adds its members. It used to mint an anonymous second box that took
+    /// them.
+    func testAReusedSubgraphIdReopensIt() throws {
+        let c = try flow("""
+            subgraph two [First]
+              direction LR
+              A --> B
+            end
+            subgraph two [Second]
+              direction RL
+              C --> D
+            end
+            """)
+        XCTAssertEqual(c.subgraphs.map(\.id), ["two"])
+        let two = try XCTUnwrap(c.subgraphs.first)
+        XCTAssertEqual(two.label, "First")
+        XCTAssertEqual(two.direction, .leftRight)
+        XCTAssertEqual(two.nodeIDs, ["A", "B", "C", "D"])
+    }
+
     /// Deterministic fake measurer for the layout-geometry assertions below.
     private let measure: DiagramTextMeasurer = { t, s in
         CGSize(width: CGFloat(max(t.count, 1)) * s * 0.6, height: s + 4)
