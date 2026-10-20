@@ -8,9 +8,10 @@ browser shows them), shapes, and each edge's endpoints, label, stroke, head,
 arrows and length.
 
 ```sh
-scripts/check-mermaid-oracle.sh            # CI: fail on a divergence not in the baseline
-scripts/check-mermaid-oracle.sh --report   # list divergences, with the charts
-scripts/check-mermaid-oracle.sh --update   # rewrite the baseline after a fix
+scripts/check-mermaid-oracle.sh            # CI: fail on a new divergence, or a known one getting worse
+scripts/check-mermaid-oracle.sh --report   # list every divergence, with the charts
+scripts/check-mermaid-oracle.sh --update   # record a fix (refuses while anything got worse)
+scripts/check-mermaid-oracle.sh --accept   # record everything as it stands
 ```
 
 **The corpus** is `cases.json`, every edge case a review has found (add new
@@ -27,12 +28,23 @@ labels and inline link text, joined by newlines or `;`.
 - **rejects:** mermaid draws and MermaidKit returns nothing. A divergence.
 - **differs:** both draw, but something a reader would see differs. A divergence.
 
-**The baseline** (`known-divergences.json`) records today's divergences by
-the hash of the chart. CI fails on any divergence that isn't in it, so a
-parser change can't quietly break a chart that used to read right. When a fix
-makes known divergences agree, run `--update` and the baseline shrinks. It
-only ever shrinks: the same ratchet as the grid-alignment floors and the
-draw-vs-scene conformance ceilings.
+**The baseline** (`known-divergences.json`) records each of today's
+divergences by the hash of the chart, with its **cost**: how many things a
+reader sees differently (a missing node, a wrong label, an extra edge, the
+direction). A rejected chart costs everything mermaid drew plus its direction,
+so turning a reject into a nearly right drawing counts as progress.
+
+CI fails when a chart diverges that the baseline doesn't list, or when a
+listed chart costs more than recorded. So a parser change can't quietly break
+a chart that read right, or make a wrong one wronger. After a fix, `--update`
+removes the charts that now agree and lowers the costs that dropped; it
+refuses to write while anything got worse. The baseline only ever shrinks: the
+same ratchet as the grid-alignment floors and the draw-vs-scene conformance
+ceilings.
+
+`--accept` writes every divergence as it stands. Use it only to start a
+baseline, or when adding a case to `cases.json` that MermaidKit doesn't read
+right yet. The diff then shows what was accepted, and the reviewer approves it.
 
 **Comparison rules** live in `normalize.mjs` (mermaid's side) and
 `Tests/MermaidLayoutTests/MermaidOracleDump.swift` (MermaidKit's side). Shapes
