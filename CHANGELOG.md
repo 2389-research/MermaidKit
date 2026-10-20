@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Bold draws bold on Linux.** Titles, headers and other emphasis were
+  always set in regular DejaVu Sans: Silica reads a `Family-Bold` name, and
+  took FontConfig's `Family:bold` as a family that doesn't exist. Linux
+  renders with emphasis change (boxes grow to fit the bold text);
+  Apple platforms are unaffected. (#81)
+
 - **Class generics read as `List<T>`**, as in mermaid. `class Box~T~` is the
   class `Box` drawn as `Box<T>`, so `Box~T~ --> Item` and `Box --> Item` meet
   the same box (the generic once split it into two), and `Box~T~ : +x` adds
@@ -114,8 +122,6 @@ line and blurs bitmaps. At the default size (1), output is byte-identical to
 
 Thanks to @hipstersmoothie, who built this for chat apps where text follows the
 user's size.
-
-### Fixed
 
 - **The geometry linter gives the same answers on Linux.**
   swift-corelibs-foundation's `CGRect.contains(CGRect)` is `union(r) == self`,
