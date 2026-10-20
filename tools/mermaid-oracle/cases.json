@@ -29,5 +29,9 @@
   "flowchart LR; A[\"&lt;brilliant&gt;\"] --> B[\"#amp; #35;\"]",
   "graph LR; A --> B; %% disabled; C --> D",
   "graph LR; classDef hot fill:#f96; A:::hot --> B",
-  "flowchart LR\n  A & B --> C\n  C -->|a %% b| D[50%% off]"
+  "flowchart LR\n  A & B --> C\n  C -->|a %% b| D[50%% off]",
+  "flowchart LR\n  subgraph S [Group one]\n    A --> B\n  end\n  C --> A",
+  "flowchart LR\n  subgraph outer\n    direction TB\n    subgraph inner [In]\n      X\n    end\n    Y --> X\n  end",
+  "flowchart LR\n  subgraph \"Quoted title\"\n    A\n  end\n  subgraph two\n    A\n  end",
+  "flowchart LR\n  subgraph two [Group]\n    A --> B\n  end\n  subgraph two [Group]\n    C --> D\n  end"
 ]

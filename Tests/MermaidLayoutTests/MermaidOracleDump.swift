@@ -41,6 +41,18 @@ final class MermaidOracleDump: XCTestCase {
             return ["from": e.from, "to": e.to, "label": visible(e.label ?? ""), "stroke": stroke,
                     "head": arrows == "none" ? "arrow" : "\(e.head)", "arrows": arrows, "length": e.length]
         }
-        return ["ok": true, "direction": direction, "vertices": vertices, "edges": edges]
+        // Subgraphs as normalize.mjs's `anonymized` leaves them: synthesized ids
+        // (`§sub0`) as `§anon<k>` by number, members sorted, sorted by id.
+        let synthesized = chart.subgraphs.map(\.id).filter { $0.hasPrefix("\u{a7}sub") }
+            .sorted { Int($0.dropFirst(4)) ?? 0 < Int($1.dropFirst(4)) ?? 0 }
+        func name(_ id: String) -> String {
+            synthesized.firstIndex(of: id).map { "\u{a7}anon\($0)" } ?? id
+        }
+        let subgraphs: [[String: Any]] = chart.subgraphs.map { s in
+            let direction: Any = s.direction.map { $0.rawValue == "TD" ? "TB" : $0.rawValue } ?? NSNull()
+            return ["id": name(s.id), "title": visible(s.label), "members": (s.nodeIDs + s.childIDs).map(name).sorted(),
+                    "direction": direction]
+        }.sorted { ($0["id"] as! String) < ($1["id"] as! String) }
+        return ["ok": true, "direction": direction, "vertices": vertices, "edges": edges, "subgraphs": subgraphs]
     }
 }

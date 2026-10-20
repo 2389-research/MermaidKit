@@ -1,6 +1,7 @@
 // The comparison schema both sides are reduced to — what a reader sees:
 //   { ok, direction, vertices: [{id, label, shape}], edges: [{from, to, label,
-//     stroke, head, arrows, length}] }
+//     stroke, head, arrows, length}], subgraphs: [{id, title, members,
+//     direction}] }
 // label: visible text (entities decoded, HTML rendered, <br> as "\n",
 // whitespace collapsed). shape: MermaidKit's NodeShape names, with shapes
 // MermaidKit has no case for reported as "rectangle" (its documented
@@ -68,6 +69,24 @@ export function normalizeMermaid(db, document) {
   const vertices = [...(raw instanceof Map ? raw.values() : Object.values(raw))].map(v => ({
     id: v.id, label: visibleText(v.text ?? v.id, document), shape: shapeOf(v.type ?? 'default'),
   }));
+  const subgraphs = anonymized((db.getSubGraphs?.() ?? []).map(s => ({
+    id: s.id, title: visibleText(s.title ?? '', document), members: [...s.nodes],
+    direction: s.dir ? (s.dir === 'TD' ? 'TB' : s.dir) : null,
+  })), id => /^subGraph\d+$/.test(id));
   return { ok: true, direction: db.getDirection?.() ?? 'TB', vertices,
-           edges: db.getEdges().map(e => edgeOf(e, document)) };
+           edges: db.getEdges().map(e => edgeOf(e, document)), subgraphs };
+}
+
+/**
+ * Subgraphs in a form both sides share: a title-only subgraph's synthesized
+ * id (mermaid's `subGraph0`, MermaidKit's `§sub0`) becomes `§anon<k>` by its
+ * place among them, in members too; members (direct nodes and child
+ * subgraphs) are sorted, since only who belongs where is visible.
+ */
+export function anonymized(subgraphs, isSynthesized) {
+  const synth = subgraphs.map(s => s.id).filter(isSynthesized)
+    .sort((a, b) => Number(a.match(/\d+$/)[0]) - Number(b.match(/\d+$/)[0]));
+  const name = id => synth.includes(id) ? `§anon${synth.indexOf(id)}` : id;
+  return subgraphs.map(s => ({ ...s, id: name(s.id), members: s.members.map(name).sort() }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
