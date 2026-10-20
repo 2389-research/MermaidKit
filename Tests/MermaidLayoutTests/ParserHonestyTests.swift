@@ -388,6 +388,14 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.nodes.first { $0.id == "G" }?.label, "a; b")
     }
 
+    /// Arrowless links (`---`, `===`) are whole links, so they neither open
+    /// inline text nor fail to close it.
+    func testArrowlessLinksBetweenStatements() throws {
+        let c = try oneLine("graph LR; A --- B; C === D; E -- solid; text --- F; G == thick; text === H; I --> J")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.label ?? "")" },
+                       ["A>B ", "C>D ", "E>F solid; text", "G>H thick; text", "I>J "])
+    }
+
     /// In `style`, `classDef` and `linkStyle` a `;` ends the statement, so a
     /// color (`#f96;`) isn't read as an entity that swallows the next one.
     func testStylingSemicolonsEndStatements() throws {

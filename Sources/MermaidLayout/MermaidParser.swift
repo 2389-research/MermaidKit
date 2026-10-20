@@ -276,12 +276,14 @@ public enum MermaidParser {
         var mode = Mode.statement
         var i = 0
 
-        /// Whether `chars[at...]` is two or more of `c` and then one of
-        /// `ends`: a whole link like `-->`, `==>` or `---`.
-        func link(at: Int, _ c: Character, ends: Set<Character>) -> Bool {
+        /// Whether `chars[at...]` is a whole link made of `c` — mermaid's
+        /// `--+[-xo>]` / `==+[=xo>]`: three or more (`---`, `====`), or two or
+        /// more then a head (`-->`, `--x`, `==o`).
+        func link(at: Int, _ c: Character) -> Bool {
             var j = at
             while j < chars.count, chars[j] == c { j += 1 }
-            return j - at >= 2 && j < chars.count && ends.contains(chars[j])
+            let heads: Set<Character> = [">", "x", "o"]
+            return j - at >= 3 || (j - at >= 2 && j < chars.count && heads.contains(chars[j]))
         }
         func styling(_ text: String) -> Bool {
             let t = text.drop(while: { $0 == " " || $0 == "\t" })
@@ -304,15 +306,21 @@ public enum MermaidParser {
                 if c == "|" { mode = .statement }
             case .linkText(let closer):
                 // Ends at the link that closes it: `-->`/`---`/`--x`/`--o`,
-                // `==>`/`===`…, or `.->`/`.-`.
-                if closer == "-", c == "-", link(at: i, "-", ends: ["-", ">", "x", "o"]) {
-                    mode = .statement
-                } else if closer == "=", c == "=", link(at: i, "=", ends: ["=", ">", "x", "o"]) {
-                    mode = .statement
+                // `==>`/`===`…, or `.->`/`.-`. The whole link is taken, so
+                // its tail can't reopen text.
+                var end = i
+                if closer == c, c == "-" || c == "=", link(at: i, c) {
+                    while end < chars.count, chars[end] == c { end += 1 }
                 } else if closer == ".", c == "." {
                     var j = i
                     while j < chars.count, chars[j] == "." { j += 1 }
-                    if j < chars.count, chars[j] == "-" { mode = .statement }
+                    if j < chars.count, chars[j] == "-" { end = j + 1 }
+                }
+                if end > i {
+                    current += String(chars[i..<end])
+                    i = end
+                    mode = .statement
+                    continue
                 }
             case .statement:
                 if current.allSatisfy({ $0 == " " || $0 == "\t" }), c == "%", i + 1 < chars.count, chars[i + 1] == "%" {
@@ -345,7 +353,7 @@ public enum MermaidParser {
                         // `--` or `==` opens inline text unless it's already a
                         // whole link (`-->`, `---`, `--x`, `==>`…), as in
                         // mermaid's lexer.
-                        if !link(at: i, c, ends: [c, ">", "x", "o"]) {
+                        if !link(at: i, c) {
                             current += String(chars[i...i + 1])
                             i += 2
                             mode = .linkText(closer: c)
