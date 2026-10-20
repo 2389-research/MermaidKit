@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **C4 boxes keep every word of their title and description.** The wrap
+  stopped at its last line and dropped the words after it, so "Drop-in
+  diagram view following the color scheme" drew as "Drop-in diagram view
+  following". Titles and descriptions now wrap in full and the box grows
+  taller to hold them; boxes keep their uniform width. (#70)
+
 ## 2.7.0 — Diagrams in your app's font
 
 Diagram labels can now be set in the font the rest of your app uses. A new

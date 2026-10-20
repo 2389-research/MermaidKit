@@ -744,6 +744,46 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.relations.first?.label, "uses")
     }
 
+    /// Every word of a C4 title and description reaches the box, each line
+    /// within the box's text width (a lone over-wide word aside): the box grows
+    /// taller instead of the wrap cutting text after its last line (#70).
+    func testC4WrapKeepsEveryWord() throws {
+        let title = "A rather long container title that needs several lines to show"
+        let descr = "Drop-in diagram view following the color scheme of the host app, "
+            + "re-rendering whenever the theme, spacing or source text changes underneath it"
+        guard case .c4(let c)? = MermaidParser.parse("""
+        C4Container
+            Container(v, "\(title)", "SwiftUI", "\(descr)")
+            Container(w, "Short", "Swift", "Images keyed by source, theme, spacing")
+        """) else { return XCTFail() }
+        let measure: DiagramTextMeasurer = { t, size in
+            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        XCTAssertEqual(layout.boxes.count, 2)
+        let v = layout.boxes[0], w = layout.boxes[1]
+
+        XCTAssertEqual(v.titleLines.joined(separator: " "), title, "title words were dropped")
+        XCTAssertEqual(v.detailLines.first, "[SwiftUI]")
+        XCTAssertEqual(v.detailLines.dropFirst().joined(separator: " "), descr,
+                       "description words past the last line were dropped")
+        XCTAssertEqual(w.detailLines.dropFirst().joined(separator: " "),
+                       "Images keyed by source, theme, spacing")
+
+        let textWidth = v.frame.width - 20          // the layout's 10pt side pads
+        for line in v.titleLines where line.contains(" ") {
+            XCTAssertLessThanOrEqual(measure(line, 12).width, textWidth, "over-wide title line: \(line)")
+        }
+        for line in v.detailLines.dropFirst() where line.contains(" ") {
+            XCTAssertLessThanOrEqual(measure(line, 10).width, textWidth, "over-wide detail line: \(line)")
+        }
+        // The box is tall enough for every line it carries.
+        let pitches = DiagramLayoutEngine.c4LinePitches(measure)
+        let needed = 10 + pitches.stereotype + 3 + CGFloat(v.titleLines.count) * pitches.title
+            + 4 + CGFloat(v.detailLines.count) * pitches.detail + 10
+        XCTAssertGreaterThanOrEqual(v.frame.height, needed)
+    }
+
     // MARK: gitGraph
 
     func testCherryPickAppearsOnTheTimeline() throws {

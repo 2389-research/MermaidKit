@@ -81,12 +81,14 @@ extension DiagramLayoutEngine {
         let vGap: CGFloat = grown(62, fontSize: labelFontSize, measure)
         let maxCols = 6
 
-        // Greedy word-wrap capped at `maxLines`; the last kept line absorbs the
-        // remainder so nothing is silently dropped.
-        func wrap(_ text: String, fontSize: Double, maxLines: Int) -> [String] {
-            guard maxLines > 0 else { return [] }
+        // Greedy word-wrap to `textWidth`, uncapped. Invariant: the lines,
+        // joined by single spaces, are exactly the text's words in order — none
+        // is dropped — and every line fits `textWidth` unless it is a single
+        // word wider than the box. Boxes are a uniform width but each grows to
+        // its own line count (rows top-align on their tallest box), so a long
+        // label costs height, never words (#70).
+        func wrap(_ text: String, fontSize: Double) -> [String] {
             let words = text.split(separator: " ").map(String.init)
-            guard !words.isEmpty else { return [] }
             var lines: [String] = []
             var current = ""
             for word in words {
@@ -96,11 +98,10 @@ extension DiagramLayoutEngine {
                 } else {
                     lines.append(current)
                     current = word
-                    if lines.count == maxLines - 1 { break }
                 }
             }
             if !current.isEmpty { lines.append(current) }
-            return Array(lines.prefix(maxLines))
+            return lines
         }
 
         func stereotype(_ e: C4Diagram.Element) -> String {
@@ -135,11 +136,11 @@ extension DiagramLayoutEngine {
         }
 
         let contents: [Content] = diagram.elements.map { e in
-            let titleLines = wrap(e.label, fontSize: nodeFontSize, maxLines: 2)
+            let titleLines = wrap(e.label, fontSize: nodeFontSize)
             var details: [String] = []
             if let tech = e.technology, !tech.isEmpty { details.append("[\(tech)]") }
             if let d = e.descr, !d.isEmpty {
-                details += wrap(d, fontSize: labelFontSize, maxLines: max(0, 3 - details.count))
+                details += wrap(d, fontSize: labelFontSize)
             }
             let titleCount = max(titleLines.count, 1)
             let height = pad + stereoH + titleGap + CGFloat(titleCount) * titleLineH
