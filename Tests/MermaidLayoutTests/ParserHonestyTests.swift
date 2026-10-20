@@ -396,6 +396,25 @@ final class ParserHonestyTests: XCTestCase {
                        ["A>B ", "C>D ", "E>F solid; text", "G>H thick; text", "I>J "])
     }
 
+    /// Only the closer an opener expects ends a node's text: `)` inside
+    /// `[…]` is text, so its `;` is too.
+    func testOnlyTheMatchingCloserEndsNodeText() throws {
+        let c = try oneLine("graph LR; A[option A); retry] --> B; B{a] b; c} --> C")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C"])
+        XCTAssertEqual(c.nodes.first { $0.id == "A" }?.label, "option A); retry")
+    }
+
+    /// Splitting is linear: a long run of blanks after a `;` once rescanned
+    /// itself at every character (quadratic within `maxTextSize`).
+    func testLongBlankRunsSplitInLinearTime() throws {
+        let start = Date()
+        // Blanks, then a statement of `#word;` entities: each `;` once
+        // rescanned the blanks too.
+        let c = try oneLine("graph LR; A --> B;" + String(repeating: " ", count: 30_000) + String(repeating: "#a;", count: 5_000))
+        XCTAssertEqual(c.edges.count, 1)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "a long blank run should split in well under 2s")
+    }
+
     /// In `style`, `classDef` and `linkStyle` a `;` ends the statement, so a
     /// color (`#f96;`) isn't read as an entity that swallows the next one.
     func testStylingSemicolonsEndStatements() throws {

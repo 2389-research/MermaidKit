@@ -265,8 +265,8 @@ public enum MermaidParser {
     static func flowchartStatements(_ line: String) -> [String] {
         enum Mode {
             case statement
-            case string(returnTo: Int)          // the shape depth to resume
-            case shape(depth: Int)              // inside […], (…), {…}, >…]
+            case string(returnTo: [Character])  // the shape closers to resume
+            case shape(closers: [Character])    // inside […], (…), {…}, >…]: what closes each
             case pipe                           // inside |…|
             case linkText(closer: Character)    // after `--`, `==` or `-.`
         }
@@ -274,7 +274,12 @@ public enum MermaidParser {
         var statements: [String] = []
         var current = ""
         var mode = Mode.statement
+        var blank = true    // `current` is only whitespace so far
+        // Whether `current` is a style/classDef/linkStyle statement, once
+        // asked: by then it holds a `#word`, so its first word is settled.
+        var styled: Bool?
         var i = 0
+        let closer: [Character: Character] = ["[": "]", "(": ")", "{": "}"]
 
         /// Whether `chars[at...]` is a whole link made of `c` — mermaid's
         /// `--+[-xo>]` / `==+[=xo>]`: three or more (`---`, `====`), or two or
@@ -293,14 +298,19 @@ public enum MermaidParser {
         while i < chars.count {
             let c = chars[i]
             switch mode {
-            case .string(let depth):
-                if c == "\"" { mode = depth > 0 ? .shape(depth: depth) : .statement }
-            case .shape(let depth):
-                switch c {
-                case "\"": mode = .string(returnTo: depth)
-                case "[", "(", "{": mode = .shape(depth: depth + 1)
-                case "]", ")", "}": mode = depth > 1 ? .shape(depth: depth - 1) : .statement
-                default: break
+            case .string(let closers):
+                if c == "\"" { mode = closers.isEmpty ? .statement : .shape(closers: closers) }
+            case .shape(var closers):
+                // Only the closer each opener expects closes it; any other
+                // (`A[option A); retry]`) is text, as `parseNodeToken` reads it.
+                if c == "\"" {
+                    mode = .string(returnTo: closers)
+                } else if let close = closer[c] {
+                    closers.append(close)
+                    mode = .shape(closers: closers)
+                } else if c == closers.last {
+                    closers.removeLast()
+                    mode = closers.isEmpty ? .statement : .shape(closers: closers)
                 }
             case .pipe:
                 if c == "|" { mode = .statement }
@@ -323,7 +333,7 @@ public enum MermaidParser {
                     continue
                 }
             case .statement:
-                if current.allSatisfy({ $0 == " " || $0 == "\t" }), c == "%", i + 1 < chars.count, chars[i + 1] == "%" {
+                if blank, c == "%", i + 1 < chars.count, chars[i + 1] == "%" {
                     i = chars.count     // a comment: the rest of the line
                     current = ""
                     continue
@@ -332,19 +342,24 @@ public enum MermaidParser {
                 case ";":
                     // Mermaid encodes every `#word;` as an entity before it lexes.
                     let word = current.reversed().prefix(while: isWordCharacter).count
-                    let entity = word > 0 && current.dropLast(word).last == "#" && !styling(current)
+                    let entity = word > 0 && current.dropLast(word).last == "#" && !{
+                        if styled == nil { styled = styling(current) }
+                        return styled!
+                    }()
                     if !entity {
                         statements.append(current)
                         current = ""
+                        blank = true
+                        styled = nil
                         i += 1
                         continue
                     }
-                case "\"": mode = .string(returnTo: 0)
-                case "[", "(", "{": mode = .shape(depth: 1)
+                case "\"": mode = .string(returnTo: [])
+                case "[", "(", "{": mode = .shape(closers: [closer[c]!])
                 case ">":
                     // `A>flag]` (asymmetric) — not a link's arrowhead.
                     if let prev = current.last, isWordCharacter(prev) {
-                        mode = .shape(depth: 1)
+                        mode = .shape(closers: ["]"])
                     }
                 case "|": mode = .pipe
                 case "-", "=":
@@ -355,18 +370,21 @@ public enum MermaidParser {
                         // mermaid's lexer.
                         if !link(at: i, c) {
                             current += String(chars[i...i + 1])
+                            blank = false
                             i += 2
                             mode = .linkText(closer: c)
                             continue
                         }
                         // Skip the whole link so its tail can't reopen text.
                         while i < chars.count, chars[i] == c { current.append(chars[i]); i += 1 }
+                        blank = false
                         continue
                     }
                     if c == "-", next == "." {
                         let after = i + 2 < chars.count ? chars[i + 2] : " "
                         if after != "." && after != "-" {
                             current += "-."
+                            blank = false
                             i += 2
                             mode = .linkText(closer: ".")
                             continue
@@ -376,6 +394,7 @@ public enum MermaidParser {
                 }
             }
             current.append(c)
+            if c != " " && c != "\t" { blank = false }
             i += 1
         }
         statements.append(current)
