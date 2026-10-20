@@ -406,7 +406,8 @@ CLI:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a
-  categorical palette, and a dark-mode flag) and `DiagramSpacing` (layout
+  categorical palette, a dark-mode flag, and an optional `fontFamily` the
+  raster renderers set and measure every label in) and `DiagramSpacing` (layout
   density and text size: `textScale` lays labels out larger or smaller — boxes,
   rows and canvases grow around the text instead of the image being scaled —
   and `MermaidView` follows the environment's Dynamic Type size).

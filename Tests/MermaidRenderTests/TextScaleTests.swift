@@ -17,17 +17,21 @@ final class TextScaleTests: XCTestCase {
     /// Problems a fixture's text has, as readable lines; nil when the diagram
     /// is past the renderer's 4000pt canvas guard at this size and isn't
     /// drawn (the state fixture, 1755pt tall at 1×, at 3×).
-    private func problems(_ name: String, source: String, scale: CGFloat) throws -> [String]? {
+    private func problems(_ name: String, source: String, scale: CGFloat,
+                          family: String? = nil) throws -> [String]? {
         // Cache-busting comment: the hook only fires on a real draw.
-        let source = source + "\n%% text scale \(scale)"
+        let source = source + "\n%% text scale \(scale) \(family ?? "")"
         let diagram = try XCTUnwrap(MermaidParser.parse(source), name)
         var drawn: [(text: String, rect: CGRect)] = []
         DiagramRenderer.textCaptureHook = { drawn.append(($0, $1)) }
         defer { DiagramRenderer.textCaptureHook = nil }
-        let image = MermaidRenderer.image(source: source, theme: DiagramTheme(prefersDark: false),
+        let image = MermaidRenderer.image(source: source, theme: DiagramTheme(prefersDark: false, fontFamily: family),
                                           spacing: DiagramSpacing(textScale: scale))
-        let scene = DiagramScene.lower(diagram, measure: MermaidRenderer.textMeasurer,
-                                       spacing: DiagramSpacing(textScale: scale))
+        // The scene measured in the same family the render drew in.
+        let scene = DiagramRenderer.$fontFamily.withValue(family) {
+            DiagramScene.lower(diagram, measure: MermaidRenderer.textMeasurer,
+                               spacing: DiagramSpacing(textScale: scale))
+        }
         guard let image else {
             XCTAssertGreaterThanOrEqual(max(scene.size.width, scene.size.height), 4000,
                                         "\(name) at \(scale)×: not drawn, yet within the canvas guard")
@@ -101,6 +105,62 @@ final class TextScaleTests: XCTestCase {
                 XCTAssertTrue(new.isEmpty, "\(name) at \(scale)×: \(new.count) — " + new.prefix(4).joined(separator: " ; "))
             }
         }
+    }
+
+    // MARK: Font family
+
+    /// Labels set in another family are laid out in it too, at the default
+    /// size and at 2×, with no problem a fixture hasn't in the system font:
+    /// every fixture in Helvetica Neue, and the box types — where labels size
+    /// the boxes — in faces far from the system font's metrics: Georgia (a
+    /// serif with no medium), Verdana (wide) and Menlo (monospaced). The chart
+    /// types cap some text columns (a gantt's label gutter) for the system
+    /// font's widths, which a wide face can exceed.
+    func testFixturesFitInAnotherFontFamily() throws {
+        let boxTypes: Set<String> = ["flowchart", "sequence", "class", "er", "state", "block", "mindmap", "c4"]
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/diagrams")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "mmd" }
+        for url in files {
+            let name = url.deletingPathExtension().lastPathComponent
+            let source = try String(contentsOf: url, encoding: .utf8)
+            let baseline = Set(try XCTUnwrap(problems(name, source: source, scale: 1), name))
+            let families = ["Helvetica Neue"] + (boxTypes.contains(name) ? ["Georgia", "Verdana", "Menlo"] : [])
+            for family in families {
+                for scale: CGFloat in [1, 2] {
+                    guard let found = try problems(name, source: source, scale: scale, family: family) else { continue }
+                    let new = found.filter { !baseline.contains($0) }
+                    XCTAssertTrue(new.isEmpty, "\(name) in \(family) at \(scale)×: " + new.prefix(4).joined(separator: " ; "))
+                }
+            }
+        }
+    }
+
+    /// The family reaches the drawn text and the layout around it, and a
+    /// family this device doesn't have is the system font, pixel for pixel.
+    func testFontFamilyIsUsedAndFallsBack() throws {
+        let source = "flowchart LR\n  A[Read the input] --> B[Write the output]"
+        let system = try XCTUnwrap(MermaidRenderer.pngData(source: source, theme: DiagramTheme(prefersDark: false)))
+        let menlo = try XCTUnwrap(MermaidRenderer.image(source: source,
+                                                        theme: DiagramTheme(prefersDark: false, fontFamily: "Menlo")))
+        let plain = try XCTUnwrap(MermaidRenderer.image(source: source, theme: DiagramTheme(prefersDark: false)))
+        XCTAssertGreaterThan(menlo.size.width, plain.size.width, "Menlo is wider: the boxes grow with it")
+        let missing = try XCTUnwrap(MermaidRenderer.pngData(
+            source: source, theme: DiagramTheme(prefersDark: false, fontFamily: "No Such Family 7f3a")))
+        XCTAssertEqual(missing, system)
+        let font = DiagramRenderer.$fontFamily.withValue("Menlo") { DiagramRenderer.font(12, weight: .semibold) }
+        XCTAssertEqual(CTFontCopyFamilyName(font) as String, "Menlo")
+    }
+
+    /// The family is part of the render-cache key, and the system font
+    /// leaves the key as it was.
+    func testFontFamilyIsInTheFingerprint() {
+        XCTAssertEqual(DiagramTheme(prefersDark: false).fingerprint,
+                       DiagramTheme(prefersDark: false, fontFamily: nil).fingerprint)
+        XCTAssertNotEqual(DiagramTheme(prefersDark: false).fingerprint,
+                          DiagramTheme(prefersDark: false, fontFamily: "Menlo").fingerprint)
     }
 
     /// Multi-line message labels and notes stack at a pitch that grows with

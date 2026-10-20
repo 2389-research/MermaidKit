@@ -98,11 +98,16 @@ enum DiagramRenderer {
     static func renderPlan(
         for diagram: MermaidDiagram, theme: DiagramTheme, spacing: DiagramSpacing
     ) -> (size: CGSize, edgePolylines: [[CGPoint]], draw: (CGContext) -> Void) {
-        let k = spacing.textScale
-        let plan = DiagramTextScale.$current.withValue(k) { unscaledRenderPlan(for: diagram, theme: theme, spacing: spacing) }
-        guard k != 1 else { return plan }
+        let k = spacing.textScale, family = theme.fontFamily
+        let plan = withText(k, family) { unscaledRenderPlan(for: diagram, theme: theme, spacing: spacing) }
+        guard k != 1 || family != nil else { return plan }
         let draw = plan.draw
-        return (plan.size, plan.edgePolylines, { context in DiagramTextScale.$current.withValue(k) { draw(context) } })
+        return (plan.size, plan.edgePolylines, { context in withText(k, family) { draw(context) } })
+    }
+
+    /// Runs `body` with labels measured and drawn at text scale `k` in `family`.
+    private static func withText<T>(_ k: CGFloat, _ family: String?, _ body: () -> T) -> T {
+        $fontFamily.withValue(family) { DiagramTextScale.$current.withValue(k, operation: body) }
     }
 
     private static func unscaledRenderPlan(
@@ -279,12 +284,13 @@ enum DiagramRenderer {
         // (threaded in via `parseWithMetadata`), not a re-scan of the source.
         guard diagram.titleText == nil, let caption
         else { return plan }
-        return DiagramTextScale.$current.withValue(textScale) {
+        let family = theme.fontFamily
+        return withText(textScale, family) {
             let captioned = captioned(plan, caption: caption, theme: theme)
-            guard textScale != 1 else { return captioned }
+            guard textScale != 1 || family != nil else { return captioned }
             let draw = captioned.draw
             return (captioned.size, captioned.edgePolylines,
-                    { context in DiagramTextScale.$current.withValue(textScale) { draw(context) } })
+                    { context in withText(textScale, family) { draw(context) } })
         }
     }
 

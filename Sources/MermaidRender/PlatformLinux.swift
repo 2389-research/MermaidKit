@@ -121,8 +121,14 @@ private final class FontCache: @unchecked Sendable {
     }
 }
 
+/// The render's font at `weight`: the theme's family when FontConfig has it,
+/// else DejaVu Sans.
 func linuxFont(_ weight: PlatformFont.Weight) -> Silica.CGFont? {
-    FontCache.shared.font(PlatformFont.familyName(weight))
+    if let family = DiagramRenderer.fontFamily {
+        let bold = weight == .semibold || weight == .bold
+        if let font = FontCache.shared.font(bold ? "\(family):bold" : family) { return font }
+    }
+    return FontCache.shared.font(PlatformFont.familyName(weight))
 }
 
 // MARK: - Platform image
