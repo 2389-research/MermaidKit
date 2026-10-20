@@ -594,6 +594,15 @@ public enum MermaidParser {
         var anonCount = 0
         // Subgraphs a later block reopened: their first direction stands.
         var reopened: Set<String> = []
+        /// Whether `id` contains `other`, at any depth.
+        func isAncestor(_ id: String, of other: String) -> Bool {
+            var seen: Set<String> = [], frontier = subgraphs[id]?.childIDs ?? []
+            while let next = frontier.popLast() {
+                if next == other { return true }
+                if seen.insert(next).inserted { frontier += subgraphs[next]?.childIDs ?? [] }
+            }
+            return false
+        }
 
         func note(_ node: Flowchart.Node) {
             if let existing = nodes[node.id] {
@@ -620,8 +629,13 @@ public enum MermaidParser {
                 let known = subgraphOrder.count
                 let id = openSubgraph(line, into: &subgraphs, order: &subgraphOrder,
                                       stack: stack, anonCount: &anonCount)
-                if subgraphOrder.count == known { reopened.insert(id) }
-                if let parent = stack.last, subgraphs[parent] != nil, !subgraphs[parent]!.childIDs.contains(id) {
+                let reopening = subgraphOrder.count == known
+                if reopening { reopened.insert(id) }
+                // A subgraph has one parent, its first: a reopened block never
+                // re-parents it (that could nest it inside its own descendant,
+                // a cycle layout would recurse on forever).
+                if let parent = stack.last, subgraphs[parent] != nil,
+                   !reopening || !subgraphs.values.contains(where: { $0.childIDs.contains(id) }) && !isAncestor(id, of: parent) {
                     subgraphs[parent]!.childIDs.append(id)
                 }
                 stack.append(id)

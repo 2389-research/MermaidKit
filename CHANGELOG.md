@@ -4,8 +4,6 @@
 
 ### Fixed
 
-### Fixed
-
 - **Bold draws bold on Linux.** Titles, headers and other emphasis were
   always set in regular DejaVu Sans: Silica reads a `Family-Bold` name, and
   took FontConfig's `Family:bold` as a family that doesn't exist. Linux

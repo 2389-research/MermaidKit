@@ -528,6 +528,31 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(two.nodeIDs, ["A", "B", "C", "D"])
     }
 
+    /// Reopening subgraphs in reverse nesting order keeps each one's first
+    /// parent: no cycle (`B` inside `A` inside `B`), which layout would
+    /// recurse on until it crashed.
+    func testReopeningSubgraphsNeverMakesACycle() throws {
+        let c = try flow("""
+            subgraph C
+              subgraph A
+                subgraph B
+                  x
+                end
+              end
+            end
+            subgraph B
+              subgraph A
+                y
+              end
+            end
+            """)
+        let children = Dictionary(uniqueKeysWithValues: c.subgraphs.map { ($0.id, $0.childIDs) })
+        XCTAssertEqual(children["C"], ["A"])
+        XCTAssertEqual(children["A"], ["B"])
+        XCTAssertEqual(children["B"], [])
+        XCTAssertNotNil(DiagramLayoutEngine.layout(c, measure: { t, s in CGSize(width: CGFloat(t.count) * s * 0.6, height: s + 4) }))
+    }
+
     /// Deterministic fake measurer for the layout-geometry assertions below.
     private let measure: DiagramTextMeasurer = { t, s in
         CGSize(width: CGFloat(max(t.count, 1)) * s * 0.6, height: s + 4)
