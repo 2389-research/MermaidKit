@@ -103,6 +103,6 @@ extension RenderScene {
                 color: theme.tertiaryText, backing: theme.canvas.withAlpha(0.88))))
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 }

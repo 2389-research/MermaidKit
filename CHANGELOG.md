@@ -20,6 +20,17 @@
   `ClassLayout.Box.label`; `name` is the id without the generic. Alt text
   reads `Box<T>` too. Charts without `~` are byte-identical. (#72)
 
+- **`<br/>` breaks the line in SVG and `SceneWire` too.** `scene`/`svg` and
+  the scene JSON the C ABI hands Android, Windows and Flutter now break a
+  label at `<br/>`, `<br>`, a literal `\n` or a newline in every diagram type,
+  on the same line centers the raster image draws, instead of showing the tag
+  as text in flowchart, class, state and other labels. Each line is its own
+  text element, and a chipped label (an edge label) gets one chip behind the
+  whole block, so the wire format and the platform renderers are unchanged.
+  A break tag in any case (`<BR>`, `<Br/>`) breaks on every path now, the
+  raster image included, through one new `DiagramLayoutEngine.hasLineBreak`.
+  Raster output is otherwise byte-identical. (#71)
+
 - **C4 boxes keep every word of their title and description.** The wrap
   stopped at its last line and dropped the words after it, so "Drop-in
   diagram view following the color scheme" drew as "Drop-in diagram view

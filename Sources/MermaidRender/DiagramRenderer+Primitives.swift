@@ -151,9 +151,7 @@ extension DiagramRenderer {
     /// single-line label skips the `brLines` split. Broad on purpose: a false
     /// positive just takes the (correct) split path, so it only needs to never
     /// MISS a real break (`<br…>`, literal `\n`, or any real newline).
-    private static func hasLineBreak(_ text: String) -> Bool {
-        text.contains("<br") || text.contains("\\n") || text.contains(where: \.isNewline)
-    }
+    private static func hasLineBreak(_ text: String) -> Bool { DiagramLayoutEngine.hasLineBreak(text) }
 
     /// Draws text centered on `center` in a flipped (y-down) context.
     #if DEBUG
@@ -165,6 +163,11 @@ extension DiagramRenderer {
     /// Suspends capture inside rotated CTMs, where the argument-space rect
     /// would be meaningless.
     nonisolated(unsafe) static var textCaptureSuspended = false
+    /// Test-only: receives every visual LINE drawText paints and the center it
+    /// paints it on, in layout coordinates — what the scene's per-line text
+    /// runs must reproduce (`DrawSceneConformanceTests`). Suspended with
+    /// `textCaptureHook`.
+    nonisolated(unsafe) static var lineCaptureHook: ((String, CGPoint) -> Void)?
     #endif
 
     /// Draws `text` at `size` × ``textScale``, centered on `center`, honoring
@@ -209,10 +212,13 @@ extension DiagramRenderer {
         }
     }
 
-    /// Draws a single visual line centered on `center` (no line-break handling,
-    /// no capture hook).
+    /// Draws a single visual line centered on `center` (no line-break handling;
+    /// only the per-line capture hook).
     private static func drawLine(_ text: String, center: CGPoint, size: CGFloat,
                                  weight: PlatformFont.Weight, color: PlatformColor, in context: CGContext) {
+        #if DEBUG
+        if let hook = lineCaptureHook, !textCaptureSuspended { hook(text, center) }
+        #endif
         #if canImport(AppKit) || canImport(UIKit)
         let attributed = NSAttributedString(string: text, attributes: [
             kCTFontAttributeName as NSAttributedString.Key: font(size, weight: weight),

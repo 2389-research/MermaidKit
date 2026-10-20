@@ -1375,6 +1375,14 @@ extension DiagramLayoutEngine {
     private static let brTagRegex =
         try? NSRegularExpression(pattern: "<br\\b[^>]*>", options: .caseInsensitive)
 
+    /// Whether `text` holds a line break `brLines` would split on — the one
+    /// test both the raster draw and the `RenderScene` lowering use, so they
+    /// agree on what breaks (any-case `<br…>`, a literal `\n`, a newline).
+    public static func hasLineBreak(_ text: String) -> Bool {
+        text.range(of: "<br", options: .caseInsensitive) != nil || text.contains("\\n")
+            || text.contains(where: \.isNewline)
+    }
+
     /// Splits `text` into visual lines on every line-break form mermaid diagrams
     /// use interchangeably: any `<br…>` HTML tag, a literal backslash-n (`\n`,
     /// the two characters authors often type), and any real newline character
