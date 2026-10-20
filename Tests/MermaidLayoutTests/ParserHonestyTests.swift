@@ -528,6 +528,26 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(two.nodeIDs, ["A", "B", "C", "D"])
     }
 
+    /// A quoted subgraph title without whitespace is its id, as in mermaid,
+    /// so an edge can target the box; one with whitespace gets a synthesized
+    /// id.
+    func testAQuotedOneWordSubgraphTitleIsItsId() throws {
+        let c = try flow("""
+            subgraph "Anon"
+              B
+            end
+            subgraph "two words"
+              D
+            end
+            Anon --> C
+            """)
+        XCTAssertEqual(c.subgraphs.first?.id, "Anon")
+        XCTAssertEqual(c.subgraphs.first?.label, "Anon")
+        XCTAssertTrue(c.subgraphs.last?.id.hasPrefix("\u{a7}sub") == true)
+        XCTAssertEqual(c.subgraphs.last?.label, "two words")
+        XCTAssertFalse(c.nodes.contains { $0.id == "Anon" }, "the edge targets the box, not a phantom node")
+    }
+
     /// Reopening subgraphs in reverse nesting order keeps each one's first
     /// parent: no cycle (`B` inside `A` inside `B`), which layout would
     /// recurse on until it crashed.

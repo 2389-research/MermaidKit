@@ -746,7 +746,14 @@ public enum MermaidParser {
             if id.isEmpty { id = "\u{a7}sub\(anonCount)"; anonCount += 1 }
         } else if rest.hasPrefix("\"") {
             label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-            id = "\u{a7}sub\(anonCount)"; anonCount += 1
+            // A quoted title without whitespace is the id too, as in mermaid
+            // (`subgraph "Anon"` is subgraph `Anon`, so `Anon --> C` targets
+            // it); one with whitespace gets a synthesized id.
+            if !label.isEmpty, !label.contains(where: \.isWhitespace) {
+                id = label
+            } else {
+                id = "\u{a7}sub\(anonCount)"; anonCount += 1
+            }
         } else {
             id = rest; label = rest
         }

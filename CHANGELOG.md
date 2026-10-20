@@ -23,7 +23,9 @@
 - **A reused subgraph id is one subgraph**, as in mermaid. A second
   `subgraph two … end` block adds its members to `two` (the first title and
   direction stand) instead of drawing an untitled second box that took them.
-  Found by the mermaid oracle's new subgraph comparison (#87).
+  A quoted one-word title is the subgraph's id too (`subgraph "Anon"` is
+  `Anon`, so `Anon --> C` targets the box). Found by the mermaid oracle's new
+  subgraph comparison (#87).
 
 ## 2.7.0 — Diagrams in your app's font
 
