@@ -48,7 +48,7 @@ extension RenderScene {
                 path: .roundedRect(box.frame, radius: 4), fill: fill,
                 stroke: Stroke(color: stroke, width: 1))))
             elements.append(.text(Text(
-                string: box.name,
+                string: box.label,
                 center: CGPoint(x: box.frame.midX, y: box.frame.minY + box.nameHeight / 2),
                 fontSize: 12, weight: .semibold, color: theme.ink)))
 

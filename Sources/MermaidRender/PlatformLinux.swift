@@ -86,17 +86,23 @@ func resolvedCGColor(_ color: PlatformColor) -> Silica.CGColor {
 /// as its measurement.
 public struct PlatformFont: Sendable {
     public enum Weight: Sendable { case regular, medium, semibold, bold }
-    /// The FontConfig *pattern* (not a bare family name) for a weight, passed to
-    /// `CGFont(name:)`: the `:bold` suffix is FontConfig syntax selecting the
-    /// bold face. "DejaVu Sans" is present in the minimal container image;
-    /// FontConfig substitutes the platform's default sans otherwise. Medium and
-    /// semibold aren't distinguished from regular/bold here — FontConfig has no
-    /// closer face in the base image, and diagram chrome doesn't lean on the
+    /// The system font's name for a weight, passed to `CGFont(name:)`.
+    /// "DejaVu Sans" is present in the minimal container image; FontConfig
+    /// substitutes the platform's default sans otherwise. Medium and semibold
+    /// aren't distinguished from regular/bold here — FontConfig has no closer
+    /// face in the base image, and diagram chrome doesn't lean on the
     /// intermediate weights the way body text would.
-    static func familyName(_ weight: Weight) -> String {
+    static func familyName(_ weight: Weight) -> String { face("DejaVu Sans", weight) }
+
+    /// `family` at `weight`, in Silica's name syntax: `Family` or
+    /// `Family-Bold`. Silica reads a `-Traits` suffix itself and sets the rest
+    /// as the FontConfig family verbatim, so FontConfig's own `Family:bold`
+    /// would ask for a family named "Family:bold" — which FontConfig answers
+    /// with its regular default, and bold never drew bold.
+    static func face(_ family: String, _ weight: Weight) -> String {
         switch weight {
-        case .regular, .medium: return "DejaVu Sans"
-        case .semibold, .bold: return "DejaVu Sans:bold"
+        case .regular, .medium: return family
+        case .semibold, .bold: return "\(family)-Bold"
         }
     }
 }
@@ -125,11 +131,10 @@ private final class FontCache: @unchecked Sendable {
 /// has it, else the system font (DejaVu Sans) — the very font object a render
 /// without a family uses, so a missing family renders byte-identically.
 /// FontConfig always answers a family it lacks with a substitute, so the face
-/// it resolved is checked against the name asked for. One face serves every
-/// weight, as the system font does here (`PlatformFont.familyName`'s `:bold`
-/// selects no bold face through Silica).
+/// it resolved is checked against the name asked for. (A family whose name
+/// has a `-` can't be named in Silica's syntax, so it falls back too.)
 func linuxFont(_ weight: PlatformFont.Weight) -> Silica.CGFont? {
-    if let family = DiagramRenderer.fontFamily, let font = FontCache.shared.font(family),
+    if let family = DiagramRenderer.fontFamily, let font = FontCache.shared.font(PlatformFont.face(family, weight)),
        font.handle.fullName.lowercased().hasPrefix(family.lowercased()) {
         return font
     }
