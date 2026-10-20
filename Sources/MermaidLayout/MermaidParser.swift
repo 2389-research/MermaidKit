@@ -263,10 +263,14 @@ public enum MermaidParser {
     /// statement's start runs to the end of the line, as it does on a line
     /// of its own.
     static func flowchartStatements(_ line: String) -> [String] {
+        /// A node's text: closed by its own delimiter, nesting counted for that
+        /// pair only (`[[x]]`, `((x))`), as `parseNodeToken` reads a shape by
+        /// its outer delimiters — `(` inside `[…]` is text.
+        struct Shape { let open: Character?, close: Character; var depth = 1 }
         enum Mode {
             case statement
-            case string(returnTo: [Character])  // the shape closers to resume
-            case shape(closers: [Character])    // inside […], (…), {…}, >…]: what closes each
+            case string(returnTo: Shape?)       // the node text to resume, if any
+            case shape(Shape)                   // inside […], (…), {…}, >…]
             case pipe                           // inside |…|
             case linkText(closer: Character)    // after `--`, `==` or `-.`
         }
@@ -298,19 +302,17 @@ public enum MermaidParser {
         while i < chars.count {
             let c = chars[i]
             switch mode {
-            case .string(let closers):
-                if c == "\"" { mode = closers.isEmpty ? .statement : .shape(closers: closers) }
-            case .shape(var closers):
-                // Only the closer each opener expects closes it; any other
-                // (`A[option A); retry]`) is text, as `parseNodeToken` reads it.
+            case .string(let shape):
+                if c == "\"" { mode = shape.map { .shape($0) } ?? .statement }
+            case .shape(var shape):
                 if c == "\"" {
-                    mode = .string(returnTo: closers)
-                } else if let close = closer[c] {
-                    closers.append(close)
-                    mode = .shape(closers: closers)
-                } else if c == closers.last {
-                    closers.removeLast()
-                    mode = closers.isEmpty ? .statement : .shape(closers: closers)
+                    mode = .string(returnTo: shape)
+                } else if c == shape.open {
+                    shape.depth += 1
+                    mode = .shape(shape)
+                } else if c == shape.close {
+                    shape.depth -= 1
+                    mode = shape.depth > 0 ? .shape(shape) : .statement
                 }
             case .pipe:
                 if c == "|" { mode = .statement }
@@ -354,12 +356,12 @@ public enum MermaidParser {
                         i += 1
                         continue
                     }
-                case "\"": mode = .string(returnTo: [])
-                case "[", "(", "{": mode = .shape(closers: [closer[c]!])
+                case "\"": mode = .string(returnTo: nil)
+                case "[", "(", "{": mode = .shape(Shape(open: c, close: closer[c]!))
                 case ">":
                     // `A>flag]` (asymmetric) — not a link's arrowhead.
-                    if let prev = current.last, isWordCharacter(prev) {
-                        mode = .shape(closers: ["]"])
+                    if let prev = current.last, isIDCharacter(prev) {
+                        mode = .shape(Shape(open: nil, close: "]"))
                     }
                 case "|": mode = .pipe
                 case "-", "=":
@@ -400,6 +402,9 @@ public enum MermaidParser {
         statements.append(current)
         return statements.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
+
+    /// A character a node id is made of (Unicode letters included).
+    static func isIDCharacter(_ c: Character) -> Bool { c.isLetter || c.isNumber || c == "_" }
 
     /// A character of mermaid's `\w`: an ASCII letter or digit, or `_`.
     private static func isWordCharacter(_ c: Character) -> Bool {
@@ -474,7 +479,12 @@ public enum MermaidParser {
             } else {
                 decoded = nil
             }
-            out += decoded ?? ns.substring(with: match.range)
+            // A `<` or `\` that would spell a line break (`&lt;br&gt;`, `#92;n`)
+            // stays as written: layout reads `<br>` and `\n` as breaks.
+            let after = ns.substring(from: cursor)
+            let breaks = (decoded == "<" && after.lowercased().hasPrefix("br"))
+                || (decoded == "\\" && after.hasPrefix("n"))
+            out += breaks ? ns.substring(with: match.range) : decoded ?? ns.substring(with: match.range)
         }
         out += ns.substring(from: cursor)
         return out
@@ -884,7 +894,7 @@ public enum MermaidParser {
         guard !trimmed.isEmpty else { return nil }
 
         /// A character an id is made of; `-` and `.` only join two of these.
-        func isWord(_ c: Character) -> Bool { c.isLetter || c.isNumber || c == "_" }
+        let isWord = isIDCharacter
         var id = ""
         var index = trimmed.startIndex
         while index < trimmed.endIndex {

@@ -396,12 +396,29 @@ final class ParserHonestyTests: XCTestCase {
                        ["A>B ", "C>D ", "E>F solid; text", "G>H thick; text", "I>J "])
     }
 
-    /// Only the closer an opener expects ends a node's text: `)` inside
-    /// `[…]` is text, so its `;` is too.
-    func testOnlyTheMatchingCloserEndsNodeText() throws {
-        let c = try oneLine("graph LR; A[option A); retry] --> B; B{a] b; c} --> C")
-        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C"])
+    /// A node's text ends at its own delimiter only: `)` or `(` inside
+    /// `[…]` is text, so its `;` is too; `[[…]]` and `((…))` nest.
+    func testOnlyTheShapesOwnDelimiterEndsNodeText() throws {
+        let c = try oneLine("graph LR; A[option A); retry] --> B; B{a] b; c} --> C; C[Status (pending; retry] --> D; D[[x; y]] --> E((p; q))")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C", "C>D", "D>E"])
         XCTAssertEqual(c.nodes.first { $0.id == "A" }?.label, "option A); retry")
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "Status (pending; retry")
+    }
+
+    /// A flag after a Unicode id is still a flag, as any id is.
+    func testFlagAfterAUnicodeID() throws {
+        let c = try oneLine("flowchart LR; café>Flag; retry] --> B; C --> D")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["café>B", "C>D"])
+    }
+
+    /// An entity spelling a line break (`&lt;br&gt;`, `#92;n`) shows as
+    /// written instead of breaking the label: layout reads `<br>` and `\n` as
+    /// breaks. A real `<br>` still breaks.
+    func testEscapedLineBreaksDontBreak() throws {
+        let c = try flow("A[\"show &lt;br&gt; and #lt;BR/#gt; and #92;n literally\"] --> B[\"a<br>b\"]")
+        let label = try XCTUnwrap(c.nodes.first { $0.id == "A" }?.label)
+        XCTAssertEqual(DiagramLayoutEngine.brLines(label).count, 1, label)
+        XCTAssertEqual(DiagramLayoutEngine.brLines(c.nodes.first { $0.id == "B" }?.label ?? "").count, 2)
     }
 
     /// Splitting is linear: a long run of blanks after a `;` once rescanned
