@@ -71,9 +71,12 @@ accepted, and the reviewer approves it.
 `Tests/MermaidLayoutTests/MermaidOracleDump.swift` (MermaidKit's side). Shapes
 MermaidKit has no case for compare as its documented rectangle fallback.
 Subgraphs compare by id (a title-only subgraph's synthesized id by its
-place among them), with their title, direction and direct members (nodes
+title and named members, since the two sides number them differently), with their title, direction and direct members (nodes
 and child subgraphs). Styling (`classDef`, `style`, `:::class`, `linkStyle`)
 isn't compared: MermaidKit themes every node alike on purpose, and what it
 must do with styling lines, keep reading the rest of the chart, is already
 compared. Edge order isn't either: it only matters to `linkStyle N`, which
 MermaidKit ignores.
+A subgraph's direction compares as declared. mermaid's renderer ignores it
+when a member links outside the subgraph, a limitation its docs list;
+MermaidKit honors it on purpose.

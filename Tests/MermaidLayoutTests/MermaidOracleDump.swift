@@ -42,9 +42,14 @@ final class MermaidOracleDump: XCTestCase {
                     "head": arrows == "none" ? "arrow" : "\(e.head)", "arrows": arrows, "length": e.length]
         }
         // Subgraphs as normalize.mjs's `anonymized` leaves them: synthesized ids
-        // (`§sub0`) as `§anon<k>` by number, members sorted, sorted by id.
-        let synthesized = chart.subgraphs.map(\.id).filter { $0.hasPrefix("\u{a7}sub") }
-            .sorted { Int($0.dropFirst(4)) ?? 0 < Int($1.dropFirst(4)) ?? 0 }
+        // (`§sub0`) as `§anon<k>`, k by content (title, then named members),
+        // members sorted, sorted by id.
+        let synthesizedIDs = Set(chart.subgraphs.map(\.id).filter { $0.hasPrefix("\u{a7}sub") })
+        func key(_ s: Flowchart.Subgraph) -> String {
+            visible(s.label) + "\u{0}" + (s.nodeIDs + s.childIDs).filter { !synthesizedIDs.contains($0) }.sorted().joined(separator: ",")
+        }
+        let synthesized = chart.subgraphs.filter { synthesizedIDs.contains($0.id) }
+            .sorted { key($0).unicodeScalars.lexicographicallyPrecedes(key($1).unicodeScalars) }.map(\.id)
         func name(_ id: String) -> String {
             synthesized.firstIndex(of: id).map { "\u{a7}anon\($0)" } ?? id
         }

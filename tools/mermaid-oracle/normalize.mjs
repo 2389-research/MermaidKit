@@ -95,14 +95,19 @@ function declares(source, id) {
 
 /**
  * Subgraphs in a form both sides share: a title-only subgraph's synthesized
- * id (mermaid's `subGraph0`, MermaidKit's `§sub0`) becomes `§anon<k>` by its
- * place among them, in members too; members (direct nodes and child
- * subgraphs) are sorted, since only who belongs where is visible.
+ * id (mermaid's `subGraph0`, MermaidKit's `§sub0`) becomes `§anon<k>`, in
+ * members too; members (direct nodes and child subgraphs) are sorted, since
+ * only who belongs where is visible. The two sides number synthesized ids in
+ * different orders (mermaid as a block closes, inner first; MermaidKit as it
+ * opens), so `k` comes from content: the title, then the named members.
+ * MermaidOracleDump.swift does the same.
  */
 export function anonymized(subgraphs, isSynthesized) {
-  const synth = subgraphs.map(s => s.id).filter(isSynthesized)
-    .sort((a, b) => Number(a.match(/\d+$/)[0]) - Number(b.match(/\d+$/)[0]));
-  const name = id => synth.includes(id) ? `§anon${synth.indexOf(id)}` : id;
+  const ids = new Set(subgraphs.map(s => s.id).filter(isSynthesized));
+  const key = s => `${s.title}\u0000${s.members.filter(m => !ids.has(m)).sort().join(',')}`;
+  const synth = subgraphs.filter(s => ids.has(s.id)).sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
+    .map(s => s.id);
+  const name = id => ids.has(id) ? `§anon${synth.indexOf(id)}` : id;
   return subgraphs.map(s => ({ ...s, id: name(s.id), members: s.members.map(name).sort() }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
