@@ -48,7 +48,10 @@ Divergences order by (kind, missing, wrong, extra). Drawing nothing is worse
 than any drawing; then losing what mermaid draws is worst, then drawing it
 wrong, then drawing extra. So no deletion can pass as progress: dropping
 anything mermaid draws raises *missing*, whatever else it fixes, while
-removing junk, or turning a rejection into a drawing, is progress.
+removing junk, or turning a rejection into a drawing, is progress. That order
+is a policy (never drop): recovering something missing counts as progress
+even if it draws extra, and the extra stays counted, so removing it later is
+progress too.
 
 CI fails when a chart diverges that the baseline doesn't list, or when a
 listed chart orders after its record, or a listed chart has left the corpus

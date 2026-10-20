@@ -48,7 +48,11 @@ function differences(m, k) {
   if (!k.ok) k = { direction: null, vertices: [], edges: [] };
   if (k.direction === null) out.missing.push(`direction ${m.direction}`);
   else if (m.direction !== k.direction) out.wrong.push(`direction ${m.direction} vs ${k.direction}`);
-  const mv = new Map(m.vertices.map(v => [v.id, v])), kv = new Map(k.vertices.map(v => [v.id, v]));
+  const mv = new Map(m.vertices.map(v => [v.id, v])), kv = new Map();
+  for (const v of k.vertices) {
+    // A node drawn twice is one node and an extra copy (mermaid's side is a map).
+    if (kv.has(v.id)) out.extra.push(`duplicate node ${JSON.stringify(v.id)}`); else kv.set(v.id, v);
+  }
   for (const [id, v] of mv) {
     const w = kv.get(id);
     if (!w) { out.missing.push(`node ${JSON.stringify(id)}`); continue; }
