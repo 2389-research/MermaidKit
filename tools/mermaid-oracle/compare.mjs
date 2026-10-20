@@ -7,13 +7,20 @@
 //   lenient     mermaid errors, MermaidKit draws (allowed: degrade, never break)
 //   rejects     mermaid draws, MermaidKit returns nothing          (divergence)
 //   differs     both draw, but something a reader sees differs     (divergence)
-// Each divergence has a cost: how many things a reader sees differently
-// (a rejected chart costs everything mermaid drew, plus its direction), and
-// a rejection is worse than any wrong drawing.
+// Each divergence counts what a reader sees differently, by how bad it is:
+//   missing  mermaid draws it and MermaidKit has nothing there: a node, an
+//            edge between those endpoints (each parallel copy), the direction
+//   wrong    it's there, but a property differs: a label, a shape, an
+//            edge's label/stroke/head/arrows/length, the direction
+//   extra    MermaidKit draws something mermaid doesn't
+// Divergences order by (kind, missing, wrong, extra): drawing nothing is
+// worse than any drawing, then losing what mermaid draws is worst, then
+// drawing it wrong, then drawing extra. So no deletion can pass as progress:
+// dropping anything mermaid draws raises `missing`, whatever else it fixes.
 // With --baseline the run fails (exit 1) if a chart diverges that the
-// baseline doesn't list, or a listed chart costs more than recorded: the
+// baseline doesn't list, or a listed chart orders after its record: the
 // baseline only ever shrinks. --update records improvements (fixed charts
-// leave, cheaper ones lower their cost) and refuses to write while anything
+// leave, better ones lower their counts) and refuses to write while anything
 // got worse, or while a listed chart has left the corpus (lost coverage
 // isn't a fix). --accept records everything as it stands, for a new
 // baseline or a changed corpus; its diff is the reviewer's to approve.
@@ -35,25 +42,41 @@ if (mermaid.length !== corpus.length || kit.length !== corpus.length) {
 const hash = s => createHash('sha256').update(s).digest('hex').slice(0, 16);
 const key = o => JSON.stringify(o, Object.keys(o).sort());
 
+/** What a reader sees differently, sorted by how bad it is (see above). */
 function differences(m, k) {
-  const out = [];
+  const out = { missing: [], wrong: [], extra: [] };
   if (!k.ok) k = { direction: null, vertices: [], edges: [] };
-  if (m.direction !== k.direction) out.push(`direction ${m.direction} vs ${k.direction}`);
+  if (k.direction === null) out.missing.push(`direction ${m.direction}`);
+  else if (m.direction !== k.direction) out.wrong.push(`direction ${m.direction} vs ${k.direction}`);
   const mv = new Map(m.vertices.map(v => [v.id, v])), kv = new Map(k.vertices.map(v => [v.id, v]));
   for (const [id, v] of mv) {
     const w = kv.get(id);
-    if (!w) { out.push(`missing node ${JSON.stringify(id)}`); continue; }
-    if (v.label !== w.label) out.push(`node ${id} label ${JSON.stringify(v.label)} vs ${JSON.stringify(w.label)}`);
-    if (v.shape !== w.shape) out.push(`node ${id} shape ${v.shape} vs ${w.shape}`);
+    if (!w) { out.missing.push(`node ${JSON.stringify(id)}`); continue; }
+    if (v.label !== w.label) out.wrong.push(`node ${id} label ${JSON.stringify(v.label)} vs ${JSON.stringify(w.label)}`);
+    if (v.shape !== w.shape) out.wrong.push(`node ${id} shape ${v.shape} vs ${w.shape}`);
   }
-  for (const id of kv.keys()) if (!mv.has(id)) out.push(`extra node ${JSON.stringify(id)}`);
-  const count = es => es.reduce((m, e) => (m.set(key(e), (m.get(key(e)) ?? 0) + 1), m), new Map());
-  const me = count(m.edges), ke = count(k.edges);
-  // One difference per missing or extra copy, so parallel edges count each.
-  for (const [e, n] of me) for (let c = ke.get(e) ?? 0; c < n; c++) out.push(`missing edge ${e}`);
-  for (const [e, n] of ke) for (let c = me.get(e) ?? 0; c < n; c++) out.push(`extra edge ${e}`);
+  for (const id of kv.keys()) if (!mv.has(id)) out.extra.push(`node ${JSON.stringify(id)}`);
+
+  // Edges: exact copies pair first; what's left pairs by endpoints (a wrong
+  // edge, one per pair), and the rest is missing or extra, copy by copy.
+  const left = [...k.edges], unmatched = [];
+  for (const e of m.edges) {
+    const i = left.findIndex(f => key(f) === key(e));
+    if (i >= 0) left.splice(i, 1); else unmatched.push(e);
+  }
+  for (const e of unmatched) {
+    const i = left.findIndex(f => f.from === e.from && f.to === e.to);
+    if (i < 0) { out.missing.push(`edge ${key(e)}`); continue; }
+    out.wrong.push(`edge ${key(e)} vs ${key(left[i])}`);
+    left.splice(i, 1);
+  }
+  for (const f of left) out.extra.push(`edge ${key(f)}`);
   return out;
 }
+const counts = d => ({ missing: d.missing.length, wrong: d.wrong.length, extra: d.extra.length });
+const total = d => d.missing.length + d.wrong.length + d.extra.length;
+const describe = d => [...d.missing.map(x => `missing ${x}`), ...d.wrong.map(x => `wrong ${x}`),
+                       ...d.extra.map(x => `extra ${x}`)];
 
 // The corpus opens with sentinels.json: charts both parsers must read, and
 // alike. If one doesn't, the harness is broken (mermaid failing to load
@@ -61,9 +84,9 @@ function differences(m, k) {
 const sentinels = JSON.parse(readFileSync(new URL('./sentinels.json', import.meta.url), 'utf8'));
 sentinels.forEach((src, i) => {
   const m = mermaid[i], k = kit[i];
-  if (corpus[i] !== src || !m.ok || !k.ok || differences(m, k).length) {
+  if (corpus[i] !== src || !m.ok || !k.ok || total(differences(m, k))) {
     console.error(`sentinel #${i} failed — the oracle harness is broken, not the parser:\n  ` +
-                  `mermaid ok=${m?.ok}, MermaidKit ok=${k?.ok}` + (m?.ok && k?.ok ? `: ${differences(m, k).join('; ')}` : ''));
+                  `mermaid ok=${m?.ok}, MermaidKit ok=${k?.ok}` + (m?.ok && k?.ok ? `: ${describe(differences(m, k)).join('; ')}` : ''));
     process.exit(2);
   }
 });
@@ -75,27 +98,28 @@ corpus.forEach((src, i) => {
   if (!m.ok && !k.ok) kind = 'agree';
   else if (!m.ok) kind = 'lenient';
   else if (!k.ok) kind = 'rejects';
-  else kind = differences(m, k).length ? 'differs' : 'agree';
+  else kind = total(differences(m, k)) ? 'differs' : 'agree';
   tally[kind]++;
   if (kind === 'rejects' || kind === 'differs') {
-    const detail = differences(m, k);
-    divergent[hash(src)] = { index: i, kind, cost: detail.length, detail, source: src };
+    const diff = differences(m, k);
+    divergent[hash(src)] = { index: i, kind, ...counts(diff), detail: describe(diff), source: src };
   }
 });
 
 console.log(`mermaid oracle: ${corpus.length} charts — ${tally.agree} agree, ${tally.lenient} lenient, ` +
             `${tally.rejects} rejected, ${tally.differs} differ`);
+const tallyOf = d => `${d.missing} missing, ${d.wrong} wrong, ${d.extra} extra`;
 const show = (tag, d) =>
-  console.log(`\n${tag}#${d.index} ${d.kind} (cost ${d.cost}): ${d.detail.join('; ')}\n  ${d.source.replace(/\n/g, '\n  ')}`);
+  console.log(`\n${tag}#${d.index} ${d.kind} (${tallyOf(d)}): ${d.detail.join('; ')}\n  ${d.source.replace(/\n/g, '\n  ')}`);
 if (!baselinePath) {
   for (const d of Object.values(divergent)) show('', d);
   process.exit(0);
 }
-// Hash → kind, corpus index and cost: the seeded corpus regenerates every
+// Hash → kind, corpus index and counts: the seeded corpus regenerates every
 // source, and --report prints the details.
 const write = entries => {
   const rows = entries.sort(([, a], [, b]) => a.index - b.index)
-    .map(([h, d]) => `  ${JSON.stringify(h)}: ${JSON.stringify({ kind: d.kind, index: d.index, cost: d.cost })}`);
+    .map(([h, d]) => `  ${JSON.stringify(h)}: ${JSON.stringify({ kind: d.kind, index: d.index, missing: d.missing, wrong: d.wrong, extra: d.extra })}`);
   writeFileSync(baselinePath, `{\n${rows.join(',\n')}\n}\n`);
   console.log(`baseline written: ${entries.length} known divergences`);
 };
@@ -104,17 +128,15 @@ if (accept) { write(Object.entries(divergent)); process.exit(0); }
 const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
 const inCorpus = new Set(corpus.map(hash));
 const fresh = Object.entries(divergent).filter(([h]) => !baseline[h]);
-// Worse is (kind, cost) in order: drawing nothing is worse than any wrong
-// drawing, so differs → rejects is worse whatever the costs; within a kind,
-// a higher cost is.
-const rank = d => [d.kind === 'rejects' ? 1 : 0, d.cost];
-const order = (a, b) => { const [x, y] = [rank(a), rank(b)]; return x[0] - y[0] || x[1] - y[1]; };
+// (kind, missing, wrong, extra) in order; see the top of this file.
+const rank = d => [d.kind === 'rejects' ? 1 : 0, d.missing, d.wrong, d.extra];
+const order = (a, b) => { const [x, y] = [rank(a), rank(b)]; return x.reduce((r, v, i) => r || v - y[i], 0); };
 const worse = Object.entries(divergent).filter(([h, d]) => baseline[h] && order(d, baseline[h]) > 0);
 const better = Object.entries(divergent).filter(([h, d]) => baseline[h] && order(d, baseline[h]) < 0);
 const fixed = Object.keys(baseline).filter(h => inCorpus.has(h) && !divergent[h]);
 const gone = Object.keys(baseline).filter(h => !inCorpus.has(h));
 for (const [, d] of fresh) show('NEW ', d);
-for (const [h, d] of worse) show(`WORSE (was ${baseline[h].kind}, cost ${baseline[h].cost}) `, d);
+for (const [h, d] of worse) show(`WORSE (was ${baseline[h].kind}, ${tallyOf(baseline[h])}) `, d);
 // A known chart leaving the corpus is lost coverage, not a fix.
 for (const h of gone) console.log(`\nGONE ${h} (${baseline[h].kind} #${baseline[h].index}): no longer in the corpus`);
 const failed = fresh.length + worse.length + gone.length > 0;

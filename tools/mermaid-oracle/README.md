@@ -35,16 +35,23 @@ ends the run.
 - **differs:** both draw, but something a reader would see differs. A divergence.
 
 **The baseline** (`known-divergences.json`) records each of today's
-divergences by the hash of the chart, with its **cost**: how many things a
-reader sees differently (a missing node, a wrong label, each missing or extra
-edge, parallel copies counted one by one, the direction). A rejected chart
-costs everything mermaid drew plus its direction. Drawing nothing is worse
-than any wrong drawing: a chart that turns from a wrong drawing into a
-rejection is worse whatever the costs, and turning a reject into a drawing is
-progress.
+divergences by the hash of the chart, with what a reader sees differently,
+counted by how bad it is:
+
+- **missing:** mermaid draws it and MermaidKit has nothing there (a node, an
+  edge between those endpoints, each parallel copy, the direction);
+- **wrong:** it's there, but a property differs (a label, a shape, an edge's
+  label, stroke, head, arrows or length, the direction);
+- **extra:** MermaidKit draws something mermaid doesn't.
+
+Divergences order by (kind, missing, wrong, extra). Drawing nothing is worse
+than any drawing; then losing what mermaid draws is worst, then drawing it
+wrong, then drawing extra. So no deletion can pass as progress: dropping
+anything mermaid draws raises *missing*, whatever else it fixes, while
+removing junk, or turning a rejection into a drawing, is progress.
 
 CI fails when a chart diverges that the baseline doesn't list, or when a
-listed chart costs more than recorded, or a listed chart has left the corpus
+listed chart orders after its record, or a listed chart has left the corpus
 (lost coverage isn't a fix). So a parser change can't quietly break a chart
 that read right, or make a wrong one wronger. After a fix, `--update` removes
 the charts that now agree and lowers the costs that dropped; it refuses to
