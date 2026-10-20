@@ -81,13 +81,15 @@ extension DiagramLayoutEngine {
         let vGap: CGFloat = grown(62, fontSize: labelFontSize, measure)
         let maxCols = 6
 
-        // Greedy word-wrap to `textWidth`, uncapped. Invariant: the lines,
-        // joined by single spaces, are exactly the text's words in order — none
-        // is dropped — and every line fits `textWidth` unless it is a single
-        // word wider than the box. Boxes are a uniform width but each grows to
-        // its own line count (rows top-align on their tallest box), so a long
-        // label costs height, never words (#70).
-        func wrap(_ text: String, fontSize: Double) -> [String] {
+        // Greedy word-wrap to `textWidth`. Invariant: the lines, joined by
+        // single spaces, are exactly the text's words in order — none is
+        // dropped — and every line fits `textWidth` unless it is a single word
+        // wider than the box. Boxes are a uniform width but each grows to its
+        // own line count (rows top-align on their tallest box), so a long label
+        // costs height, not words (#70). Past `maxLines` (generous: no real
+        // label reaches it, but one can't grow a box past the 3999pt canvas)
+        // the last kept line ends in "…", so a cut is marked, never silent.
+        func wrap(_ text: String, fontSize: Double, maxLines: Int) -> [String] {
             let words = text.split(separator: " ").map(String.init)
             var lines: [String] = []
             var current = ""
@@ -101,7 +103,12 @@ extension DiagramLayoutEngine {
                 }
             }
             if !current.isEmpty { lines.append(current) }
-            return lines
+            guard lines.count > maxLines else { return lines }
+            var last = lines[maxLines - 1].split(separator: " ").map(String.init)
+            while last.count > 1, measure(last.joined(separator: " ") + "…", fontSize).width > textWidth {
+                last.removeLast()
+            }
+            return lines.prefix(maxLines - 1) + [last.joined(separator: " ") + "…"]
         }
 
         func stereotype(_ e: C4Diagram.Element) -> String {
@@ -136,11 +143,11 @@ extension DiagramLayoutEngine {
         }
 
         let contents: [Content] = diagram.elements.map { e in
-            let titleLines = wrap(e.label, fontSize: nodeFontSize)
+            let titleLines = wrap(e.label, fontSize: nodeFontSize, maxLines: 4)
             var details: [String] = []
             if let tech = e.technology, !tech.isEmpty { details.append("[\(tech)]") }
             if let d = e.descr, !d.isEmpty {
-                details += wrap(d, fontSize: labelFontSize)
+                details += wrap(d, fontSize: labelFontSize, maxLines: 12)
             }
             let titleCount = max(titleLines.count, 1)
             let height = pad + stereoH + titleGap + CGFloat(titleCount) * titleLineH

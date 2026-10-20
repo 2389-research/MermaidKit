@@ -784,6 +784,30 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(v.frame.height, needed)
     }
 
+    /// A label too long for any box is cut at a generous line cap with "…",
+    /// never silently: the kept lines are the text's first words, in order,
+    /// and the box stays within the canvas instead of being clipped by it.
+    func testC4OverlongDescriptionIsCutVisibly() throws {
+        let words = (1...600).map { "word\($0)" }
+        guard case .c4(let c)? = MermaidParser.parse("""
+        C4Container
+            Container(v, "\(words.prefix(60).joined(separator: " "))", "", "\(words.joined(separator: " "))")
+        """) else { return XCTFail() }
+        let measure: DiagramTextMeasurer = { t, size in
+            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        let box = try XCTUnwrap(layout.boxes.first)
+        XCTAssertEqual(box.detailLines.count, 12)
+        XCTAssertEqual(box.titleLines.count, 4)
+        for lines in [box.titleLines, box.detailLines] {
+            XCTAssertTrue(lines.last?.hasSuffix("…") == true, "a cut is marked")
+            let kept = lines.joined(separator: " ").dropLast().split(separator: " ").map(String.init)
+            XCTAssertEqual(kept, Array(words.prefix(kept.count)), "the kept words are the first ones, in order")
+        }
+        XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "the box fits the canvas")
+    }
+
     // MARK: gitGraph
 
     func testCherryPickAppearsOnTheTimeline() throws {
