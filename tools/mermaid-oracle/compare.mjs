@@ -75,6 +75,20 @@ function differences(m, k) {
     left.splice(i, 1);
   }
   for (const f of left) out.extra.push(`edge ${key(f)}`);
+
+  // Subgraphs, by (normalized) id: a missing box is missing; a wrong title or
+  // direction, or each member in the wrong box, is wrong; a box mermaid
+  // doesn't draw is extra.
+  const ms = new Map((m.subgraphs ?? []).map(s => [s.id, s])), ks = new Map((k.subgraphs ?? []).map(s => [s.id, s]));
+  for (const [id, s] of ms) {
+    const t = ks.get(id);
+    if (!t) { out.missing.push(`subgraph ${JSON.stringify(id)}`); continue; }
+    if (s.title !== t.title) out.wrong.push(`subgraph ${id} title ${JSON.stringify(s.title)} vs ${JSON.stringify(t.title)}`);
+    if (s.direction !== t.direction) out.wrong.push(`subgraph ${id} direction ${s.direction} vs ${t.direction}`);
+    for (const n of s.members) if (!t.members.includes(n)) out.wrong.push(`subgraph ${id} lacks ${JSON.stringify(n)}`);
+    for (const n of t.members) if (!s.members.includes(n)) out.wrong.push(`subgraph ${id} wrongly holds ${JSON.stringify(n)}`);
+  }
+  for (const id of ks.keys()) if (!ms.has(id)) out.extra.push(`subgraph ${JSON.stringify(id)}`);
   return out;
 }
 const counts = d => ({ missing: d.missing.length, wrong: d.wrong.length, extra: d.extra.length });

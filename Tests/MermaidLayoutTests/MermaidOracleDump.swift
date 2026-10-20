@@ -41,6 +41,23 @@ final class MermaidOracleDump: XCTestCase {
             return ["from": e.from, "to": e.to, "label": visible(e.label ?? ""), "stroke": stroke,
                     "head": arrows == "none" ? "arrow" : "\(e.head)", "arrows": arrows, "length": e.length]
         }
-        return ["ok": true, "direction": direction, "vertices": vertices, "edges": edges]
+        // Subgraphs as normalize.mjs's `anonymized` leaves them: synthesized ids
+        // (`§sub0`) as `§anon<k>`, k by content (title, then named members),
+        // members sorted, sorted by id.
+        let synthesizedIDs = Set(chart.subgraphs.map(\.id).filter { $0.hasPrefix("\u{a7}sub") })
+        func key(_ s: Flowchart.Subgraph) -> String {
+            visible(s.label) + "\u{0}" + (s.nodeIDs + s.childIDs).filter { !synthesizedIDs.contains($0) }.sorted().joined(separator: ",")
+        }
+        let synthesized = chart.subgraphs.filter { synthesizedIDs.contains($0.id) }
+            .sorted { key($0).unicodeScalars.lexicographicallyPrecedes(key($1).unicodeScalars) }.map(\.id)
+        func name(_ id: String) -> String {
+            synthesized.firstIndex(of: id).map { "\u{a7}anon\($0)" } ?? id
+        }
+        let subgraphs: [[String: Any]] = chart.subgraphs.map { s in
+            let direction: Any = s.direction.map { $0.rawValue == "TD" ? "TB" : $0.rawValue } ?? NSNull()
+            return ["id": name(s.id), "title": visible(s.label), "members": (s.nodeIDs + s.childIDs).map(name).sorted(),
+                    "direction": direction]
+        }.sorted { ($0["id"] as! String) < ($1["id"] as! String) }
+        return ["ok": true, "direction": direction, "vertices": vertices, "edges": edges, "subgraphs": subgraphs]
     }
 }
