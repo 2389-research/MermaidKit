@@ -83,6 +83,6 @@ extension RenderScene {
                 fontSize: 9.5, weight: .medium, color: theme.secondaryText, rotation: -.pi / 2)))
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 }

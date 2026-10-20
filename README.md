@@ -236,11 +236,10 @@ mermaid.js, and the failure mode is deliberate:
   something you wrote, that's a gap: please
   [open an issue](#reporting-a-diagram-that-renders-wrong) with the source.
 
-Not supported anywhere: HTML in labels other than `<br/>` line breaks (the
-CoreGraphics/Silica raster backends honor `<br/>` in every label; the
-SVG/`SceneWire` path honors it in sequence messages and notes only; flowchart
-labels drop inline formatting tags like `<b>` and `<code>` for their text,
-other types render tags as text),
+Not supported anywhere: HTML in labels other than `<br/>` line breaks (every
+backend, raster and SVG/`SceneWire` alike, breaks the line at `<br/>` in every
+label; flowchart labels drop inline formatting tags like `<b>` and `<code>`
+for their text, other types render tags as text),
 FontAwesome icons, click callbacks, animations, and mermaid.js theming
 directives (theming is `DiagramTheme`'s job).
 

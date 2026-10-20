@@ -52,7 +52,7 @@ extension RenderScene {
                                       weight: .regular, color: theme.secondaryText, theme: theme))
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Text on an opaque-ish canvas chip — the platform-free twin of

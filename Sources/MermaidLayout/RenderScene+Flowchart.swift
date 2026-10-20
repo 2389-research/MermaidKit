@@ -209,7 +209,7 @@ extension RenderScene {
                 fontSize: 12, weight: .medium, color: theme.ink)))
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Adds a circle (`--o`) or cross (`--x`) mark for a line ending at `tip`

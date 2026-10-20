@@ -85,7 +85,7 @@ extension RenderScene {
             }
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Crow's-foot cardinality drawn along the edge at `end`, oriented away from

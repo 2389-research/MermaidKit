@@ -74,6 +74,6 @@ extension RenderScene {
                 fontSize: 10.5, color: theme.secondaryText, backing: theme.canvas)))
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 }
