@@ -66,8 +66,10 @@ extension DiagramLayoutEngine {
     public static func layout(_ diagram: C4Diagram, measure: DiagramTextMeasurer) -> C4Layout {
         // Long labels cost height (#70). The canvas caps at 3999pt, so if the
         // whole chart wouldn't fit at the generous line caps, lay it out again
-        // at tighter ones, down to 2 title / 3 description lines — every cut
-        // still ends in "…" — rather than let the canvas clip whole rows.
+        // at tighter ones, down to 2 title / 3 detail lines — every cut still
+        // ends in "…" — rather than let the canvas clip whole rows. The last
+        // caps are the ones the layout always had (technology included), so
+        // the result is never taller than it was before #70.
         let caps: [(title: Int, detail: Int)] = [(4, 12), (3, 6), (2, 3)]
         for cap in caps {
             let (layout, height) = layout(diagram, measure: measure, titleCap: cap.title, detailCap: cap.detail)
@@ -164,7 +166,8 @@ extension DiagramLayoutEngine {
             var details: [String] = []
             if let tech = e.technology, !tech.isEmpty { details.append("[\(tech)]") }
             if let d = e.descr, !d.isEmpty {
-                details += wrap(d, fontSize: labelFontSize, maxLines: detailCap)
+                // The technology line counts toward the cap, as it always has.
+                details += wrap(d, fontSize: labelFontSize, maxLines: max(1, detailCap - details.count))
             }
             let titleCount = max(titleLines.count, 1)
             let height = pad + stereoH + titleGap + CGFloat(titleCount) * titleLineH

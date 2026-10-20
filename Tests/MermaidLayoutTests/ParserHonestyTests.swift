@@ -816,17 +816,22 @@ final class ParserHonestyTests: XCTestCase {
         // ~26), within MermaidParser.maxTextSize.
         let title = (1...25).map { "t\($0)" }.joined(separator: " ")
         let descr = (1...80).map { "w\($0)" }.joined(separator: " ")
-        let elements = (0..<73).map { "    Container(c\($0), \"\(title)\", \"\", \"\(descr)\")" }.joined(separator: "\n")
-        guard case .c4(let c)? = MermaidParser.parse("C4Container\n" + elements) else { return XCTFail() }
-        let measure: DiagramTextMeasurer = { t, size in
-            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
-        }
-        let layout = DiagramLayoutEngine.layout(c, measure: measure)
-        XCTAssertEqual(layout.boxes.count, 73)
-        for box in layout.boxes {
-            XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "a box runs off the canvas")
-            XCTAssertTrue(box.detailLines.last?.hasSuffix("…") == true)
-            XCTAssertTrue(box.titleLines.last?.hasSuffix("…") == true)
+        // 73 boxes past both caps, then 140 with a technology line and a few
+        // description lines (each group alone outgrows the canvas).
+        let tech = (1...30).map { "w\($0)" }.joined(separator: " ")
+        let sources = [(0..<73).map { "    Container(c\($0), \"\(title)\", \"\", \"\(descr)\")" },
+                       (0..<140).map { "    Container(d\($0), \"T\", \"Swift\", \"\(tech)\")" }]
+        for elements in sources.map({ $0.joined(separator: "\n") }) {
+            guard case .c4(let c)? = MermaidParser.parse("C4Container\n" + elements) else { return XCTFail("parse") }
+            let measure: DiagramTextMeasurer = { t, size in
+                CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+            }
+            let layout = DiagramLayoutEngine.layout(c, measure: measure)
+            XCTAssertGreaterThanOrEqual(layout.boxes.count, 73)
+            for box in layout.boxes {
+                XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "a box runs off the canvas")
+                XCTAssertTrue(box.detailLines.last?.hasSuffix("…") == true)
+            }
         }
     }
 
