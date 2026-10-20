@@ -63,7 +63,7 @@ extension RenderScene {
             }
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Satisfaction badge color: 1 red, 2 orange, 3 amber, 4 lime, 5 green —

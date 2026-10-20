@@ -62,7 +62,7 @@ extension RenderScene {
             }
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Opaque white — the root label color (`PlatformColor.white` in the CG draw).

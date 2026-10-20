@@ -26,5 +26,5 @@ for (const source of sources) {
   // Outside the try: a throw here is this harness failing, and it ends the
   // run instead of passing as a rejection. (compare.mjs's sentinels catch a
   // mermaid that can't run at all.)
-  console.log(JSON.stringify(normalizeMermaid(diagram.db, dom.window.document)));
+  console.log(JSON.stringify(normalizeMermaid(diagram.db, dom.window.document, source)));
 }

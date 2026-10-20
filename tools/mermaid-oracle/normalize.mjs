@@ -1,6 +1,7 @@
 // The comparison schema both sides are reduced to — what a reader sees:
 //   { ok, direction, vertices: [{id, label, shape}], edges: [{from, to, label,
-//     stroke, head, arrows, length}] }
+//     stroke, head, arrows, length}], subgraphs: [{id, title, members,
+//     direction}] }
 // label: visible text (entities decoded, HTML rendered, <br> as "\n",
 // whitespace collapsed). shape: MermaidKit's NodeShape names, with shapes
 // MermaidKit has no case for reported as "rectangle" (its documented
@@ -63,11 +64,50 @@ function edgeOf(e, document) {
   };
 }
 
-export function normalizeMermaid(db, document) {
+export function normalizeMermaid(db, document, source = '') {
   const raw = db.getVertices();
   const vertices = [...(raw instanceof Map ? raw.values() : Object.values(raw))].map(v => ({
     id: v.id, label: visibleText(v.text ?? v.id, document), shape: shapeOf(v.type ?? 'default'),
   }));
+  const subgraphs = anonymized((db.getSubGraphs?.() ?? []).map(s => ({
+    id: s.id, title: visibleText(s.title ?? '', document), members: [...s.nodes],
+    direction: s.dir ? (s.dir === 'TD' ? 'TB' : s.dir) : null,
+  })), id => /^subGraph\d+$/.test(id) && !declares(source, id));
   return { ok: true, direction: db.getDirection?.() ?? 'TB', vertices,
-           edges: db.getEdges().map(e => edgeOf(e, document)) };
+           edges: db.getEdges().map(e => edgeOf(e, document)), subgraphs };
+}
+
+/**
+ * Whether `source` names `id` in a `subgraph` statement itself (so it's not
+ * synthesized). Text that can't be a statement — comments, quoted strings,
+ * and label contents in brackets or pipes — is blanked first, so a label
+ * mentioning `subgraph subGraph0` doesn't count.
+ */
+function declares(source, id) {
+  const code = source
+    .replace(/%%[^\n]*/g, '')
+    .replace(/"[^"\n]*"/g, '""')
+    .replace(/\|[^|\n]*\|/g, '||')
+    .replace(/\[[^\]\n]*\]|\([^)\n]*\)|\{[^}\n]*\}/g, '[]');
+  return code.split(/[\n;]/).some(statement =>
+    new RegExp(`^\\s*subgraph\\s+${id}(?![\\w-])`).test(statement));
+}
+
+/**
+ * Subgraphs in a form both sides share: a title-only subgraph's synthesized
+ * id (mermaid's `subGraph0`, MermaidKit's `§sub0`) becomes `§anon<k>`, in
+ * members too; members (direct nodes and child subgraphs) are sorted, since
+ * only who belongs where is visible. The two sides number synthesized ids in
+ * different orders (mermaid as a block closes, inner first; MermaidKit as it
+ * opens), so `k` comes from content: the title, then the named members.
+ * MermaidOracleDump.swift does the same.
+ */
+export function anonymized(subgraphs, isSynthesized) {
+  const ids = new Set(subgraphs.map(s => s.id).filter(isSynthesized));
+  const key = s => `${s.title}\u0000${s.members.filter(m => !ids.has(m)).sort().join(',')}`;
+  const synth = subgraphs.filter(s => ids.has(s.id)).sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
+    .map(s => s.id);
+  const name = id => ids.has(id) ? `§anon${synth.indexOf(id)}` : id;
+  return subgraphs.map(s => ({ ...s, id: name(s.id), members: s.members.map(name).sort() }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
