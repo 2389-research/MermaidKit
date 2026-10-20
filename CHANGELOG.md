@@ -7,7 +7,8 @@
   label at `<br/>`, `<br>`, a literal `\n` or a newline in every diagram type,
   on the same line centers the raster image draws, instead of showing the tag
   as text in flowchart, class, state and other labels. Each line is its own
-  text element, so the wire format and the platform renderers are unchanged.
+  text element, and a chipped label (an edge label) gets one chip behind the
+  whole block, so the wire format and the platform renderers are unchanged.
   Raster output is byte-identical. (#71)
 
 ## 2.7.0 — Diagrams in your app's font

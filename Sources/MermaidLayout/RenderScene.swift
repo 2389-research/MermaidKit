@@ -166,10 +166,35 @@ public struct RenderScene: Sendable, Codable {
     /// a `<br/>` to SVG or the wire as literal text.
     init(size: CGSize, background: DiagramColor, elements: [Element],
          measure: DiagramTextMeasurer) {
-        self.init(size: size, background: background, elements: elements.flatMap { element in
-            guard case .text(let text) = element else { return [element] }
-            return Self.lines(of: text, measure: measure).map(Element.text)
-        })
+        var out: [Element] = []
+        out.reserveCapacity(elements.count)
+        for element in elements {
+            guard case .text(let text) = element else { out.append(element); continue }
+            let lines = Self.lines(of: text, measure: measure)
+            guard lines.count > 1, let backing = text.backing else { out += lines.map(Element.text); continue }
+            // The raster draws ONE chip behind the whole block (the label's
+            // measured size plus a 3pt pad), then the lines; a chip per line
+            // would paint over the line above's descenders.
+            let sizes = lines.map { measure($0.string, Double(text.fontSize)) }
+            let width: CGFloat = sizes.map(\.width).max() ?? 0
+            let height: CGFloat = sizes.map(\.height).reduce(0, +)
+            let pad: CGFloat = 3
+            let hw = width / 2 + pad, hh = height / 2 + pad
+            let path: ShapePath
+            if text.rotation == 0 {
+                path = .roundedRect(CGRect(x: text.center.x - hw, y: text.center.y - hh,
+                                           width: hw * 2, height: hh * 2), radius: 0)
+            } else {
+                let c: CGFloat = cos(text.rotation), s: CGFloat = sin(text.rotation)
+                func corner(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                    CGPoint(x: text.center.x + x * c - y * s, y: text.center.y + x * s + y * c)
+                }
+                path = .polygon([corner(-hw, -hh), corner(hw, -hh), corner(hw, hh), corner(-hw, hh)])
+            }
+            out.append(.shape(Shape(path: path, fill: backing, stroke: nil)))
+            out += lines.map { line in var line = line; line.backing = nil; return .text(line) }
+        }
+        self.init(size: size, background: background, elements: out)
     }
 
     /// Breaks `text` into one run per visual line — the ONE line split every
@@ -180,7 +205,8 @@ public struct RenderScene: Sendable, Codable {
     /// (any `<br…>`, a literal `\n`, any real newline), stacks the lines
     /// top-to-bottom at their measured heights, and centers the block on the
     /// run's center; so does this, in the run's rotated frame. Each line keeps
-    /// the run's size, weight, color, backing and rotation. A run with no
+    /// the run's size, weight, color, backing and rotation (the measured init
+    /// then trades a multi-line run's per-line backing for one block chip). A run with no
     /// break comes back untouched; one that is only breaks draws nothing.
     /// Lines stay separate runs, so the wire format (one string per text
     /// element) and every backend that paints it are unchanged.

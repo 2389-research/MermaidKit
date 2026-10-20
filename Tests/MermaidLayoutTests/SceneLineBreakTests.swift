@@ -138,6 +138,29 @@ final class SceneLineBreakTests: XCTestCase {
     }
 
     /// Breaks alone draw nothing, as in the raster path; no empty run remains.
+    /// A chipped label (an edge label on its canvas-colored chip) that breaks
+    /// gets ONE chip behind the whole block, as the raster draws it, sized to
+    /// the block plus the 3pt pad; its lines carry no chip of their own, which
+    /// would paint over the descenders of the line above.
+    func testAChippedLabelGetsOneChipForTheBlock() throws {
+        let diagram = try XCTUnwrap(MermaidParser.parse("flowchart TD\n  A -->|gyp<br/>qjy| B"))
+        let scene = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure))
+        let lines = scene.elements.compactMap { e -> RenderScene.Text? in
+            if case .text(let t) = e, ["gyp", "qjy"].contains(t.string) { return t } else { return nil }
+        }
+        XCTAssertEqual(lines.map(\.string), ["gyp", "qjy"])
+        XCTAssertTrue(lines.allSatisfy { $0.backing == nil }, "lines carry no chip of their own")
+        let first = try XCTUnwrap(scene.elements.firstIndex { if case .text(let t) = $0 { t.string == "gyp" } else { false } })
+        guard case .shape(let chip) = scene.elements[first - 1], case .roundedRect(let rect, _) = chip.path else {
+            return XCTFail("one chip shape right before the lines")
+        }
+        XCTAssertEqual(chip.fill, theme.canvas)
+        let size = lines[0].fontSize
+        XCTAssertEqual(rect.width, 3 * size * 0.6 + 6, accuracy: 0.001)
+        XCTAssertEqual(rect.height, 2 * (size + 4) + 6, accuracy: 0.001)
+        XCTAssertEqual(rect.midY, (lines[0].center.y + lines[1].center.y) / 2, accuracy: 0.001)
+    }
+
     func testBreaksOnlyDrawNothing() throws {
         let all = try texts("flowchart TD\n    A --> B\n    A -->|<br/>| B")
         XCTAssertFalse(all.contains { $0.string.isEmpty || $0.string.contains("<br") })
