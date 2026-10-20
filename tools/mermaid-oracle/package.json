@@ -1,0 +1,10 @@
+{
+  "name": "mermaidkit-mermaid-oracle",
+  "private": true,
+  "description": "Differential test: MermaidKit's flowchart parser against mermaid.js's own, on a fixed + generated corpus.",
+  "type": "module",
+  "dependencies": {
+    "jsdom": "26.1.0",
+    "mermaid": "12.2.0"
+  }
+}
