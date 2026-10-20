@@ -37,6 +37,13 @@ renderers. The DocC article *Adding a Diagram Type* walks through all of it.
   links Silica only on Linux, and only when the `LinuxRaster` package trait is
   enabled (default OFF, so `from:`-pinned consumers get a Silica-free graph);
   don't add other dependencies.
+- **Flowchart syntax is judged against mermaid.js.** `scripts/check-mermaid-oracle.sh`
+  parses a fixed and generated corpus with mermaid's own parser and with
+  MermaidKit, and fails on any divergence not in
+  `tools/mermaid-oracle/known-divergences.json`. A change may make that list
+  shorter (`--update`), never longer. Add a case you've found to
+  `tools/mermaid-oracle/cases.json` rather than only to a unit test. See
+  `tools/mermaid-oracle/README.md`.
 - Regenerate README images with `scripts/gen-gallery.sh` when a fix changes
   how a fixture renders.
 
