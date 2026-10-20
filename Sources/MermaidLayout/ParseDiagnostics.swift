@@ -6,9 +6,10 @@ public struct ParseDiagnostic: Hashable, Sendable {
     public enum Severity: String, Hashable, Sendable {
         /// The source cannot produce a diagram.
         case error
-        /// The source parses, but something the author wrote was set aside.
-        /// Reserved: `diagnose` currently reports only errors, and returns `[]`
-        /// for a source that parses.
+        /// The source parses, but something the author wrote was set aside: a
+        /// flowchart statement the parser couldn't read (left out of the
+        /// diagram), a stray `end`, an unknown direction. Styling ignored on
+        /// purpose (`classDef`, `style`, `click`…) isn't reported.
         case note
     }
 
@@ -38,9 +39,10 @@ extension MermaidParser {
         "block-beta",
     ]
 
-    /// Explains a source that `parse` rejects (and returns `[]` for one it
-    /// accepts). Deliberately cheap — safe to call on every failed parse to
-    /// build an error UI or a log line:
+    /// Explains a source that `parse` rejects, or, for a flowchart it accepts,
+    /// notes what it left out (`.note`s; other types return `[]` once they
+    /// parse). Deliberately cheap — safe to call on every parse to build an
+    /// error UI, a log line, or a host's "show the source instead" check:
     ///
     /// ```swift
     /// guard let diagram = MermaidParser.parse(source) else {
@@ -68,15 +70,16 @@ extension MermaidParser {
         let headerLine = headerIndex + 1
         let headerWord = String(header.split(separator: " ").first ?? "")
 
-        if parse(source) != nil { return [] }
+        if parse(source) != nil { return setAsideNotes(source) }
 
         // The header was recognized but the parse still failed: either the
         // flowchart edge cap, or a body the type parser couldn't use.
         if knownHeaders.contains(where: { header.hasPrefix(commonPrefixKey($0)) }) {
             if header.hasPrefix("graph") || header.hasPrefix("flowchart") {
                 // Distinguish the edge cap from an empty/broken body.
-                let lines = rawLines.filter { !$0.isEmpty && !$0.hasPrefix("%%") }
-                if let chart = parseFlowchart(header: header, body: Array(lines.dropFirst())),
+                let statements = rawLines.filter { !$0.isEmpty && !$0.hasPrefix("%%") }.flatMap(flowchartStatements)
+                if let first = statements.first,
+                   let chart = parseFlowchart(header: first, body: Array(statements.dropFirst())),
                    chart.edges.count > maxEdges {
                     return [.init(severity: .error, line: nil,
                                   message: "flowchart has \(chart.edges.count) edges; the cap is \(maxEdges) (MermaidParser.maxEdges)")]
@@ -93,6 +96,26 @@ extension MermaidParser {
         }
         return [.init(severity: .error, line: headerLine,
                       message: "unknown diagram type '\(headerWord)'")]
+    }
+
+    /// A `.note` for each statement a flowchart that parses set aside, at its
+    /// line in `source`; `[]` for every other type.
+    private static func setAsideNotes(_ source: String) -> [ParseDiagnostic] {
+        let body = strippingMetadata(from: source).lines
+            .map { (text: $0.text.trimmingCharacters(in: .whitespaces), line: $0.line) }
+            .filter { !$0.text.isEmpty && !$0.text.hasPrefix("%%") }
+        guard let header = body.first?.text, header.hasPrefix("graph") || header.hasPrefix("flowchart") else { return [] }
+
+        let statements = body.flatMap { line in
+            flowchartStatements(line.text).map { (text: $0, line: Optional(line.line)) }
+        }
+        guard let first = statements.first else { return [] }
+
+        var notes: [ParseDiagnostic] = []
+        _ = parseFlowchart(header: first.text, body: statements.dropFirst().map(\.text)) { index, reason in
+            notes.append(.init(severity: .note, line: statements[index + 1].line, message: reason))
+        }
+        return notes
     }
 
     /// The prefix `parse` actually matches for a canonical header ("pie"

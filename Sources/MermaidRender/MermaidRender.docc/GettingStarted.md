@@ -81,6 +81,10 @@ if MermaidRenderer.image(source: source, theme: theme) == nil {
 }
 ```
 
+A flowchart can render with a line left out — one the parser couldn't read.
+`diagnose` reports each as a `.note` at its line, so a host that would rather
+show the source than a diagram with parts missing can check for them.
+
 ## What parses, what doesn't
 
 30 diagram types parse their core syntax. Styling and interaction
