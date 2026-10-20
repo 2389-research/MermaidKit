@@ -151,9 +151,7 @@ extension DiagramRenderer {
     /// single-line label skips the `brLines` split. Broad on purpose: a false
     /// positive just takes the (correct) split path, so it only needs to never
     /// MISS a real break (`<br…>`, literal `\n`, or any real newline).
-    private static func hasLineBreak(_ text: String) -> Bool {
-        text.contains("<br") || text.contains("\\n") || text.contains(where: \.isNewline)
-    }
+    private static func hasLineBreak(_ text: String) -> Bool { DiagramLayoutEngine.hasLineBreak(text) }
 
     /// Draws text centered on `center` in a flipped (y-down) context.
     #if DEBUG

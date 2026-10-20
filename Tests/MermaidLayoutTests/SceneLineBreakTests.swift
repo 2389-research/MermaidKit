@@ -178,6 +178,14 @@ final class SceneLineBreakTests: XCTestCase {
         XCTAssertEqual(chip.height, measure("", Double(size)).height + 6, accuracy: 0.001)
     }
 
+    /// `<BR>` and `<Br/>` break too, in the scene as in `brLines` (the quick
+    /// test before the split was case-sensitive, so they drew literally).
+    func testAnyCaseBreakTagBreaks() throws {
+        try assertLines("flowchart TD\n  A[one<BR>two] --> B[three<Br/>four]", [["one", "two"], ["three", "four"]])
+        XCTAssertTrue(DiagramLayoutEngine.hasLineBreak("a<BR>b"))
+        XCTAssertFalse(DiagramLayoutEngine.hasLineBreak("a brb"))
+    }
+
     func testBreaksOnlyDrawNothing() throws {
         let all = try texts("flowchart TD\n    A --> B\n    A -->|<br/>| B")
         XCTAssertFalse(all.contains { $0.string.isEmpty || $0.string.contains("<br") })

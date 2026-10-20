@@ -27,7 +27,9 @@
   as text in flowchart, class, state and other labels. Each line is its own
   text element, and a chipped label (an edge label) gets one chip behind the
   whole block, so the wire format and the platform renderers are unchanged.
-  Raster output is byte-identical. (#71)
+  A break tag in any case (`<BR>`, `<Br/>`) breaks on every path now, the
+  raster image included, through one new `DiagramLayoutEngine.hasLineBreak`.
+  Raster output is otherwise byte-identical. (#71)
 
 ## 2.7.0 — Diagrams in your app's font
 

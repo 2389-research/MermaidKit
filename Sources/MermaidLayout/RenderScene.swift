@@ -214,10 +214,9 @@ public struct RenderScene: Sendable, Codable {
     /// Lines stay separate runs, so the wire format (one string per text
     /// element) and every backend that paints it are unchanged.
     static func lines(of text: Text, measure: DiagramTextMeasurer) -> [Text] {
-        // drawText's own guard, verbatim: what it leaves unsplit, so does this.
-        let s = text.string
-        guard s.contains("<br") || s.contains("\\n") || s.contains(where: \.isNewline) else { return [text] }
-        let lines = DiagramLayoutEngine.brLines(s)
+        // drawText's own test: what it leaves unsplit, so does this.
+        guard DiagramLayoutEngine.hasLineBreak(text.string) else { return [text] }
+        let lines = DiagramLayoutEngine.brLines(text.string)
         let heights = lines.map { measure($0, Double(text.fontSize)).height }
         var top = -heights.reduce(0, +) / 2
         return zip(lines, heights).map { line, height in
