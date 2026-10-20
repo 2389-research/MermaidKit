@@ -20,6 +20,12 @@ seed. They combine every construct the parser reads with the characters that
 have broken it (`; | # & < > " ( ) [ ] { } : @ % ~`), in node labels, edge
 labels and inline link text, joined by newlines or `;`.
 
+**Sentinels** (`sentinels.json`) open the corpus: charts both parsers must
+read, and read alike. If one doesn't, the run stops (exit 2) and blames the
+harness, so a mermaid that can't load can't pass as every chart "lenient".
+Only mermaid's own parse is caught as a rejection; a throw in the harness
+ends the run.
+
 **Each chart is one of:**
 
 - **agree:** both draw the same thing.

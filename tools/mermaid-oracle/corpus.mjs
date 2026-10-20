@@ -66,6 +66,7 @@ for (let i = 0; i < count; i++) {
                             : `${header}\n  ${body.join('\n  ')}`);
 }
 const cases = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
+const sentinels = JSON.parse(readFileSync(new URL('./sentinels.json', import.meta.url), 'utf8'));
 // A corpus that repeats itself tests less than its size claims (a weak PRNG
 // once cycled every ~320 charts); refuse one that does.
 const distinct = new Set(charts).size;
@@ -73,4 +74,4 @@ if (distinct < charts.length * 0.98) {
   console.error(`corpus.mjs: only ${distinct} of ${charts.length} generated charts are distinct`);
   process.exit(1);
 }
-console.log(JSON.stringify([...cases, ...charts]));
+console.log(JSON.stringify([...sentinels, ...cases, ...charts]));

@@ -52,6 +52,18 @@ function differences(m, k) {
   return out;
 }
 
+// The corpus opens with sentinels.json: charts both parsers must read, and
+// alike. If one doesn't, the harness is broken (mermaid failing to load
+// would otherwise pass as every chart "lenient"), so nothing else counts.
+const sentinels = JSON.parse(readFileSync(new URL('./sentinels.json', import.meta.url), 'utf8'));
+sentinels.forEach((src, i) => {
+  const m = mermaid[i], k = kit[i];
+  if (corpus[i] !== src || !m.ok || !k.ok || differences(m, k).length) {
+    console.error(`sentinel #${i} failed — the oracle harness is broken, not the parser:\n  ` +
+                  `mermaid ok=${m?.ok}, MermaidKit ok=${k?.ok}` + (m?.ok && k?.ok ? `: ${differences(m, k).join('; ')}` : ''));
+    process.exit(2);
+  }
+});
 const tally = { agree: 0, lenient: 0, rejects: 0, differs: 0 };
 const divergent = {};
 corpus.forEach((src, i) => {

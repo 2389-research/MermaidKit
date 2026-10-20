@@ -15,10 +15,16 @@ mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
 
 const sources = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 for (const source of sources) {
+  let diagram;
   try {
-    const diagram = await mermaid.mermaidAPI.getDiagramFromText(source);
-    console.log(JSON.stringify(normalizeMermaid(diagram.db, dom.window.document)));
-  } catch (err) {
+    diagram = await mermaid.mermaidAPI.getDiagramFromText(source);
+  } catch {
+    // Mermaid's verdict: its grammar, or its own model, rejects the chart.
     console.log(JSON.stringify({ ok: false }));
+    continue;
   }
+  // Outside the try: a throw here is this harness failing, and it ends the
+  // run instead of passing as a rejection. (compare.mjs's sentinels catch a
+  // mermaid that can't run at all.)
+  console.log(JSON.stringify(normalizeMermaid(diagram.db, dom.window.document)));
 }
