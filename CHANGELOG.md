@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **`<br/>` breaks the line in SVG and `SceneWire` too.** `scene`/`svg` and
+  the scene JSON the C ABI hands Android, Windows and Flutter now break a
+  label at `<br/>`, `<br>`, a literal `\n` or a newline in every diagram type,
+  on the same line centers the raster image draws, instead of showing the tag
+  as text in flowchart, class, state and other labels. Each line is its own
+  text element, so the wire format and the platform renderers are unchanged.
+  Raster output is byte-identical. (#71)
+
 ## 2.7.0 — Diagrams in your app's font
 
 Diagram labels can now be set in the font the rest of your app uses. A new

@@ -224,7 +224,7 @@ extension RenderScene {
             }
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// The arrow ending for a sequence head style — the platform-free twin of

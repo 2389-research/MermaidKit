@@ -96,9 +96,11 @@ public struct RenderScene: Sendable, Codable {
         }
     }
 
-    /// A text run centered on `center`. `backing`, when set, is an opaque chip
-    /// color painted behind the text (edge labels sit on a canvas-colored chip
-    /// so the routed line doesn't show through). `rotation` is a clockwise angle
+    /// A text run centered on `center` — one visual line: a lowered scene
+    /// never holds a line break in `string` (see `lines(of:measure:)`).
+    /// `backing`, when set, is an opaque chip color painted behind the text
+    /// (edge labels sit on a canvas-colored chip so the routed line doesn't
+    /// show through). `rotation` is a clockwise angle
     /// in radians about `center` (0 for the common horizontal run) — swimlane
     /// lane titles read bottom-to-top at −π/2, matching `drawTextRotated`.
     public struct Text: Sendable, Codable {
@@ -156,6 +158,49 @@ public struct RenderScene: Sendable, Codable {
         self.size = size
         self.background = background
         self.elements = elements
+    }
+
+    /// The scene a family lowering returns: `elements` with every text run
+    /// broken into its visual lines (`lines(of:measure:)`). Every
+    /// `from(_ layout:…)` builds its scene through this, so no family can ship
+    /// a `<br/>` to SVG or the wire as literal text.
+    init(size: CGSize, background: DiagramColor, elements: [Element],
+         measure: DiagramTextMeasurer) {
+        self.init(size: size, background: background, elements: elements.flatMap { element in
+            guard case .text(let text) = element else { return [element] }
+            return Self.lines(of: text, measure: measure).map(Element.text)
+        })
+    }
+
+    /// Breaks `text` into one run per visual line — the ONE line split every
+    /// family's text goes through on its way into a scene.
+    ///
+    /// Invariant: the raster path is the reference, and this reproduces it.
+    /// `DiagramRenderer.drawText` splits on `DiagramLayoutEngine.brLines`
+    /// (any `<br…>`, a literal `\n`, any real newline), stacks the lines
+    /// top-to-bottom at their measured heights, and centers the block on the
+    /// run's center; so does this, in the run's rotated frame. Each line keeps
+    /// the run's size, weight, color, backing and rotation. A run with no
+    /// break comes back untouched; one that is only breaks draws nothing.
+    /// Lines stay separate runs, so the wire format (one string per text
+    /// element) and every backend that paints it are unchanged.
+    static func lines(of text: Text, measure: DiagramTextMeasurer) -> [Text] {
+        // drawText's own guard, verbatim: what it leaves unsplit, so does this.
+        let s = text.string
+        guard s.contains("<br") || s.contains("\\n") || s.contains(where: \.isNewline) else { return [text] }
+        let lines = DiagramLayoutEngine.brLines(s)
+        let heights = lines.map { measure($0, Double(text.fontSize)).height }
+        var top = -heights.reduce(0, +) / 2
+        return zip(lines, heights).map { line, height in
+            // Offset along the run's own vertical axis, turned by its rotation.
+            let dy = top + height / 2
+            top += height
+            var run = text
+            run.string = line
+            run.center = CGPoint(x: text.center.x - dy * sin(text.rotation),
+                                 y: text.center.y + dy * cos(text.rotation))
+            return run
+        }
     }
 }
 

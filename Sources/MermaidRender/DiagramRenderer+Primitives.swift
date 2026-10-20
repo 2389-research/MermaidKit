@@ -165,6 +165,11 @@ extension DiagramRenderer {
     /// Suspends capture inside rotated CTMs, where the argument-space rect
     /// would be meaningless.
     nonisolated(unsafe) static var textCaptureSuspended = false
+    /// Test-only: receives every visual LINE drawText paints and the center it
+    /// paints it on, in layout coordinates — what the scene's per-line text
+    /// runs must reproduce (`DrawSceneConformanceTests`). Suspended with
+    /// `textCaptureHook`.
+    nonisolated(unsafe) static var lineCaptureHook: ((String, CGPoint) -> Void)?
     #endif
 
     /// Draws `text` at `size` × ``textScale``, centered on `center`, honoring
@@ -209,10 +214,13 @@ extension DiagramRenderer {
         }
     }
 
-    /// Draws a single visual line centered on `center` (no line-break handling,
-    /// no capture hook).
+    /// Draws a single visual line centered on `center` (no line-break handling;
+    /// only the per-line capture hook).
     private static func drawLine(_ text: String, center: CGPoint, size: CGFloat,
                                  weight: PlatformFont.Weight, color: PlatformColor, in context: CGContext) {
+        #if DEBUG
+        if let hook = lineCaptureHook, !textCaptureSuspended { hook(text, center) }
+        #endif
         #if canImport(AppKit) || canImport(UIKit)
         let attributed = NSAttributedString(string: text, attributes: [
             kCTFontAttributeName as NSAttributedString.Key: font(size, weight: weight),

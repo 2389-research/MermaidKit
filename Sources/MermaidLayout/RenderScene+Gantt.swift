@@ -76,7 +76,7 @@ extension RenderScene {
             }
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Bar fill by task status: active is the full accent, normal a lighter

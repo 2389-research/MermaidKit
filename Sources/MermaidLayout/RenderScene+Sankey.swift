@@ -60,7 +60,7 @@ extension RenderScene {
                 fontSize: 11, color: theme.ink, backing: theme.canvas)))
         }
 
-        return RenderScene(size: layout.size, background: theme.canvas, elements: elements)
+        return RenderScene(size: layout.size, background: theme.canvas, elements: elements, measure: measure)
     }
 
     /// Splits a cubic Bézier (`p0`→`p3`, controls `c1`,`c2`) at its midpoint
