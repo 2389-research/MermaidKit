@@ -171,11 +171,14 @@ public struct RenderScene: Sendable, Codable {
         for element in elements {
             guard case .text(let text) = element else { out.append(element); continue }
             let lines = Self.lines(of: text, measure: measure)
-            guard lines.count > 1, let backing = text.backing else { out += lines.map(Element.text); continue }
+            guard lines.count != 1, let backing = text.backing else { out += lines.map(Element.text); continue }
             // The raster draws ONE chip behind the whole block (the label's
             // measured size plus a 3pt pad), then the lines; a chip per line
-            // would paint over the line above's descenders.
-            let sizes = lines.map { measure($0.string, Double(text.fontSize)) }
+            // would paint over the line above's descenders. A label that is
+            // only breaks measures as one empty line there, and still masks
+            // the edge under it.
+            let sizes = lines.isEmpty ? [measure("", Double(text.fontSize))]
+                : lines.map { measure($0.string, Double(text.fontSize)) }
             let width: CGFloat = sizes.map(\.width).max() ?? 0
             let height: CGFloat = sizes.map(\.height).reduce(0, +)
             let pad: CGFloat = 3

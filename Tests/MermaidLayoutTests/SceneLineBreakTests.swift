@@ -161,6 +161,23 @@ final class SceneLineBreakTests: XCTestCase {
         XCTAssertEqual(rect.midY, (lines[0].center.y + lines[1].center.y) / 2, accuracy: 0.001)
     }
 
+    /// A chipped label that is only breaks draws no text, but still masks
+    /// the edge with its chip, as the raster does (one empty line's height).
+    func testABreakOnlyChippedLabelKeepsItsChip() throws {
+        let diagram = try XCTUnwrap(MermaidParser.parse("flowchart TD\n  A -->|<br/>| B"))
+        let scene = try XCTUnwrap(RenderScene.from(diagram, theme: theme, measure: measure))
+        let chips = scene.elements.compactMap { e -> CGRect? in
+            if case .shape(let s) = e, s.fill == theme.canvas, s.stroke == nil, case .roundedRect(let r, _) = s.path { return r }
+            return nil
+        }
+        // One empty line, padded: this measurer gives "" a 0.6em width and a
+        // size+4 height, so the chip's size pins its font size.
+        XCTAssertEqual(chips.count, 1, "the chip stays: \(chips)")
+        let chip = try XCTUnwrap(chips.first)
+        let size = (chip.width - 6) / 0.6
+        XCTAssertEqual(chip.height, measure("", Double(size)).height + 6, accuracy: 0.001)
+    }
+
     func testBreaksOnlyDrawNothing() throws {
         let all = try texts("flowchart TD\n    A --> B\n    A -->|<br/>| B")
         XCTAssertFalse(all.contains { $0.string.isEmpty || $0.string.contains("<br") })
