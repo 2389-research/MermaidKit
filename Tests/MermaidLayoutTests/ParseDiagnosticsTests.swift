@@ -98,4 +98,28 @@ final class ParseDiagnosticsTests: XCTestCase {
         XCTAssertEqual(MermaidParser.diagnose(source).map(\.line), [6, 7])
         XCTAssertEqual(MermaidParser.diagnose("flowchart LR\n  A --> B; %% a comment"), [])
     }
+
+    /// A line is found by its place in the source, not its text: a body line
+    /// that repeats a line of an `accDescr` block is noted where it is.
+    func testNoteLinesSurviveRepeatedText() {
+        let source = "flowchart LR\n  accDescr {\n  ???\n  }\n  ???\n  A --> B"
+        XCTAssertEqual(MermaidParser.diagnose(source).map(\.line), [5])
+    }
+
+    /// An `&` fan endpoint that isn't a node is left out, and noted.
+    func testUnreadFanEndpointsAreNoted() {
+        let notes = MermaidParser.diagnose("flowchart LR\n  A & ??? --> B")
+        XCTAssertEqual(notes.map(\.line), [2])
+        XCTAssertTrue(notes.first?.message.contains("???") == true, notes.first?.message ?? "")
+    }
+
+    /// A top-level `direction` changes nothing (the header sets the flow), as
+    /// in mermaid, and says so; an unknown one is noted as unknown.
+    func testTopLevelDirectionsAreNoted() {
+        let notes = MermaidParser.diagnose("flowchart TD\n  direction LR\n  direction QQ\n  A --> B")
+        XCTAssertEqual(notes.map(\.line), [2, 3])
+        guard notes.count == 2 else { return }
+        XCTAssertTrue(notes[0].message.contains("no effect"), notes[0].message)
+        XCTAssertTrue(notes[1].message.contains("unknown direction 'QQ'"), notes[1].message)
+    }
 }

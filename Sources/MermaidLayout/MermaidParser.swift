@@ -252,43 +252,139 @@ public enum MermaidParser {
     // MARK: Flowchart
 
     /// A flowchart's statements: its lines, each split at every `;` that ends
-    /// a statement (`graph LR; A --> B; B --> C`), as mermaid allows. A `;`
-    /// inside quotes or brackets, or ending an entity (`#quot;`, `&amp;`,
-    /// `#35;`), belongs to the text around it.
+    /// a statement (`graph LR; A --> B; B --> C`), as mermaid allows.
+    ///
+    /// A `;` ends a statement exactly where mermaid's lexer reads it as one:
+    /// not inside a string (`"…"`), a node's text (`[…]`, `(…)`, `{…}`,
+    /// `>…]`), a pipe label (`|…|`) or a link's inline text (`-- … -->`,
+    /// `== … ==>`, `-. … .->`), and not ending an entity (`#quot;`, `#35;`).
+    /// In `style`, `classDef` and `linkStyle` statements a `;` always ends
+    /// one, so `fill:#f96;` is a color, not an entity. A `%%` comment at a
+    /// statement's start runs to the end of the line, as it does on a line
+    /// of its own.
     static func flowchartStatements(_ line: String) -> [String] {
+        enum Mode {
+            case statement
+            case string(returnTo: Int)          // the shape depth to resume
+            case shape(depth: Int)              // inside […], (…), {…}, >…]
+            case pipe                           // inside |…|
+            case linkText(closer: Character)    // after `--`, `==` or `-.`
+        }
+        let chars = Array(line)
         var statements: [String] = []
         var current = ""
-        var depth = 0
-        var quoted = false
-        // Characters since an entity's `#`/`&`, while they could still be one.
-        var entity: Int?
-        for c in line {
-            if c == "\"" { quoted.toggle() }
-            if !quoted {
+        var mode = Mode.statement
+        var i = 0
+
+        /// Whether `chars[at...]` is two or more of `c` and then one of
+        /// `ends`: a whole link like `-->`, `==>` or `---`.
+        func link(at: Int, _ c: Character, ends: Set<Character>) -> Bool {
+            var j = at
+            while j < chars.count, chars[j] == c { j += 1 }
+            return j - at >= 2 && j < chars.count && ends.contains(chars[j])
+        }
+        func styling(_ text: String) -> Bool {
+            let t = text.drop(while: { $0 == " " || $0 == "\t" })
+            return ["style", "classDef", "linkStyle"].contains { startsWithKeyword(t, $0) }
+        }
+
+        while i < chars.count {
+            let c = chars[i]
+            switch mode {
+            case .string(let depth):
+                if c == "\"" { mode = depth > 0 ? .shape(depth: depth) : .statement }
+            case .shape(let depth):
                 switch c {
-                case "[", "(", "{": depth += 1
-                case "]", ")", "}": depth = max(0, depth - 1)
+                case "\"": mode = .string(returnTo: depth)
+                case "[", "(", "{": mode = .shape(depth: depth + 1)
+                case "]", ")", "}": mode = depth > 1 ? .shape(depth: depth - 1) : .statement
+                default: break
+                }
+            case .pipe:
+                if c == "|" { mode = .statement }
+            case .linkText(let closer):
+                // Ends at the link that closes it: `-->`/`---`/`--x`/`--o`,
+                // `==>`/`===`…, or `.->`/`.-`.
+                if closer == "-", c == "-", link(at: i, "-", ends: ["-", ">", "x", "o"]) {
+                    mode = .statement
+                } else if closer == "=", c == "=", link(at: i, "=", ends: ["=", ">", "x", "o"]) {
+                    mode = .statement
+                } else if closer == ".", c == "." {
+                    var j = i
+                    while j < chars.count, chars[j] == "." { j += 1 }
+                    if j < chars.count, chars[j] == "-" { mode = .statement }
+                }
+            case .statement:
+                if current.allSatisfy({ $0 == " " || $0 == "\t" }), c == "%", i + 1 < chars.count, chars[i + 1] == "%" {
+                    i = chars.count     // a comment: the rest of the line
+                    current = ""
+                    continue
+                }
+                switch c {
+                case ";":
+                    // Mermaid encodes every `#word;` as an entity before it lexes.
+                    let word = current.reversed().prefix(while: isWordCharacter).count
+                    let entity = word > 0 && current.dropLast(word).last == "#" && !styling(current)
+                    if !entity {
+                        statements.append(current)
+                        current = ""
+                        i += 1
+                        continue
+                    }
+                case "\"": mode = .string(returnTo: 0)
+                case "[", "(", "{": mode = .shape(depth: 1)
+                case ">":
+                    // `A>flag]` (asymmetric) — not a link's arrowhead.
+                    if let prev = current.last, isWordCharacter(prev) {
+                        mode = .shape(depth: 1)
+                    }
+                case "|": mode = .pipe
+                case "-", "=":
+                    let next = i + 1 < chars.count ? chars[i + 1] : " "
+                    if next == c {
+                        // `--` or `==` opens inline text unless it's already a
+                        // whole link (`-->`, `---`, `--x`, `==>`…), as in
+                        // mermaid's lexer.
+                        if !link(at: i, c, ends: [c, ">", "x", "o"]) {
+                            current += String(chars[i...i + 1])
+                            i += 2
+                            mode = .linkText(closer: c)
+                            continue
+                        }
+                        // Skip the whole link so its tail can't reopen text.
+                        while i < chars.count, chars[i] == c { current.append(chars[i]); i += 1 }
+                        continue
+                    }
+                    if c == "-", next == "." {
+                        let after = i + 2 < chars.count ? chars[i + 2] : " "
+                        if after != "." && after != "-" {
+                            current += "-."
+                            i += 2
+                            mode = .linkText(closer: ".")
+                            continue
+                        }
+                    }
                 default: break
                 }
             }
-            if c == ";", !quoted, depth == 0, entity == nil {
-                statements.append(current)
-                current = ""
-                continue
-            }
-            if c == "#" || c == "&" {
-                entity = 0
-            } else if let count = entity {
-                let continues = c.isLetter || c.isNumber || (count == 0 && c == "#")
-                entity = continues && count < 32 ? count + 1 : nil
-                if c == ";" { entity = nil }
-            }
             current.append(c)
+            i += 1
         }
         statements.append(current)
-        // A `%%` comment after a `;` is still a comment.
-        return statements.map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("%%") }
+        return statements.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// A character of mermaid's `\w`: an ASCII letter or digit, or `_`.
+    private static func isWordCharacter(_ c: Character) -> Bool {
+        c == "_" || (c.isASCII && (c.isLetter || c.isNumber))
+    }
+
+    /// Whether `line` opens with `keyword` as a whole word (`style A …`, not
+    /// `styleguide --> B`): mermaid reads a keyword only before whitespace.
+    static func startsWithKeyword(_ line: some StringProtocol, _ keyword: String) -> Bool {
+        guard line.hasPrefix(keyword) else { return false }
+        let next = line.dropFirst(keyword.count).first
+        return next == nil || next == " " || next == "\t"
     }
 
     /// Label text as mermaid shows it: entities decoded (`#quot;`, `#35;`,
@@ -308,11 +404,12 @@ public enum MermaidParser {
         pattern: #"</?(?:b|i|u|s|em|strong|code|kbd|mark|small|big|sub|sup|strike|del|ins|span|font|a|p|div|tt|q|cite)(?:\s[^<>]*)?/?>"#,
         options: [.caseInsensitive])
 
-    /// `#name;` / `#123;` (mermaid's own) and `&name;` / `&#123;` / `&#x1F600;`
-    /// (HTML). An unknown name or a code point that isn't a character stays
-    /// as written.
+    /// `&#x1F600;` / `&#123;` / `&name;` (HTML) and `#123;` / `#name;`
+    /// (mermaid's own, any `#word;`). A reference to something that isn't a
+    /// printable character stays as written, as does an unknown `&name;`; an
+    /// unknown `#name;` reads `&name;`, as mermaid shows it.
     private static let entityPattern = try? NSRegularExpression(
-        pattern: #"(?:&#[xX]([0-9A-Fa-f]{1,6})|&#([0-9]{1,7})|#([0-9]{1,7})|[&#]([A-Za-z][A-Za-z0-9]{1,31}));"#)
+        pattern: #"&#[xX]([0-9A-Fa-f]{1,8});|&#([0-9]{1,10});|#([0-9]{1,10});|&([A-Za-z][A-Za-z0-9]{1,31});|#([A-Za-z0-9_]{1,32});"#)
 
     private static let namedEntities: [String: String] = [
         "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00A0}",
@@ -340,11 +437,13 @@ public enum MermaidParser {
             }
             let decoded: String?
             if let hex = group(1) {
-                decoded = UInt32(hex, radix: 16).flatMap(printable)
+                decoded = UInt32(hex, radix: 16).flatMap(referenced)
             } else if let decimal = group(2) ?? group(3) {
-                decoded = UInt32(decimal).flatMap(printable)
+                decoded = UInt32(decimal).flatMap(referenced)
             } else if let name = group(4) {
                 decoded = namedEntities[name]
+            } else if let name = group(5) {
+                decoded = namedEntities[name] ?? "&\(name);"
             } else {
                 decoded = nil
             }
@@ -354,11 +453,23 @@ public enum MermaidParser {
         return out
     }
 
-    /// The character a code point names, unless it's a control character.
-    private static func printable(_ value: UInt32) -> String? {
-        guard value >= 0x20, value != 0x7F, let scalar = Unicode.Scalar(value) else { return nil }
+    /// The character a numeric reference names, as a browser reads it:
+    /// 0x80–0x9F as Windows-1252 (`#133;` is "…"), and nothing for a control
+    /// character, a noncharacter (U+FFFE, U+FDD0…) or a value that isn't a
+    /// Unicode scalar — none of those can be drawn, and SVG can't hold them.
+    private static func referenced(_ value: UInt32) -> String? {
+        if (0x80...0x9F).contains(value) { return windows1252[Int(value - 0x80)] }
+        guard value >= 0x20, value != 0x7F, value & 0xFFFE != 0xFFFE, !(0xFDD0...0xFDEF).contains(value),
+              let scalar = Unicode.Scalar(value) else { return nil }
         return String(scalar)
     }
+
+    /// Windows-1252's 0x80–0x9F, which HTML reads numeric references in that
+    /// range as; its five gaps are C1 controls and stay unread.
+    private static let windows1252: [String?] = [
+        "€", nil, "‚", "ƒ", "„", "…", "†", "‡", "ˆ", "‰", "Š", "‹", "Œ", nil, "Ž", nil,
+        nil, "‘", "’", "“", "”", "•", "–", "—", "˜", "™", "š", "›", "œ", nil, "ž", "Ÿ",
+    ]
 
     private static func replacing(_ pattern: NSRegularExpression?, in text: String, with template: String) -> String {
         guard let pattern else { return text }
@@ -418,7 +529,7 @@ public enum MermaidParser {
         }
 
         for (index, line) in body.enumerated() {
-            if line.hasPrefix("subgraph") {
+            if startsWithKeyword(line, "subgraph") {
                 let id = openSubgraph(line, into: &subgraphs, order: &subgraphOrder,
                                       stack: stack, anonCount: &anonCount)
                 if let parent = stack.last, subgraphs[parent] != nil {
@@ -431,27 +542,37 @@ public enum MermaidParser {
                 if stack.isEmpty { setAside(index, "'end' with no subgraph open") } else { stack.removeLast() }
                 continue
             }
-            if line.hasPrefix("direction ") {
+            if startsWithKeyword(line, "direction") {
                 // Scoped to the innermost open subgraph. A top-level direction
-                // line is dropped (the header token already set the chart's
-                // flow); either way it never leaks in as a phantom node.
+                // line is dropped, as mermaid drops it (the header sets the
+                // chart's flow); either way it never leaks in as a phantom node.
+                let token = line.dropFirst("direction".count)
+                let parsed = Flowchart.Direction(rawValue: normalizedDirectionToken(token))
+                let written = token.trimmingCharacters(in: .whitespaces)
+                if parsed == nil {
+                    setAside(index, "unknown direction '\(written)'")
+                }
                 if let top = stack.last, subgraphs[top] != nil {
-                    let token = line.dropFirst("direction".count)
-                    let parsed = Flowchart.Direction(rawValue: normalizedDirectionToken(token))
-                    if parsed == nil {
-                        setAside(index, "unknown direction '\(token.trimmingCharacters(in: .whitespaces))'")
-                    }
                     subgraphs[top]!.direction = parsed
+                } else if parsed != nil {
+                    setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow")
                 }
                 continue
             }
             // Styling, ignored on purpose: the theme draws every node alike.
-            if line.hasPrefix("classDef") || line.hasPrefix("class ") || line.hasPrefix("style")
-                || line.hasPrefix("linkStyle") || line.hasPrefix("click ") { continue }
+            if ["classDef", "class", "style", "linkStyle", "click"].contains(where: { startsWithKeyword(line, $0) }) {
+                continue
+            }
 
             // Split on links (`-->`, `---`, `-.->`, `==>`, `~~~`, `--o`, …),
             // keeping what each draws and its optional |label|.
-            if let parsed = parseEdgeLine(line), !parsed.isEmpty {
+            var unread: [Substring] = []
+            if let parsed = parseEdgeLine(line, unread: &unread), !parsed.isEmpty {
+                for token in unread {
+                    let text = token.trimmingCharacters(in: .whitespaces)
+                    setAside(index, text.isEmpty ? "an empty '&' endpoint; left out of the diagram"
+                        : "couldn't read '\(text.count > 60 ? text.prefix(57) + "…" : text)' in an '&' fan; left out of the diagram")
+                }
                 for edge in parsed {
                     note(edge.fromNode)
                     note(edge.toNode)
@@ -670,7 +791,8 @@ public enum MermaidParser {
     /// fanned (`A & B --> C`) forms yield several. The old single-edge parser
     /// silently erased any line it couldn't fully tokenize, which killed the
     /// most common idioms in real flowcharts.
-    private static func parseEdgeLine(_ raw: String) -> [ParsedEdge]? {
+    /// `unread` collects the endpoints of an `&` fan that aren't nodes.
+    private static func parseEdgeLine(_ raw: String, unread: inout [Substring]) -> [ParsedEdge]? {
         let line = normalizeEdgeSyntax(raw)
         var segments: [String] = []
         var joins: [Link] = []
@@ -692,13 +814,20 @@ public enum MermaidParser {
         }
         guard !joins.isEmpty, segments.count == joins.count + 1 else { return nil }
 
+        var ends: [[Flowchart.Node]] = []
+        for segment in segments {
+            var nodes: [Flowchart.Node] = []
+            for token in splitEndpoints(segment) {
+                if let node = parseNodeToken(token) { nodes.append(node) } else { unread.append(token) }
+            }
+            guard !nodes.isEmpty else { unread = []; return nil }
+            ends.append(nodes)
+        }
+
         var out: [ParsedEdge] = []
         for (i, join) in joins.enumerated() {
-            let lefts = splitEndpoints(segments[i]).compactMap(parseNodeToken)
-            let rights = splitEndpoints(segments[i + 1]).compactMap(parseNodeToken)
-            guard !lefts.isEmpty, !rights.isEmpty else { return nil }
-            for l in lefts {
-                for r in rights {
+            for l in ends[i] {
+                for r in ends[i + 1] {
                     out.append(ParsedEdge(
                         fromNode: l, toNode: r,
                         edge: Flowchart.Edge(from: l.id, to: r.id, label: join.label,

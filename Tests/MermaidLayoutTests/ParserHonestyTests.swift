@@ -356,10 +356,70 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.edges.map(\.label), [nil, "a < b", "\"quoted\""])
     }
 
-    /// Unknown names and control characters stay as written.
+    /// Control characters and unknown HTML names stay as written; an
+    /// unknown `#name;` reads `&name;`, as mermaid shows it.
     func testUnknownEntitiesStay() throws {
         let c = try flow("A[\"#nosuch; and #12; and &bogus;\"]")
-        XCTAssertEqual(c.nodes.first?.label, "#nosuch; and #12; and &bogus;")
+        XCTAssertEqual(c.nodes.first?.label, "&nosuch; and #12; and &bogus;")
+    }
+
+    /// Numeric references read as a browser reads them: 0x80–0x9F as
+    /// Windows-1252. A C1 control, a noncharacter or a non-scalar stays as
+    /// written, never reaching SVG or a terminal.
+    func testNumericReferencesReadAsBrowsersDo() throws {
+        let c = try oneLine("flowchart LR; A[\"#133; #150; &#x80; | #129; #65535; &#xFDD0; &#xD800; #1114112;\"]")
+        XCTAssertEqual(c.nodes.first?.label, "… – € | #129; #65535; &#xFDD0; &#xD800; #1114112;")
+    }
+
+    /// Every label form keeps its `;`, as mermaid's lexer does: pipes, the
+    /// flag shape, each inline link text, `{{…}}`, `((…))` and
+    /// `@{ label }`. Splitting them broke charts that read before.
+    func testSemicolonsInEveryLabelFormStay() throws {
+        let c = try oneLine("""
+            flowchart LR; A -->|wait; retry| B; B>Flag; here] --> C; C -- wait; then --> D; \
+            D == heavy; load ==> E; E -. maybe; later .-> F; F --> G; \
+            G{{a; b}} --> H((c; d)); H@{ shape: rect, label: "e; f" } --> I
+            """)
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to) \($0.label ?? "")" },
+                       ["A>B wait; retry", "B>C ", "C>D wait; then", "D>E heavy; load", "E>F maybe; later",
+                        "F>G ", "G>H ", "H>I "])
+        XCTAssertEqual(c.nodes.first { $0.id == "B" }?.label, "Flag; here")
+        XCTAssertEqual(c.nodes.first { $0.id == "H" }?.label, "e; f")
+        XCTAssertEqual(c.nodes.first { $0.id == "G" }?.label, "a; b")
+    }
+
+    /// In `style`, `classDef` and `linkStyle` a `;` ends the statement, so a
+    /// color (`#f96;`) isn't read as an entity that swallows the next one.
+    func testStylingSemicolonsEndStatements() throws {
+        for source in ["graph LR; classDef hot fill:#f96; A:::hot --> B",
+                       "graph LR; style A fill:#f96; A --> B",
+                       "graph LR; linkStyle 0 stroke:#f00; A --> B"] {
+            XCTAssertEqual(try oneLine(source).edges.map { "\($0.from)>\($0.to)" }, ["A>B"], source)
+        }
+    }
+
+    /// A `%%` comment after a `;` runs to the end of the line, as one on a
+    /// line of its own does; what follows it isn't drawn.
+    func testCommentAfterASemicolonEndsTheLine() throws {
+        let c = try oneLine("graph LR; A --> B; %% disabled; C --> D")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B"])
+    }
+
+    /// Keywords are whole words, as in mermaid: `styleguide`, `subgraphs`,
+    /// `ending`… are node ids. `styleguide --> B` was skipped as styling.
+    func testKeywordsAreWholeWords() throws {
+        for id in ["styleguide", "subgraphs", "classDefault", "classy", "linkStyles", "clicks", "directions", "ending"] {
+            let c = try oneLine("flowchart LR\n  \(id) --> B")
+            XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["\(id)>B"], id)
+        }
+    }
+
+    private func oneLine(_ source: String) throws -> Flowchart {
+        guard case .flowchart(let c)? = MermaidParser.parse(source) else {
+            XCTFail("should parse: \(source)")
+            throw CancellationError()
+        }
+        return c
     }
 
     /// Inline formatting tags give way to their text (the renderers can't

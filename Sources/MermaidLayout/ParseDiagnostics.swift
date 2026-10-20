@@ -101,24 +101,13 @@ extension MermaidParser {
     /// A `.note` for each statement a flowchart that parses set aside, at its
     /// line in `source`; `[]` for every other type.
     private static func setAsideNotes(_ source: String) -> [ParseDiagnostic] {
-        func lines(_ text: String) -> [String] {
-            text.split(separator: "\n", omittingEmptySubsequences: false)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-        }
-        let body = lines(stripMetadata(from: source).body).filter { !$0.isEmpty && !$0.hasPrefix("%%") }
-        guard let header = body.first, header.hasPrefix("graph") || header.hasPrefix("flowchart") else { return [] }
+        let body = strippingMetadata(from: source).lines
+            .map { (text: $0.text.trimmingCharacters(in: .whitespaces), line: $0.line) }
+            .filter { !$0.text.isEmpty && !$0.text.hasPrefix("%%") }
+        guard let header = body.first?.text, header.hasPrefix("graph") || header.hasPrefix("flowchart") else { return [] }
 
-        // Front matter and `acc…` statements are lifted out before parsing, but
-        // every other line keeps its text and order, so a forward scan finds
-        // each body line's place in the source.
-        let raw = lines(source)
-        var cursor = 0
-        var statements: [(text: String, line: Int?)] = []
-        for text in body {
-            while cursor < raw.count, raw[cursor] != text { cursor += 1 }
-            let line = cursor < raw.count ? cursor + 1 : nil
-            cursor += 1
-            statements += flowchartStatements(text).map { ($0, line) }
+        let statements = body.flatMap { line in
+            flowchartStatements(line.text).map { (text: $0, line: Optional(line.line)) }
         }
         guard let first = statements.first else { return [] }
 
