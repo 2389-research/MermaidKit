@@ -14,5 +14,20 @@
   "flowchart LR\n  A -->|ping ops@xmail.com| B\n  C[mail joe@outlook.com] --> D",
   "flowchart LR\n  A <--- B\n  C <--o D\n  E o--> F",
   "flowchart LR\n  x-->o\n  o --> x",
-  "flowchart TD\n  A[Start]:::hot --> B@{ shape: diam, label: \"Decide\" }"
+  "flowchart TD\n  A[Start]:::hot --> B@{ shape: diam, label: \"Decide\" }",
+  "flowchart LR; A -->|wait; retry| B; B>Flag; here] --> C",
+  "flowchart LR; A -- wait; then --> B; B == heavy; load ==> C; C -. maybe; later .-> D",
+  "flowchart LR; A{{a; b}} --> B((c; d)); B@{ shape: rect, label: \"e; f\" } --> C",
+  "graph LR; A --- B; C === D; E -- solid; text --- F; G --> H",
+  "graph LR; A[option A); retry] --> B",
+  "graph LR; A[Status (pending; retry] --> B; C --> D",
+  "graph LR; A[Array[index; retry] --> B; C --> D",
+  "graph LR; D[[x; y]] --> E((p; q)); F --> G[(db; x)]",
+  "flowchart LR\n  styleguide --> B\n  subgraphs --> C\n  classDefault --> D\n  ending --> E",
+  "flowchart LR\n  direction --> B",
+  "flowchart LR; A[x #133; y] --> B[x #nosuch; y]",
+  "flowchart LR; A[\"&lt;brilliant&gt;\"] --> B[\"#amp; #35;\"]",
+  "graph LR; A --> B; %% disabled; C --> D",
+  "graph LR; classDef hot fill:#f96; A:::hot --> B",
+  "flowchart LR\n  A & B --> C\n  C -->|a %% b| D[50%% off]"
 ]
