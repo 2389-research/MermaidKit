@@ -1,5 +1,54 @@
 # Changelog
 
+## 2.6.0 — Flowcharts read the way mermaid reads them
+
+Flowcharts now read like mermaid.js in many more cases, and every rule is
+checked against mermaid's own parser. A new test compares 1,534 charts with
+mermaid 12.2.0: on 2.5.0, 430 of them read the same as mermaid; on 2.6.0,
+1,029 do, and none reads worse. Output for every chart in the fixture set is
+byte-identical to 2.5.0.
+
+- **`;` separates statements**, as in mermaid: `graph LR; A --> B; B --> C`
+  draws two edges, and `graph LR;` sets the direction. A `;` stays part of the
+  text when it's inside a label: quotes, node text (`[…]`, `(…)`, `{…}`,
+  `>…]`, `[[…]]`, `[(…)]`…), pipe labels (`|…|`), inline link text
+  (`-- … -->`, `== … ==>`, `-. … .->`) or an entity (`#quot;`). In `style`,
+  `classDef` and `linkStyle`, a `;` ends the statement, so `fill:#f96;` stays
+  a color. A `%%` after a `;` comments out the rest of the line. (#76)
+- **Entities in labels are decoded**: mermaid's `#quot;`, `#35;` and
+  `#name;`, and HTML's `&amp;`, `&#169;` and `&#x2665;`. Numeric references
+  read as a browser reads them: `#133;` is "…", per Windows-1252. Control
+  characters, noncharacters and anything that would spell a line break stay
+  as written. An unknown `#name;` shows `&name;`, as mermaid shows it. (#76)
+- **Inline formatting tags** (`<b>`, `<i>`, `<code>`, `<span …>`…) are dropped,
+  and their text kept, since the renderers can't style it. `<br>` breaks
+  stay. (#76)
+- **Keywords are whole words**: `styleguide --> B`, `subgraphs --> B` and
+  `direction --> B` are edges between nodes, as in mermaid. (#76)
+- **`MermaidParser.diagnose` notes what a flowchart that parses left out**,
+  at its line in the source:
+  - a statement it couldn't read;
+  - an `end` with no subgraph open;
+  - an unknown direction, or a top-level `direction`, which has no effect;
+  - an `&` fan endpoint that isn't a node.
+
+  Hosts can now tell a diagram that rendered whole from one with parts
+  missing. **Behavior change:** `diagnose` used to return `[]` for any source
+  that parsed. It can now return `.note`s for one; check `severity` if you
+  only want errors. (#76)
+
+Thanks to @hipstersmoothie for #76.
+
+### Tooling
+
+- **A mermaid.js oracle** (`scripts/check-mermaid-oracle.sh`, run in CI) parses
+  a fixed and a seeded generated corpus with mermaid's own parser and with
+  MermaidKit, and compares what a reader sees. Known divergences are recorded,
+  each counted as missing, wrong or extra. CI fails if a chart diverges
+  newly, a known one gets worse, or a chart leaves the corpus, so the list
+  only shrinks. It went from 934 known divergences to 256 in this release.
+  See `tools/mermaid-oracle/README.md`. (#78)
+
 ## 2.5.0 — Dynamic Type for diagrams, everywhere
 
 Diagram text can now follow the reader's text size. `DiagramSpacing.textScale`
