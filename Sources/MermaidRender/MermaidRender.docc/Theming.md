@@ -15,6 +15,7 @@ it to re-skin all 30 diagram types at once.
 | `hairline` | Rules and borders: table lines, axes, lifelines |
 | `palette` | **Categorical accents** — node tints, pie slices, sankey bands, gantt sections, git branches, cycled by index |
 | `prefersDark` | Keys the render cache and dark-tuned alpha choices |
+| `fontFamily` | The family every label is set in (`nil`: the system font) |
 
 ## The two built-in appearances
 
@@ -69,6 +70,20 @@ Two rules of thumb:
 - **Palette colors are used at reduced alpha for fills** (nodes tint at
   ~10–25% alpha with a stronger border), so pick saturated hues — they'll
   soften on the page.
+
+## A font family
+
+```swift
+DiagramTheme(prefersDark: false, fontFamily: "Inter")
+```
+
+Every label is measured and drawn in the family, so boxes fit the text as
+drawn; body text uses the family's regular face where it has no medium, and
+titles take its nearest bold. A family the device doesn't have is the system
+font, byte for byte. It applies to the raster renders (`MermaidView`,
+`image`, `pdfData`, `attachmentString`). `scene` and `svg` stay in the system
+font: `RenderScene` carries no font, and the Android, Flutter and Windows
+renderers set text in their own platform fonts.
 
 ## Monochrome
 

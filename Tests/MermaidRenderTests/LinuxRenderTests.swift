@@ -76,5 +76,26 @@ final class LinuxRenderTests: XCTestCase {
             MermaidRenderer.pdfData(source: "flowchart TD\n A --> B", theme: theme))
         XCTAssertEqual(Array(data.prefix(4)), Array("%PDF".utf8))
     }
+
+    /// `DiagramTheme.fontFamily` on Linux: FontConfig answers a family it
+    /// lacks with a substitute, so a missing family must still render
+    /// byte-identically to the system font, and a family it has sets every
+    /// label, every weight, in that one face (measured as drawn).
+    func testFontFamilyResolvesOrFallsBackExactly() throws {
+        let src = "flowchart LR\n  A[Start here] --> B{Decide?}\n  B -->|yes| C[Ship it]"
+        func png(_ family: String?) throws -> Data {
+            try XCTUnwrap(MermaidRenderer.image(source: src, theme: DiagramTheme(prefersDark: false, fontFamily: family))?.pngData())
+        }
+        XCTAssertEqual(try png("No Such Family Anywhere"), try png(nil), "a missing family is the system font, byte for byte")
+        XCTAssertNotEqual(try png("DejaVu Sans Mono"), try png(nil), "an installed family is used")
+        let widths = [PlatformFont.Weight.regular, .bold].map { weight in
+            DiagramRenderer.$fontFamily.withValue("DejaVu Sans Mono") {
+                DiagramRenderer.measure("Start here", size: 13, weight: weight).width
+            }
+        }
+        // Monospaced: 10 glyphs at 0.602em; one face for every weight.
+        XCTAssertEqual(widths[0], widths[1], accuracy: 0.01)
+        XCTAssertEqual(widths[0], 13 * 10 * 0.602, accuracy: 0.5)
+    }
 }
 #endif

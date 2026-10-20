@@ -36,7 +36,9 @@ public struct DiagramTheme: Sendable {
     /// The font family every label is set in (`"Inter"`, `"Avenir Next"`), at
     /// the weights the renderer asks for; nil, or a family this device
     /// doesn't have, is the system font. Labels are measured in it too, so
-    /// boxes fit the text as drawn.
+    /// boxes fit the text as drawn. Raster renders only (`MermaidView`,
+    /// `image`, `pdfData`, `attachmentString`): `scene`/`svg` stay in the
+    /// system font, since `RenderScene` carries no font.
     public let fontFamily: String?
 
     /// The default categorical palette: six hues tuned to stay distinct on

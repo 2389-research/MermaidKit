@@ -121,12 +121,17 @@ private final class FontCache: @unchecked Sendable {
     }
 }
 
-/// The render's font at `weight`: the theme's family when FontConfig has it,
-/// else DejaVu Sans.
+/// The render's font at `weight`: the theme's family when FontConfig really
+/// has it, else the system font (DejaVu Sans) — the very font object a render
+/// without a family uses, so a missing family renders byte-identically.
+/// FontConfig always answers a family it lacks with a substitute, so the face
+/// it resolved is checked against the name asked for. One face serves every
+/// weight, as the system font does here (`PlatformFont.familyName`'s `:bold`
+/// selects no bold face through Silica).
 func linuxFont(_ weight: PlatformFont.Weight) -> Silica.CGFont? {
-    if let family = DiagramRenderer.fontFamily {
-        let bold = weight == .semibold || weight == .bold
-        if let font = FontCache.shared.font(bold ? "\(family):bold" : family) { return font }
+    if let family = DiagramRenderer.fontFamily, let font = FontCache.shared.font(family),
+       font.handle.fullName.lowercased().hasPrefix(family.lowercased()) {
+        return font
     }
     return FontCache.shared.font(PlatformFont.familyName(weight))
 }
