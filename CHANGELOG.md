@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Class generics read as `List<T>`**, as in mermaid. `class Box~T~` is the
+  class `Box` drawn as `Box<T>`, so `Box~T~ --> Item` and `Box --> Item` meet
+  the same box (the generic once split it into two), and `Box~T~ : +x` adds
+  its member (it was dropped). Members pair their tildes the way mermaid
+  does: `+List~List~int~~ xs` reads `+List<List<int>> xs`, a method's name,
+  parameters and return type each on their own, and a lone `~` stays as
+  written. New `ClassDiagram.Class.generic` and `.label` and
+  `ClassLayout.Box.label`; `name` is the id without the generic. Alt text
+  reads `Box<T>` too. Charts without `~` are byte-identical. (#72)
+
 ## 2.7.0 — Diagrams in your app's font
 
 Diagram labels can now be set in the font the rest of your app uses. A new

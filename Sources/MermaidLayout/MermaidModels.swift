@@ -295,10 +295,22 @@ public struct ClassDiagram: Hashable, Sendable {
     public struct Class: Hashable, Sendable, Identifiable {
         /// Same as `name`.
         public var id: String { name }
+        /// The name without its generic: `class Box~T~` is `Box`, so
+        /// relations to `Box` and `Box~T~` meet the same box, as in mermaid.
         public let name: String
-        /// Attribute compartment lines, as written (members without `()`).
+        /// The generic written between the tildes (`T` for `Box~T~`,
+        /// `K, V` for `Map~K, V~`); nil when there's none.
+        public var generic: String? = nil
+        /// What the box's header reads: `Box<T>`, or just the name.
+        public var label: String {
+            guard let generic else { return name }
+            return "\(name)<\(MermaidParser.genericTypes(generic))>"
+        }
+        /// Attribute compartment lines, as written (members without `()`),
+        /// with `~T~` generics read as `<T>` the way mermaid shows them.
         public var attributes: [String]
-        /// Method compartment lines, as written (members containing `()`).
+        /// Method compartment lines, as written (members containing `()`),
+        /// with generics read as in `attributes`.
         public var methods: [String]
     }
 

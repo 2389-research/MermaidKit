@@ -228,8 +228,8 @@ mermaid.js, and the failure mode is deliberate:
   heads for every token (`-x`, `-)`, `<<->>`), autonumber badges; gantt
   directive lines (never phantom bars) and `y/M/s` durations; radar
   positional values; packet `+N` relative widths; treemap `:::class`;
-  gitGraph `cherry-pick`; class generics `~T~` (parsed; drawn as written, not as
-  `<T>`); ER attribute keys; state
+  gitGraph `cherry-pick`; class generics (`Box~T~` reads `Box<T>`, as in
+  mermaid); ER attribute keys; state
   composites, forks, choices. Some still doesn't (mermaid's newer named
   flowchart shapes, like `@{ shape: doc }`, draw as rectangles, with their
   labels intact). If your diagram parses but drops
