@@ -54,7 +54,7 @@ CI fails when a chart diverges that the baseline doesn't list, or when a
 listed chart orders after its record, or a listed chart has left the corpus
 (lost coverage isn't a fix). So a parser change can't quietly break a chart
 that read right, or make a wrong one wronger. After a fix, `--update` removes
-the charts that now agree and lowers the costs that dropped; it refuses to
+the charts that now agree and records the ones that got better; it refuses to
 write while anything got worse or went missing. The baseline only ever
 shrinks: the same ratchet as the grid-alignment floors and the draw-vs-scene
 conformance ceilings.
