@@ -835,6 +835,23 @@ final class ParserHonestyTests: XCTestCase {
         }
     }
 
+    /// Wrapping stops at the line cap: a description near the input limit
+    /// costs a few lines of measuring, not one per word.
+    func testC4WrapStopsMeasuringAtTheCap() throws {
+        let descr = (1...8_000).map { "w\($0)" }.joined(separator: " ")
+        guard case .c4(let c)? = MermaidParser.parse("C4Container\n    Container(v, \"T\", \"\", \"\(descr)\")") else {
+            return XCTFail("parse")
+        }
+        var measured = 0
+        let measure: DiagramTextMeasurer = { t, size in
+            measured += 1
+            return CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let box = try XCTUnwrap(DiagramLayoutEngine.layout(c, measure: measure).boxes.first)
+        XCTAssertEqual(box.detailLines.count, 12)
+        XCTAssertLessThan(measured, 1_000, "measured \(measured) times for 12 lines")
+    }
+
     // MARK: gitGraph
 
     func testCherryPickAppearsOnTheTimeline() throws {

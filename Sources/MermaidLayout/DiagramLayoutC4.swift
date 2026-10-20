@@ -116,6 +116,9 @@ extension DiagramLayoutEngine {
                 } else {
                     lines.append(current)
                     current = word
+                    // A line past the cap only marks the cut; nothing after it
+                    // can change what's kept, so stop measuring.
+                    if lines.count == maxLines { break }
                 }
             }
             if !current.isEmpty { lines.append(current) }
