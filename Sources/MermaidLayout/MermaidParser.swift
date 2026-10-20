@@ -1250,20 +1250,31 @@ public enum MermaidParser {
         var relations: [ClassDiagram.Relation] = []
         var openClass: String? // inside `class X { … }`
 
-        func note(_ name: String) {
-            guard !name.isEmpty, classes[name] == nil else { return }
-            classes[name] = ClassDiagram.Class(name: name, attributes: [], methods: [])
-            order.append(name)
+        // Mints (or finds) the class a written name refers to and returns its
+        // id: `Box~T~` and `Box` are the same class.
+        @discardableResult
+        func note(_ written: String) -> String {
+            let (name, generic) = splitGeneric(written)
+            guard !name.isEmpty else { return name }
+            if classes[name] == nil {
+                classes[name] = ClassDiagram.Class(name: name, generic: generic, attributes: [], methods: [])
+                order.append(name)
+            } else if classes[name]?.generic == nil {
+                // mermaid keeps only the first mention's generic, so
+                // `Box --> Item` then `class Box~T~` loses the `T`; keep it.
+                classes[name]?.generic = generic
+            }
+            return name
         }
 
-        func addMember(_ raw: String, to name: String) {
+        func addMember(_ raw: String, to written: String) {
             let member = raw.trimmingCharacters(in: .whitespaces)
             guard !member.isEmpty else { return }
-            note(name)
+            let name = note(written)
             if member.contains("(") {
-                classes[name]?.methods.append(member)
+                classes[name]?.methods.append(genericMember(member))
             } else {
-                classes[name]?.attributes.append(member)
+                classes[name]?.attributes.append(genericMember(member))
             }
         }
 
@@ -1310,9 +1321,10 @@ public enum MermaidParser {
             // when no relation connector is present on the line.
             if !connectors.contains(where: { line.contains($0.token) }),
                let colon = line.firstIndex(of: ":") {
-                let name = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
+                let written = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
+                let name = splitGeneric(written).name
                 if !name.isEmpty, name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) {
-                    addMember(String(line[line.index(after: colon)...]), to: name)
+                    addMember(String(line[line.index(after: colon)...]), to: written)
                 }
                 continue
             }
@@ -1331,10 +1343,9 @@ public enum MermaidParser {
                 }
                 let rightName = stripMultiplicity(right.trimmingCharacters(in: .whitespaces), trailing: false)
                 guard !left.isEmpty, !rightName.isEmpty else { break }
-                let from = connector.reversed ? rightName : left
-                let to = connector.reversed ? left : rightName
-                note(left)
-                note(rightName)
+                let leftID = note(left), rightID = note(rightName)
+                let from = connector.reversed ? rightID : leftID
+                let to = connector.reversed ? leftID : rightID
                 relations.append(ClassDiagram.Relation(from: from, to: to, kind: connector.kind, label: label))
                 break
             }
@@ -1342,6 +1353,88 @@ public enum MermaidParser {
 
         guard !classes.isEmpty else { return nil }
         return ClassDiagram(classes: order.compactMap { classes[$0] }, relations: relations)
+    }
+
+    /// `Box~T~` → (`Box`, `T`): mermaid splits a class name at its first
+    /// tilde. A name whose generic never closes (`Box~T`) stays whole, as
+    /// written; an empty one (`Box~~`) is just `Box`.
+    static func splitGeneric(_ written: String) -> (name: String, generic: String?) {
+        guard let open = written.firstIndex(of: "~"), open > written.startIndex,
+              written.hasSuffix("~"), written.index(before: written.endIndex) > open else {
+            return (written, nil)
+        }
+        let name = String(written[..<open]).trimmingCharacters(in: .whitespaces)
+        let generic = String(written[written.index(after: open)..<written.index(before: written.endIndex)])
+        return (name, generic.trimmingCharacters(in: .whitespaces).isEmpty ? nil : generic)
+    }
+
+    /// A class member as mermaid shows it: generics read `<T>` in a method's
+    /// name, parameters and return type, each on its own (so
+    /// `+map~U~(f) Box~U~` pairs within each part, never across them).
+    /// The leading visibility (`~` is package) is never a generic.
+    static func genericMember(_ member: String) -> String {
+        guard member.contains("~") else { return member }
+        var rest = Substring(member)
+        var visibility = ""
+        if let first = rest.first, "+-#~".contains(first) {
+            visibility = String(first)
+            rest = rest.dropFirst()
+        }
+        // mermaid's method split: the name runs to the last `(` before the
+        // last `)`.
+        guard let close = rest.lastIndex(of: ")"),
+              let open = rest[..<close].lastIndex(of: "("), open > rest.startIndex else {
+            return visibility + genericTypes(String(rest))
+        }
+        return visibility + genericTypes(String(rest[..<open]))
+            + "(" + genericTypes(String(rest[rest.index(after: open)..<close])) + ")"
+            + genericTypes(String(rest[rest.index(after: close)...]))
+    }
+
+    /// mermaid's `parseGenericTypes`: split at commas, glue `Map~K` and
+    /// ` V~` back together (one tilde on each side), then pair each piece's
+    /// tildes outside-in, so `List~List~int~~` reads `List<List<int>>`.
+    /// A lone tilde stays. One deliberate difference: mermaid can glue a
+    /// piece twice and lose text (`a~b,c~d,e~f` shows `c<d,e>f`); here a
+    /// piece glues once, and nothing written is dropped.
+    static func genericTypes(_ text: String) -> String {
+        guard text.contains("~") else { return text }
+        // Pieces and the "," between them, like JS `split(/(,)/)`.
+        let sets = Array(text.split(separator: ",", omittingEmptySubsequences: false)
+            .flatMap { [String($0), ","] }
+            .dropLast())
+        func tildes(_ s: String) -> Int { s.reduce(0) { $1 == "~" ? $0 + 1 : $0 } }
+        var output: [String] = []
+        var glued = -1 // the last piece already glued onto the one before it
+        var i = 0
+        while i < sets.count {
+            var set = sets[i]
+            if set == ",", i > 0, i + 1 < sets.count, i - 1 != glued,
+               tildes(sets[i - 1]) == 1, tildes(sets[i + 1]) == 1 {
+                set = sets[i - 1] + "," + sets[i + 1]
+                output.removeLast()
+                i += 1
+                glued = i
+            }
+            output.append(pairTildes(set))
+            i += 1
+        }
+        return output.joined()
+    }
+
+    /// mermaid's `processSet`: the first tilde pairs with the last, the
+    /// second with the second-to-last, and so on; with an odd count a
+    /// leading tilde sits out (else the middle one stays).
+    private static func pairTildes(_ text: String) -> String {
+        var chars = Array(text)
+        var positions = chars.indices.filter { chars[$0] == "~" }
+        guard positions.count > 1 else { return text }
+        if positions.count % 2 != 0, positions.first == 0 { positions.removeFirst() }
+        for k in 0..<positions.count / 2 {
+            chars[positions[k]] = "<"
+            chars[positions[positions.count - 1 - k]] = ">"
+        }
+        return String(chars)
     }
 
     // MARK: ER

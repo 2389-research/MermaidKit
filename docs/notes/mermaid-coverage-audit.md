@@ -20,7 +20,7 @@ Status/worst-gap cells below carry the reconciled 1.0 verdict; struck-through te
 |---|---|---|---|---|
 | flowchart | 11/13 fixed (v2.4.0) | 13 → 1+1 partial | ~~chained edges `A --> B --> C` silently erase the whole line~~ **[FIXED]** — remains: markdown strings / entity codes; `@{shape}` **[PARTIAL]** (names without a model case draw as labelled rectangles) | M (markdown/entities) |
 | sequenceDiagram | 12+bug fixed | 12 (+1 bug) → 1 | ~~`->>+`/`->>-` activation shorthand mints phantom `+John`/`-John` lifelines~~ **[FIXED]** — remains only obscure `A->>()E:` phantom | L (S fix for phantoms; fragments L) |
-| classDiagram | 0 fixed | 10 **[remains]** | `class X["label"]` splits one class into two; multiplicity discarded (generics now also split) | M–L |
+| classDiagram | 1 fixed | 10 → 9 | `class X["label"]` splits one class into two; multiplicity discarded (generics **[FIXED]**, #72) | M–L |
 | stateDiagram-v2 | 0 fixed | 6 **[remains]** | `id : description` lines dropped (can delete the state); note bodies leak as phantom states | M (2 worst fixes are S) |
 | erDiagram | 0 fixed | 7 **[remains]** | word-form relationships (`only one to zero or more`) vanish entirely | M |
 | journey | complete | 0 | — | — |
@@ -162,7 +162,7 @@ Supported: implicit participants, `participant`/`actor` with `as` alias, `->`, `
 **Worst: `+`/`-` shorthand phantom lifelines — silently mis-draws nearly every real-world sequence diagram.**
 
 ## classDiagram (parseClass L492–590) — 10 gaps
-**Reconciled 2026-07-15: still accurate — unchanged in 1.0** (the parser-honesty pass did not touch classDiagram). Minor addendum: class generics `List~int~` also *split* the class, slightly worse than the "tildes literal" degrade noted below.
+**Reconciled 2026-07-15: still accurate — unchanged in 1.0** (the parser-honesty pass did not touch classDiagram). Minor addendum: class generics `List~int~` also *split* the class, slightly worse than the "tildes literal" degrade noted below. **Update (#72):** generics are fixed — `Box~T~` is the class `Box` drawn `Box<T>`, and members read `List<int>`.
 
 Supported: `class X` / bodies / colon shorthand; attribute-vs-method split; all 8 relation connectors incl. reversed; relation labels; multiplicity tolerated (stripped).
 
@@ -175,7 +175,7 @@ Supported: `class X` / bodies / colon shorthand; attribute-vs-method split; all 
 | Namespaces | `namespace BaseShapes { … }` | SD of grouping (inner classes parse) | L |
 | Notes | `note for Duck "can fly"` | **SD** (L552) — note text lost | M |
 | direction | `direction LR` | SD (no model field) | M |
-| Generics | `List~int~` | DEG: tildes literal (should show `<int>`) | S |
+| Generics | `List~int~` | ~~DEG: tildes literal (should show `<int>`)~~ **[FIXED #72]** — reads `List<int>`; `Box~T~` and `Box` are one class | S |
 | Two-way relation | `ClassA <|--|> ClassB` | **PC**: `<\|--` matches first, phantom class `\|> ClassB` | S–M |
 | Lollipop | `foo --() bar` | **PC**: phantom class `() bar` | M |
 | `:::` shorthand | `Animal:::styleClass` | **PC**: colon-shorthand branch (L556–563) adds bogus attribute `::styleClass` | S |
@@ -457,7 +457,7 @@ Estimated: 2–3 focused sessions; parser-only, tests in MermaidKit CI.
 
 - **Flowchart**: chained edges + `&` fan-out (M — biggest single win in the audit), inline `-- text -->` labels (S), remaining classic shapes (M), bidirectional/thick edges (S–M). Then subgraphs (L) and `@{ shape }` (L) as separate projects.
 - **Sequence**: cross/async arrow tokens (S parse, M arrowheads), notes (M), autonumber (S), actor figure (S–M), activations model+bars (M), boxes (M). Fragments (loop/alt/opt/par/critical/break) are the flagship L item — a frame model shared with the future block/composite work.
-- **Class**: multiplicity fields + rendering (M), annotations as badges (S), notes (M), generics display (S). Namespaces (L) later.
+- **Class**: multiplicity fields + rendering (M), annotations as badges (S), notes (M), ~~generics display (S)~~ (done, #72). Namespaces (L) later.
 - **State**: per-composite direction (M); concurrency regions (L) later.
 
 Estimated: flowchart chains + sequence arrows/notes first (one session each), fragments + subgraphs as two L projects.
