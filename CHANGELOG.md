@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 2.7.0 — Diagrams in your app's font
+
+Diagram labels can now be set in the font the rest of your app uses. A new
+`DiagramTheme.fontFamily` takes a family name, and every label is measured
+and drawn in that family, so boxes still fit the text. At the default (`nil`,
+the system font), output is byte-identical to 2.6.0. Additive: no existing
+call changes.
 
 - **`DiagramTheme.fontFamily`** sets and measures every label in a chosen
   family (`DiagramTheme(prefersDark: false, fontFamily: "Inter")`), for the
@@ -10,6 +16,9 @@
   system font, byte for byte, on Apple platforms and Linux. It's part of the
   theme's cache fingerprint. `scene`/`svg` stay in the system font. Additive;
   the default is unchanged. (#77)
+
+Thanks to @hipstersmoothie, who built this so chat apps can draw diagrams in
+the interface font their users pick.
 
 ## 2.6.0 — Flowcharts read the way mermaid reads them
 
