@@ -320,6 +320,58 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(Set(c.nodes.map(\.label)), ["a", "Flag", "Input", "b", "c"])
     }
 
+    /// `;` ends a statement, as in mermaid. A one-line chart parsed to
+    /// nothing (its direction read as `LR;`), and `graph LR;` alone was laid
+    /// out top-down.
+    func testSemicolonsSeparateStatements() throws {
+        guard case .flowchart(let c)? = MermaidParser.parse("graph LR; A --> B; B --> C") else {
+            return XCTFail("a one-line chart should parse")
+        }
+        XCTAssertEqual(c.direction, .leftRight)
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C"])
+
+        guard case .flowchart(let d)? = MermaidParser.parse("graph LR;\n  A --> B") else { return XCTFail() }
+        XCTAssertEqual(d.direction, .leftRight)
+    }
+
+    /// A `;` in quotes, in brackets or ending an entity stays in the text.
+    func testSemicolonsInLabelsAndEntitiesStay() throws {
+        let c = try flow("A[\"a; b\"] --> B(c;d); B --> C{e;f}; C --> D[\"#quot;q#quot;\"]")
+        XCTAssertEqual(c.nodes.map(\.label), ["a; b", "c;d", "e;f", "\"q\""])
+        XCTAssertEqual(c.edges.count, 3)
+    }
+
+    /// Entities in labels, mermaid's and HTML's. They were drawn as written.
+    func testEntitiesAreDecoded() throws {
+        let c = try flow("""
+            A["Say #quot;hi#quot; &amp; wave"] --> B["x #35; y #9829; &#x2665; &#169; &lt;tag&gt;"]
+            subgraph S [Tom &amp; Jerry]
+              C -->|a &lt; b| D
+            end
+            C -- #quot;quoted#quot; --> E
+            """)
+        XCTAssertEqual(c.nodes.first { $0.id == "A" }?.label, "Say \"hi\" & wave")
+        XCTAssertEqual(c.nodes.first { $0.id == "B" }?.label, "x # y ♥ ♥ © <tag>")
+        XCTAssertEqual(c.subgraphs.first?.label, "Tom & Jerry")
+        XCTAssertEqual(c.edges.map(\.label), [nil, "a < b", "\"quoted\""])
+    }
+
+    /// Unknown names and control characters stay as written.
+    func testUnknownEntitiesStay() throws {
+        let c = try flow("A[\"#nosuch; and #12; and &bogus;\"]")
+        XCTAssertEqual(c.nodes.first?.label, "#nosuch; and #12; and &bogus;")
+    }
+
+    /// Inline formatting tags give way to their text (the renderers can't
+    /// style it). `<br>` breaks and angle brackets that aren't formatting
+    /// stay.
+    func testFormattingTagsAreDropped() throws {
+        let c = try flow("""
+            A["<b>bold</b> <i>it</i> <code>x</code> <span style='c'>s</span>"] --> B["p<0.05, List<String>, a<br/>b"]
+            """)
+        XCTAssertEqual(c.nodes.map(\.label), ["bold it x s", "p<0.05, List<String>, a<br/>b"])
+    }
+
     // MARK: flowchart subgraphs
 
     /// Deterministic fake measurer for the layout-geometry assertions below.

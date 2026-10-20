@@ -53,4 +53,49 @@ final class ParseDiagnosticsTests: XCTestCase {
         let d = try XCTUnwrap(MermaidParser.diagnose("gitGraph\n \n").first)
         XCTAssertTrue(d.message.contains("recognized 'gitGraph'"), d.message)
     }
+
+    // MARK: Notes on a flowchart that parses
+
+    /// A statement the flowchart parser can't read is left out of the diagram,
+    /// and `diagnose` says so at its line, so a host can tell a diagram that
+    /// rendered whole from one with parts missing.
+    func testSetAsideStatementsAreNoted() {
+        let source = "flowchart LR\n  A --> B\n  this is not mermaid\n  end\n  B --> C"
+        XCTAssertNotNil(MermaidParser.parse(source))
+        let notes = MermaidParser.diagnose(source)
+        XCTAssertEqual(notes.map(\.severity), [.note, .note])
+        XCTAssertEqual(notes.map(\.line), [3, 4])
+        XCTAssertTrue(notes[0].message.contains("this is not mermaid"), notes[0].message)
+        XCTAssertTrue(notes[1].message.contains("end"), notes[1].message)
+    }
+
+    /// Directions the parser doesn't know fall back, and are noted.
+    func testUnknownDirectionsAreNoted() {
+        let notes = MermaidParser.diagnose("flowchart XY\n  A --> B\n  subgraph S\n    direction QQ\n    C\n  end")
+        XCTAssertEqual(notes.map(\.line), [1, 4])
+        XCTAssertTrue(notes[0].message.contains("XY"), notes[0].message)
+        XCTAssertTrue(notes[1].message.contains("QQ"), notes[1].message)
+    }
+
+    /// Styling is ignored on purpose (the theme draws every node alike), so
+    /// it isn't noted.
+    func testIgnoredStylingIsNotNoted() {
+        XCTAssertEqual(MermaidParser.diagnose("""
+            flowchart LR
+              classDef hot fill:#f96
+              A --> B:::hot
+              class B hot
+              style A fill:#fff
+              linkStyle 0 stroke:red
+              click A "https://example.com"
+            """), [])
+    }
+
+    /// Lines keep their numbers in the source past front matter, `acc…`
+    /// statements and `;`-joined statements.
+    func testNoteLinesCountTheWholeSource() {
+        let source = "---\ntitle: T\n---\nflowchart LR\n  accTitle: a title\n  A --> B; ??? nope; B --> C\n  !!!"
+        XCTAssertEqual(MermaidParser.diagnose(source).map(\.line), [6, 7])
+        XCTAssertEqual(MermaidParser.diagnose("flowchart LR\n  A --> B; %% a comment"), [])
+    }
 }

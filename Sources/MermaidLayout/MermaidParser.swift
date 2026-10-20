@@ -149,7 +149,9 @@ public enum MermaidParser {
         guard let header = lines.first else { return nil }
 
         if header.hasPrefix("graph") || header.hasPrefix("flowchart") {
-            return parseFlowchart(header: header, body: Array(lines.dropFirst()))
+            let statements = lines.flatMap(flowchartStatements)
+            guard let first = statements.first else { return nil }
+            return parseFlowchart(header: first, body: Array(statements.dropFirst()))
                 .flatMap { $0.edges.count <= maxEdges ? .flowchart($0) : nil }
         }
         if header.hasPrefix("sequenceDiagram") {
@@ -249,11 +251,137 @@ public enum MermaidParser {
 
     // MARK: Flowchart
 
-    static func parseFlowchart(header: String, body: [String]) -> Flowchart? {
+    /// A flowchart's statements: its lines, each split at every `;` that ends
+    /// a statement (`graph LR; A --> B; B --> C`), as mermaid allows. A `;`
+    /// inside quotes or brackets, or ending an entity (`#quot;`, `&amp;`,
+    /// `#35;`), belongs to the text around it.
+    static func flowchartStatements(_ line: String) -> [String] {
+        var statements: [String] = []
+        var current = ""
+        var depth = 0
+        var quoted = false
+        // Characters since an entity's `#`/`&`, while they could still be one.
+        var entity: Int?
+        for c in line {
+            if c == "\"" { quoted.toggle() }
+            if !quoted {
+                switch c {
+                case "[", "(", "{": depth += 1
+                case "]", ")", "}": depth = max(0, depth - 1)
+                default: break
+                }
+            }
+            if c == ";", !quoted, depth == 0, entity == nil {
+                statements.append(current)
+                current = ""
+                continue
+            }
+            if c == "#" || c == "&" {
+                entity = 0
+            } else if let count = entity {
+                let continues = c.isLetter || c.isNumber || (count == 0 && c == "#")
+                entity = continues && count < 32 ? count + 1 : nil
+                if c == ";" { entity = nil }
+            }
+            current.append(c)
+        }
+        statements.append(current)
+        // A `%%` comment after a `;` is still a comment.
+        return statements.map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("%%") }
+    }
+
+    /// Label text as mermaid shows it: entities decoded (`#quot;`, `#35;`,
+    /// `&amp;`, `&#35;`, `&#x2665;`) and inline formatting tags (`<b>`, `<i>`,
+    /// `<code>`, `<span …>`, …) dropped for their text, which the renderers
+    /// can't style. `<br>` line breaks stay; other angle brackets (`p<0.05`,
+    /// `List<String>`) are text.
+    static func labelText(_ raw: String) -> String {
+        guard raw.contains("#") || raw.contains("&") || raw.contains("<") else { return raw }
+        var text = raw
+        if text.contains("<") { text = replacing(formattingTag, in: text, with: "") }
+        if text.contains("#") || text.contains("&") { text = decodingEntities(text) }
+        return text
+    }
+
+    private static let formattingTag = try? NSRegularExpression(
+        pattern: #"</?(?:b|i|u|s|em|strong|code|kbd|mark|small|big|sub|sup|strike|del|ins|span|font|a|p|div|tt|q|cite)(?:\s[^<>]*)?/?>"#,
+        options: [.caseInsensitive])
+
+    /// `#name;` / `#123;` (mermaid's own) and `&name;` / `&#123;` / `&#x1F600;`
+    /// (HTML). An unknown name or a code point that isn't a character stays
+    /// as written.
+    private static let entityPattern = try? NSRegularExpression(
+        pattern: #"(?:&#[xX]([0-9A-Fa-f]{1,6})|&#([0-9]{1,7})|#([0-9]{1,7})|[&#]([A-Za-z][A-Za-z0-9]{1,31}));"#)
+
+    private static let namedEntities: [String: String] = [
+        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00A0}",
+        "hellip": "…", "mdash": "—", "ndash": "–", "middot": "·", "bull": "•",
+        "lsquo": "‘", "rsquo": "’", "ldquo": "“", "rdquo": "”", "laquo": "«", "raquo": "»",
+        "copy": "©", "reg": "®", "trade": "™", "deg": "°", "plusmn": "±", "times": "×",
+        "divide": "÷", "micro": "µ", "para": "¶", "sect": "§", "euro": "€", "pound": "£",
+        "yen": "¥", "cent": "¢", "infin": "∞", "ne": "≠", "le": "≤", "ge": "≥",
+        "larr": "←", "rarr": "→", "uarr": "↑", "darr": "↓", "harr": "↔",
+        "lArr": "⇐", "rArr": "⇒", "hArr": "⇔", "hearts": "♥", "check": "✓", "cross": "✗",
+        "semi": ";", "colon": ":", "num": "#", "lpar": "(", "rpar": ")",
+        "lsqb": "[", "rsqb": "]", "lcub": "{", "rcub": "}", "vert": "|", "excl": "!",
+    ]
+
+    private static func decodingEntities(_ text: String) -> String {
+        guard let pattern = entityPattern else { return text }
+        let ns = text as NSString
+        var out = ""
+        var cursor = 0
+        for match in pattern.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            out += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            cursor = match.range.location + match.range.length
+            func group(_ i: Int) -> String? {
+                match.range(at: i).location == NSNotFound ? nil : ns.substring(with: match.range(at: i))
+            }
+            let decoded: String?
+            if let hex = group(1) {
+                decoded = UInt32(hex, radix: 16).flatMap(printable)
+            } else if let decimal = group(2) ?? group(3) {
+                decoded = UInt32(decimal).flatMap(printable)
+            } else if let name = group(4) {
+                decoded = namedEntities[name]
+            } else {
+                decoded = nil
+            }
+            out += decoded ?? ns.substring(with: match.range)
+        }
+        out += ns.substring(from: cursor)
+        return out
+    }
+
+    /// The character a code point names, unless it's a control character.
+    private static func printable(_ value: UInt32) -> String? {
+        guard value >= 0x20, value != 0x7F, let scalar = Unicode.Scalar(value) else { return nil }
+        return String(scalar)
+    }
+
+    private static func replacing(_ pattern: NSRegularExpression?, in text: String, with template: String) -> String {
+        guard let pattern else { return text }
+        return pattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                                withTemplate: template)
+    }
+
+    /// Parses a flowchart's header and body statements. `setAside` hears about
+    /// each statement it couldn't use — by body index, or -1 for the header —
+    /// and why; styling it ignores on purpose (`classDef`, `style`, `click`…)
+    /// isn't reported.
+    static func parseFlowchart(header: String, body: [String],
+                               setAside: (_ index: Int, _ reason: String) -> Void = { _, _ in }) -> Flowchart? {
         let parts = header.split(separator: " ")
-        let direction = parts.count > 1
-            ? Flowchart.Direction(rawValue: String(parts[1]).uppercased()) ?? .topDown
-            : .topDown
+        var direction = Flowchart.Direction.topDown
+        if parts.count > 1 {
+            let token = normalizedDirectionToken(parts[1])
+            if let parsed = Flowchart.Direction(rawValue: token) {
+                direction = parsed
+            } else {
+                setAside(-1, "unknown direction '\(parts[1])'; laid out top-down")
+            }
+        }
 
         var nodes: [String: Flowchart.Node] = [:]
         var order: [String] = []
@@ -289,7 +417,7 @@ public enum MermaidParser {
             }
         }
 
-        for line in body {
+        for (index, line) in body.enumerated() {
             if line.hasPrefix("subgraph") {
                 let id = openSubgraph(line, into: &subgraphs, order: &subgraphOrder,
                                       stack: stack, anonCount: &anonCount)
@@ -299,18 +427,27 @@ public enum MermaidParser {
                 stack.append(id)
                 continue
             }
-            if line == "end" { if !stack.isEmpty { stack.removeLast() }; continue }
+            if line == "end" {
+                if stack.isEmpty { setAside(index, "'end' with no subgraph open") } else { stack.removeLast() }
+                continue
+            }
             if line.hasPrefix("direction ") {
                 // Scoped to the innermost open subgraph. A top-level direction
                 // line is dropped (the header token already set the chart's
                 // flow); either way it never leaks in as a phantom node.
                 if let top = stack.last, subgraphs[top] != nil {
-                    subgraphs[top]!.direction = Flowchart.Direction(
-                        rawValue: normalizedDirectionToken(line.dropFirst("direction".count)))
+                    let token = line.dropFirst("direction".count)
+                    let parsed = Flowchart.Direction(rawValue: normalizedDirectionToken(token))
+                    if parsed == nil {
+                        setAside(index, "unknown direction '\(token.trimmingCharacters(in: .whitespaces))'")
+                    }
+                    subgraphs[top]!.direction = parsed
                 }
                 continue
             }
-            if line.hasPrefix("classDef") || line.hasPrefix("class ") || line.hasPrefix("style") { continue }
+            // Styling, ignored on purpose: the theme draws every node alike.
+            if line.hasPrefix("classDef") || line.hasPrefix("class ") || line.hasPrefix("style")
+                || line.hasPrefix("linkStyle") || line.hasPrefix("click ") { continue }
 
             // Split on links (`-->`, `---`, `-.->`, `==>`, `~~~`, `--o`, …),
             // keeping what each draws and its optional |label|.
@@ -326,6 +463,8 @@ public enum MermaidParser {
             // Standalone node declaration.
             if let node = parseNodeToken(Substring(line)) {
                 note(node)
+            } else {
+                setAside(index, "couldn't read '\(line.count > 60 ? line.prefix(57) + "…" : line)'; left out of the diagram")
             }
         }
 
@@ -385,7 +524,7 @@ public enum MermaidParser {
         }
         // Guard against a duplicate/reused id clobbering an open block.
         if subgraphs[id] != nil { id = "\u{a7}sub\(anonCount)"; anonCount += 1 }
-        subgraphs[id] = Flowchart.Subgraph(id: id, label: label)
+        subgraphs[id] = Flowchart.Subgraph(id: id, label: labelText(label))
         order.append(id)
         return id
     }
@@ -545,7 +684,7 @@ public enum MermaidParser {
             var link = found.link
             var after = rest[found.range.upperBound...].drop(while: { $0 == " " })
             if after.hasPrefix("|"), let close = after.dropFirst().firstIndex(of: "|") {
-                link.label = String(after[after.index(after: after.startIndex)..<close])
+                link.label = labelText(String(after[after.index(after: after.startIndex)..<close]))
                 after = after[after.index(after: close)...]
             }
             joins.append(link)
@@ -614,9 +753,9 @@ public enum MermaidParser {
         func stripped(_ open: String, _ close: String) -> String? {
             guard rest.hasPrefix(open), rest.hasSuffix(close),
                   rest.count >= open.count + close.count else { return nil }
-            return String(rest.dropFirst(open.count).dropLast(close.count))
+            return labelText(String(rest.dropFirst(open.count).dropLast(close.count))
                 .trimmingCharacters(in: .whitespaces)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"")))
         }
 
         if rest.isEmpty {
@@ -669,7 +808,7 @@ public enum MermaidParser {
                 .trimmingCharacters(in: .whitespaces)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
             switch key {
-            case "label" where !value.isEmpty: label = value
+            case "label" where !value.isEmpty: label = labelText(value)
             case "shape": shape = shapeNames[value.lowercased()] ?? .rectangle
             default: break
             }

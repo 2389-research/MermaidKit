@@ -56,6 +56,12 @@ final class AdversarialInputTests: XCTestCase {
             "A@{", "A@{}", "A@{ shape: }", "A@{ shape: diam, label: \"unterminated }",
             "A@{ , , : , }", "A{{", "A}}", "A[[x]", "A[/", "A[/x\\", "A>", "A>x] & B>y] & ]]] & C", "a@ --- @b --- @", "x@x@x--x@x", "@--o@", "< < <--- o--o x", "o--> --> -->x", "] & ) & }","-.-.", "a-.-.b",
             "a--b.c--d", "a.-b", ".a --> -b",
+            // Statements, entities and tags: lone and doubled `;`, entities
+            // cut short, out of range or enormous, tags left open.
+            ";", ";;;;", "A;B;;C", "; --> ;", "A[\";\"];", "A[\"#quot\"]", "A[\"&#;\"]", "A[\"&#x;\"]",
+            "A[\"&#xFFFFFFF;\"]", "A[\"#99999999;\"]", "A[\"&#55296;\"]",
+            "A[\"#" + String(repeating: "a", count: 200) + ";\"]",
+            "A[\"<b\"]", "A[\"</b>\"]", "A[\"<span <b>>\"]", "A[\"<<b>>x<</b>>\"]",
             // Link tokens: heads, strokes and lengths, alone, mismatched or
             // unfinished.
             "A --o", "o--o", "x--x", "A o--x B", "A <--o B", "A <~~~> B", "A ~~ B", "~~~~~~",
