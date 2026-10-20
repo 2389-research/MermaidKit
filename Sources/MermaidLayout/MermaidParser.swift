@@ -594,6 +594,8 @@ public enum MermaidParser {
         var anonCount = 0
         // Subgraphs a later block reopened: their first direction stands.
         var reopened: Set<String> = []
+        // Every id a header names, so a synthesized one never takes it.
+        let namedSubgraphs = Set(body.compactMap { startsWithKeyword($0, "subgraph") ? subgraphHeader($0).id : nil })
         /// Whether `id` contains `other`, at any depth.
         func isAncestor(_ id: String, of other: String) -> Bool {
             var seen: Set<String> = [], frontier = subgraphs[id]?.childIDs ?? []
@@ -628,7 +630,7 @@ public enum MermaidParser {
             if startsWithKeyword(line, "subgraph") {
                 let known = subgraphOrder.count
                 let id = openSubgraph(line, into: &subgraphs, order: &subgraphOrder,
-                                      stack: stack, anonCount: &anonCount)
+                                      stack: stack, reserved: namedSubgraphs, anonCount: &anonCount)
                 let reopening = subgraphOrder.count == known
                 if reopening { reopened.insert(id) }
                 // A subgraph has one parent, its first: a reopened block never
@@ -723,43 +725,46 @@ public enum MermaidParser {
         return t == "TB" ? "TD" : t
     }
 
-    /// Parses a `subgraph …` header into a fresh subgraph definition and
-    /// registers it. Accepts `subgraph id[Label]`, `subgraph id`, a bare
-    /// `subgraph "Title"`, and an anonymous `subgraph` (synthesized id).
+    /// A `subgraph …` header's id and title: `subgraph id[Title]`,
+    /// `subgraph id`, `subgraph "Title"` (a one-word quoted title is the id
+    /// too, as in mermaid) or a bare `subgraph`. A nil id is one to
+    /// synthesize.
+    private static func subgraphHeader(_ line: String) -> (id: String?, label: String) {
+        let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
+        if rest.isEmpty { return (nil, "") }
+        if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
+            let id = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
+            let label = String(rest[rest.index(after: open)..<close])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+            return (id.isEmpty ? nil : id, label)
+        }
+        if rest.hasPrefix("\"") {
+            let label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return (!label.isEmpty && !label.contains(where: \.isWhitespace) ? label : nil, label)
+        }
+        return (rest, rest)
+    }
+
+    /// Opens the subgraph a `subgraph …` header names (see `subgraphHeader`):
+    /// a new definition, registered, or a closed one reopened.
     private static func openSubgraph(
         _ line: String,
         into subgraphs: inout [String: Flowchart.Subgraph],
         order: inout [String],
         stack: [String],
+        reserved: Set<String>,
         anonCount: inout Int
     ) -> String {
-        let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
-        /// A synthesized id (`§sub0`, `§sub1`, …) no subgraph has yet, even
-        /// one the source named in that spelling.
+        /// A synthesized id (`§sub0`, `§sub1`, …) no subgraph has, and no
+        /// header in the chart names (`reserved`), whatever the order.
         func fresh() -> String {
-            while subgraphs["\u{a7}sub\(anonCount)"] != nil { anonCount += 1 }
+            while subgraphs["\u{a7}sub\(anonCount)"] != nil || reserved.contains("\u{a7}sub\(anonCount)") { anonCount += 1 }
             defer { anonCount += 1 }
             return "\u{a7}sub\(anonCount)"
         }
-        var id: String
-        var label: String
-        if rest.isEmpty {
-            id = fresh()
-            label = ""
-        } else if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
-            id = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
-            label = String(rest[rest.index(after: open)..<close])
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
-            if id.isEmpty { id = fresh() }
-        } else if rest.hasPrefix("\"") {
-            label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-            // A quoted title without whitespace is the id too, as in mermaid
-            // (`subgraph "Anon"` is subgraph `Anon`, so `Anon --> C` targets
-            // it); one with whitespace gets a synthesized id.
-            id = !label.isEmpty && !label.contains(where: \.isWhitespace) ? label : fresh()
-        } else {
-            id = rest; label = rest
-        }
+        let header = subgraphHeader(line)
+        var id = header.id ?? fresh()
+        let label = header.label
         // A closed subgraph's id, used again, reopens it, as in mermaid: its
         // first title and direction stand and the block adds members. Only a
         // named id can (a synthesized one is always new); one still open (a

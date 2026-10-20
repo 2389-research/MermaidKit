@@ -531,10 +531,13 @@ final class ParserHonestyTests: XCTestCase {
     /// A synthesized subgraph id never collides with one the source named in
     /// the same spelling, so an untitled block is its own box, not a reopening.
     func testSynthesizedSubgraphIdsAreAlwaysNew() throws {
-        let c = try flow("subgraph \u{a7}sub0 [Named]\n  A\nend\nsubgraph\n  B\nend")
-        XCTAssertEqual(c.subgraphs.count, 2)
-        XCTAssertEqual(c.subgraphs.first { $0.label == "Named" }?.nodeIDs, ["A"])
-        XCTAssertEqual(c.subgraphs.first { $0.label == "" }?.nodeIDs, ["B"])
+        for source in ["subgraph \u{a7}sub0 [Named]\n  A\nend\nsubgraph\n  B\nend",
+                       "subgraph\n  B\nend\nsubgraph \u{a7}sub0 [Named]\n  A\nend"] {
+            let c = try flow(source)
+            XCTAssertEqual(c.subgraphs.count, 2, source)
+            XCTAssertEqual(c.subgraphs.first { $0.label == "Named" }?.nodeIDs, ["A"], source)
+            XCTAssertEqual(c.subgraphs.first { $0.label == "" }?.nodeIDs, ["B"], source)
+        }
     }
 
     /// A quoted subgraph title without whitespace is its id, as in mermaid,
