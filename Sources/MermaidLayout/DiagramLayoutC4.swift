@@ -64,6 +64,20 @@ extension DiagramLayoutEngine {
     /// same-channel labels fan out vertically. Pure geometry — the renderer
     /// only draws.
     public static func layout(_ diagram: C4Diagram, measure: DiagramTextMeasurer) -> C4Layout {
+        // Long labels cost height (#70). The canvas caps at 3999pt, so if the
+        // whole chart wouldn't fit at the generous line caps, lay it out again
+        // at tighter ones, down to 2 title / 3 description lines — every cut
+        // still ends in "…" — rather than let the canvas clip whole rows.
+        let caps: [(title: Int, detail: Int)] = [(4, 12), (3, 6), (2, 3)]
+        for cap in caps {
+            let (layout, height) = layout(diagram, measure: measure, titleCap: cap.title, detailCap: cap.detail)
+            if height <= 3999 || cap == caps.last! { return layout }
+        }
+        preconditionFailure("unreachable: the last cap always returns")
+    }
+
+    private static func layout(_ diagram: C4Diagram, measure: DiagramTextMeasurer,
+                               titleCap: Int, detailCap: Int) -> (C4Layout, height: CGFloat) {
         let margin: CGFloat = 16
         let titleHeight: CGFloat = diagram.title == nil ? 0 : Self.titleHeight(24, measure)
         // Boxes widen with the text, so a label wraps to the same lines at any
@@ -108,7 +122,10 @@ extension DiagramLayoutEngine {
             while last.count > 1, measure(last.joined(separator: " ") + "…", fontSize).width > textWidth {
                 last.removeLast()
             }
-            return lines.prefix(maxLines - 1) + [last.joined(separator: " ") + "…"]
+            // A lone word that fits but leaves no room for "…" gives up letters.
+            var kept = last.joined(separator: " ")
+            while kept.count > 1, measure(kept + "…", fontSize).width > textWidth { kept.removeLast() }
+            return lines.prefix(maxLines - 1) + [kept + "…"]
         }
 
         func stereotype(_ e: C4Diagram.Element) -> String {
@@ -143,11 +160,11 @@ extension DiagramLayoutEngine {
         }
 
         let contents: [Content] = diagram.elements.map { e in
-            let titleLines = wrap(e.label, fontSize: nodeFontSize, maxLines: 4)
+            let titleLines = wrap(e.label, fontSize: nodeFontSize, maxLines: titleCap)
             var details: [String] = []
             if let tech = e.technology, !tech.isEmpty { details.append("[\(tech)]") }
             if let d = e.descr, !d.isEmpty {
-                details += wrap(d, fontSize: labelFontSize, maxLines: 12)
+                details += wrap(d, fontSize: labelFontSize, maxLines: detailCap)
             }
             let titleCount = max(titleLines.count, 1)
             let height = pad + stereoH + titleGap + CGFloat(titleCount) * titleLineH
@@ -394,7 +411,7 @@ extension DiagramLayoutEngine {
 
         let width = min(max(finalWidth, 1), 3999)
         let height = min(max(canvasHeight, 1), 3999)
-        return C4Layout(size: CGSize(width: width, height: height),
-                        title: diagram.title, boxes: boxes, edges: edges)
+        return (C4Layout(size: CGSize(width: width, height: height),
+                         title: diagram.title, boxes: boxes, edges: edges), canvasHeight)
     }
 }

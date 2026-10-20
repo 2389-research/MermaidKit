@@ -808,6 +808,28 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "the box fits the canvas")
     }
 
+    /// Many boxes at the line caps would run the chart past the 3999pt canvas,
+    /// which clips whole rows; the layout tightens its caps instead, so every
+    /// box stays on the canvas and every cut still ends in "…".
+    func testManyLongC4BoxesStayOnTheCanvas() throws {
+        // Past both caps (4 title lines of ~21 chars, 12 description lines of
+        // ~26), within MermaidParser.maxTextSize.
+        let title = (1...25).map { "t\($0)" }.joined(separator: " ")
+        let descr = (1...80).map { "w\($0)" }.joined(separator: " ")
+        let elements = (0..<73).map { "    Container(c\($0), \"\(title)\", \"\", \"\(descr)\")" }.joined(separator: "\n")
+        guard case .c4(let c)? = MermaidParser.parse("C4Container\n" + elements) else { return XCTFail() }
+        let measure: DiagramTextMeasurer = { t, size in
+            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        XCTAssertEqual(layout.boxes.count, 73)
+        for box in layout.boxes {
+            XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "a box runs off the canvas")
+            XCTAssertTrue(box.detailLines.last?.hasSuffix("…") == true)
+            XCTAssertTrue(box.titleLines.last?.hasSuffix("…") == true)
+        }
+    }
+
     // MARK: gitGraph
 
     func testCherryPickAppearsOnTheTimeline() throws {

@@ -25,8 +25,9 @@
   diagram view following the color scheme" drew as "Drop-in diagram view
   following". Titles and descriptions now wrap in full and the box grows
   taller to hold them; boxes keep their uniform width. A label too long for
-  any box (past 4 title or 12 description lines) ends in "…" instead of
-  running off the canvas. (#70)
+  any box (past 4 title or 12 description lines) ends in "…", and a chart
+  that would still outgrow the canvas tightens those caps, so no box runs off
+  it. (#70)
 
 ## 2.7.0 — Diagrams in your app's font
 
