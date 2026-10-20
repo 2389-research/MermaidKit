@@ -406,6 +406,17 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "Status (pending; retry")
     }
 
+    /// Deciding whether an entity spells a break never recurses: a run of
+    /// `&lt;` once made decoding exponential (40 never finished).
+    func testManyEscapedAngleBracketsDecodeQuickly() throws {
+        let start = Date()
+        let run = String(repeating: "&lt;#lt;#60;&#60;", count: 1_000)
+        let c = try flow("A[\"\(run)br&gt;\"]")
+        // Every `<` decodes but the last, which spells `<br>` and stays as written.
+        XCTAssertEqual(c.nodes.first?.label, String(repeating: "<", count: 3_999) + "&#60;br>")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "decoding a long run of < entities should be linear")
+    }
+
     /// A flag after a Unicode id is still a flag, as any id is.
     func testFlagAfterAUnicodeID() throws {
         let c = try oneLine("flowchart LR; café>Flag; retry] --> B; C --> D")

@@ -476,7 +476,10 @@ public enum MermaidParser {
         "lsqb": "[", "rsqb": "]", "lcub": "{", "rcub": "}", "vert": "|", "excl": "!",
     ]
 
-    private static func decodingEntities(_ text: String) -> String {
+    /// `guardingBreaks` keeps an entity that would spell a line break as
+    /// written; the look-ahead deciding that decodes without it, so decoding
+    /// never recurses (it's linear: each `<` looks 256 characters ahead).
+    private static func decodingEntities(_ text: String, guardingBreaks: Bool = true) -> String {
         guard let pattern = entityPattern else { return text }
         let ns = text as NSString
         var out = ""
@@ -501,9 +504,15 @@ public enum MermaidParser {
             }
             // A `<` or `\` that would spell a line break (`&lt;br&gt;`, `#92;n`)
             // stays as written: layout reads `<br>` and `\n` as breaks.
-            let after = ns.substring(from: cursor)
-            let breaks = (decoded == "<" && spellsBreakTag(decodingEntities(String(after.prefix(256)))))
-                || (decoded == "\\" && after.hasPrefix("n"))
+            let breaks: Bool
+            if guardingBreaks, decoded == "<" || decoded == "\\" {
+                let after = ns.substring(with: NSRange(location: cursor, length: min(256, ns.length - cursor)))
+                breaks = decoded == "<"
+                    ? spellsBreakTag(decodingEntities(after, guardingBreaks: false))
+                    : after.hasPrefix("n")
+            } else {
+                breaks = false
+            }
             out += breaks ? ns.substring(with: match.range) : decoded ?? ns.substring(with: match.range)
         }
         out += ns.substring(from: cursor)
@@ -511,8 +520,7 @@ public enum MermaidParser {
     }
 
     /// Whether `<` + `text` opens a tag layout reads as a line break — the
-    /// same `<br\b[^>]*>` as `DiagramLayoutEngine.brLines`. (The caller
-    /// passes a bounded prefix, so many `&lt;` stay linear.)
+    /// same `<br\b[^>]*>` as `DiagramLayoutEngine.brLines`.
     private static func spellsBreakTag(_ text: String) -> Bool {
         guard let breakTag else { return false }
         let tag = "<" + text
