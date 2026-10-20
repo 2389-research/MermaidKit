@@ -734,35 +734,39 @@ public enum MermaidParser {
         anonCount: inout Int
     ) -> String {
         let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
+        /// A synthesized id (`§sub0`, `§sub1`, …) no subgraph has yet, even
+        /// one the source named in that spelling.
+        func fresh() -> String {
+            while subgraphs["\u{a7}sub\(anonCount)"] != nil { anonCount += 1 }
+            defer { anonCount += 1 }
+            return "\u{a7}sub\(anonCount)"
+        }
         var id: String
         var label: String
         if rest.isEmpty {
-            id = "\u{a7}sub\(anonCount)"; anonCount += 1
+            id = fresh()
             label = ""
         } else if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
             id = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
             label = String(rest[rest.index(after: open)..<close])
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
-            if id.isEmpty { id = "\u{a7}sub\(anonCount)"; anonCount += 1 }
+            if id.isEmpty { id = fresh() }
         } else if rest.hasPrefix("\"") {
             label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
             // A quoted title without whitespace is the id too, as in mermaid
             // (`subgraph "Anon"` is subgraph `Anon`, so `Anon --> C` targets
             // it); one with whitespace gets a synthesized id.
-            if !label.isEmpty, !label.contains(where: \.isWhitespace) {
-                id = label
-            } else {
-                id = "\u{a7}sub\(anonCount)"; anonCount += 1
-            }
+            id = !label.isEmpty && !label.contains(where: \.isWhitespace) ? label : fresh()
         } else {
             id = rest; label = rest
         }
         // A closed subgraph's id, used again, reopens it, as in mermaid: its
-        // first title and direction stand and the block adds members. An id
-        // still open (a subgraph inside itself) gets a fresh one instead.
+        // first title and direction stand and the block adds members. Only a
+        // named id can (a synthesized one is always new); one still open (a
+        // subgraph inside itself) gets a fresh id instead.
         if subgraphs[id] != nil {
             if !stack.contains(id) { return id }
-            id = "\u{a7}sub\(anonCount)"; anonCount += 1
+            id = fresh()
         }
         subgraphs[id] = Flowchart.Subgraph(id: id, label: labelText(label))
         order.append(id)
