@@ -64,7 +64,7 @@ function edgeOf(e, document) {
   };
 }
 
-export function normalizeMermaid(db, document) {
+export function normalizeMermaid(db, document, source = '') {
   const raw = db.getVertices();
   const vertices = [...(raw instanceof Map ? raw.values() : Object.values(raw))].map(v => ({
     id: v.id, label: visibleText(v.text ?? v.id, document), shape: shapeOf(v.type ?? 'default'),
@@ -72,9 +72,14 @@ export function normalizeMermaid(db, document) {
   const subgraphs = anonymized((db.getSubGraphs?.() ?? []).map(s => ({
     id: s.id, title: visibleText(s.title ?? '', document), members: [...s.nodes],
     direction: s.dir ? (s.dir === 'TD' ? 'TB' : s.dir) : null,
-  })), id => /^subGraph\d+$/.test(id));
+  })), id => /^subGraph\d+$/.test(id) && !declares(source, id));
   return { ok: true, direction: db.getDirection?.() ?? 'TB', vertices,
            edges: db.getEdges().map(e => edgeOf(e, document)), subgraphs };
+}
+
+/** Whether `source` names `id` in a `subgraph` statement itself (so it's not synthesized). */
+function declares(source, id) {
+  return new RegExp(`(^|[\\n;])\\s*subgraph\\s+${id}(?![\\w-])`).test(source);
 }
 
 /**
