@@ -13,8 +13,9 @@
 // baseline doesn't list, or a listed chart costs more than recorded: the
 // baseline only ever shrinks. --update records improvements (fixed charts
 // leave, cheaper ones lower their cost) and refuses to write while anything
-// got worse. --accept records everything as it stands, for a new baseline
-// or new corpus cases; its diff is the reviewer's to approve.
+// got worse, or while a listed chart has left the corpus (lost coverage
+// isn't a fix). --accept records everything as it stands, for a new
+// baseline or a changed corpus; its diff is the reviewer's to approve.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
@@ -47,8 +48,9 @@ function differences(m, k) {
   for (const id of kv.keys()) if (!mv.has(id)) out.push(`extra node ${JSON.stringify(id)}`);
   const count = es => es.reduce((m, e) => (m.set(key(e), (m.get(key(e)) ?? 0) + 1), m), new Map());
   const me = count(m.edges), ke = count(k.edges);
-  for (const [e, n] of me) if ((ke.get(e) ?? 0) < n) out.push(`missing edge ${e}`);
-  for (const [e, n] of ke) if ((me.get(e) ?? 0) < n) out.push(`extra edge ${e}`);
+  // One difference per missing or extra copy, so parallel edges count each.
+  for (const [e, n] of me) for (let c = ke.get(e) ?? 0; c < n; c++) out.push(`missing edge ${e}`);
+  for (const [e, n] of ke) for (let c = me.get(e) ?? 0; c < n; c++) out.push(`extra edge ${e}`);
   return out;
 }
 
@@ -107,14 +109,15 @@ const fixed = Object.keys(baseline).filter(h => inCorpus.has(h) && !divergent[h]
 const gone = Object.keys(baseline).filter(h => !inCorpus.has(h));
 for (const [, d] of fresh) show('NEW ', d);
 for (const [h, d] of worse) show(`WORSE (was cost ${baseline[h].cost}) `, d);
-const failed = fresh.length + worse.length > 0;
-if (failed) console.log(`\n${fresh.length} new and ${worse.length} worse divergences`);
+// A known chart leaving the corpus is lost coverage, not a fix.
+for (const h of gone) console.log(`\nGONE ${h} (${baseline[h].kind} #${baseline[h].index}): no longer in the corpus`);
+const failed = fresh.length + worse.length + gone.length > 0;
+if (failed) console.log(`\n${fresh.length} new, ${worse.length} worse and ${gone.length} gone divergences`);
 if (fixed.length || better.length)
   console.log(`${fixed.length} known divergences now agree and ${better.length} improved` +
               (update ? '' : ' — shrink the baseline with --update'));
-if (gone.length) console.log(`${gone.length} baseline charts are no longer in the corpus`);
 if (update) {
-  if (failed) { console.log('baseline not written: fix what got worse, or --accept it for review'); process.exit(1); }
+  if (failed) { console.log('baseline not written: fix what got worse or went missing, or --accept it for review'); process.exit(1); }
   write(Object.entries(divergent));
 }
 process.exit(failed ? 1 : 0);

@@ -36,21 +36,24 @@ ends the run.
 
 **The baseline** (`known-divergences.json`) records each of today's
 divergences by the hash of the chart, with its **cost**: how many things a
-reader sees differently (a missing node, a wrong label, an extra edge, the
-direction). A rejected chart costs everything mermaid drew plus its direction,
-so turning a reject into a nearly right drawing counts as progress.
+reader sees differently (a missing node, a wrong label, each missing or extra
+edge, parallel copies counted one by one, the direction). A rejected chart
+costs everything mermaid drew plus its direction, so turning a reject into a
+nearly right drawing counts as progress.
 
 CI fails when a chart diverges that the baseline doesn't list, or when a
-listed chart costs more than recorded. So a parser change can't quietly break
-a chart that read right, or make a wrong one wronger. After a fix, `--update`
-removes the charts that now agree and lowers the costs that dropped; it
-refuses to write while anything got worse. The baseline only ever shrinks: the
-same ratchet as the grid-alignment floors and the draw-vs-scene conformance
-ceilings.
+listed chart costs more than recorded, or a listed chart has left the corpus
+(lost coverage isn't a fix). So a parser change can't quietly break a chart
+that read right, or make a wrong one wronger. After a fix, `--update` removes
+the charts that now agree and lowers the costs that dropped; it refuses to
+write while anything got worse or went missing. The baseline only ever
+shrinks: the same ratchet as the grid-alignment floors and the draw-vs-scene
+conformance ceilings.
 
 `--accept` writes every divergence as it stands. Use it only to start a
 baseline, or when adding a case to `cases.json` that MermaidKit doesn't read
-right yet. The diff then shows what was accepted, and the reviewer approves it.
+right yet, or when the corpus changes on purpose. The diff then shows what was
+accepted, and the reviewer approves it.
 
 **Comparison rules** live in `normalize.mjs` (mermaid's side) and
 `Tests/MermaidLayoutTests/MermaidOracleDump.swift` (MermaidKit's side). Shapes
