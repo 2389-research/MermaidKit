@@ -46,7 +46,7 @@ extension DiagramLayoutEngine {
         var boxSizes: [String: CGSize] = [:]
         for cls in diagram.classes {
             let members = cls.attributes + cls.methods
-            var width = measure(cls.name, nodeFontSize).width + compartmentPadX * 2 + 8
+            var width = measure(cls.label, nodeFontSize).width + compartmentPadX * 2 + 8
             for member in members {
                 width = max(width, measure(member, labelFontSize).width + compartmentPadX * 2)
             }
@@ -76,7 +76,7 @@ extension DiagramLayoutEngine {
         let boxes = diagram.classes.compactMap { cls -> ClassLayout.Box? in
             guard let frame = frames[cls.name] else { return nil }
             return ClassLayout.Box(
-                name: cls.name, attributes: cls.attributes, methods: cls.methods,
+                name: cls.name, label: cls.label, attributes: cls.attributes, methods: cls.methods,
                 frame: frame, nameHeight: compartmentNameHeight, rowHeight: compartmentRowHeight
             )
         }

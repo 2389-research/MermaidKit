@@ -55,7 +55,7 @@ per type. Support matrix in `README.md`; gallery in `docs/GALLERY.md`.
 | Charts & data | pie, xychart, quadrant, radar, sankey, packet, treemap, venn. |
 | Trees & hierarchies | mindmap, kanban, treeView, ishikawa (fishbone), cynefin, wardley. |
 | Timeline & process | gantt, timeline, journey. |
-| Per-type depth | Each type parses its real syntax, not a stub — e.g. sequence supports typed participants, `box` groups, 10 arrow tokens (including bidirectional `<<->>`/`<<-->>`), nested combined fragments (loop/alt/opt/par/critical/break) + activation bars + create/destroy + autonumber; class supports 7 relation kinds (generics like `Box~T~` parse but display as written, not as `Box<T>`); ER supports four cardinalities and identifying/non-identifying relations. |
+| Per-type depth | Each type parses its real syntax, not a stub — e.g. sequence supports typed participants, `box` groups, 10 arrow tokens (including bidirectional `<<->>`/`<<-->>`), nested combined fragments (loop/alt/opt/par/critical/break) + activation bars + create/destroy + autonumber; class supports 7 relation kinds (generics like `Box~T~` read `Box<T>`, as in mermaid); ER supports four cardinalities and identifying/non-identifying relations. |
 | Header nuances | `stateDiagram` matches both bare and `-v2`; `C4*` matches on the `C4` stem; `-beta` types match on their stem; `block-beta` requires its full header. |
 
 ### G2 — Flowchart layout engine (layered / Sugiyama)

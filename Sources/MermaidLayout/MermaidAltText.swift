@@ -33,7 +33,7 @@ public enum MermaidAltText {
                 "\(slices.joined(separator: ", "))\(d.slices.count > 4 ? ", and \(d.slices.count - 4) more" : "")."
         case .classDiagram(let d):
             return "Class diagram with \(count(d.classes.count, "class")) and " +
-                "\(count(d.relations.count, "relation")): \(list(d.classes.map(\.name)))."
+                "\(count(d.relations.count, "relation")): \(list(d.classes.map(\.label)))."
         case .er(let d):
             return "Entity-relationship diagram with \(count(d.entities.count, "entity", "entities")) and " +
                 "\(count(d.relations.count, "relation")): \(list(d.entities.map(\.name)))."

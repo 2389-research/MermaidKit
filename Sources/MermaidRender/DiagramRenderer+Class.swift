@@ -47,7 +47,7 @@ extension DiagramRenderer {
         for box in layout.boxes {
             fillStrokeBox(box.frame, radius: 4, fill: fill, stroke: stroke, in: context)
 
-            drawText(box.name,
+            drawText(box.label,
                      center: CGPoint(x: box.frame.midX, y: box.frame.minY + box.nameHeight / 2),
                      size: 12, weight: .semibold, color: theme.ink, in: context)
 
