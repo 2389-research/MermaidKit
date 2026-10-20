@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **`DiagramTheme.fontFamily`** sets and measures every label in a chosen
+  family (`DiagramTheme(prefersDark: false, fontFamily: "Inter")`), for the
+  raster renders (`MermaidView`, `image`, `pdfData`, `attachmentString`). Body
+  text takes the family's regular face where it has no medium, so text never
+  draws wider than it was measured. A family the device doesn't have is the
+  system font, byte for byte, on Apple platforms and Linux. It's part of the
+  theme's cache fingerprint. `scene`/`svg` stay in the system font. Additive;
+  the default is unchanged. (#77)
+
 ## 2.6.0 — Flowcharts read the way mermaid reads them
 
 Flowcharts now read like mermaid.js in many more cases, and every rule is

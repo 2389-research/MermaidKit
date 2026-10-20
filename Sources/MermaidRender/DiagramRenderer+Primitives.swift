@@ -14,10 +14,54 @@ import UIKit
 
 extension DiagramRenderer {
 
+    /// The render's `DiagramTheme.fontFamily`, set by `renderPlan` around layout
+    /// and drawing: every label is measured and drawn in it. Nil is the system
+    /// font.
+    @TaskLocal static var fontFamily: String?
+
     #if canImport(AppKit) || canImport(UIKit)
     static func font(_ size: CGFloat, weight: PlatformFont.Weight = .regular) -> CTFont {
-        PlatformFont.systemFont(ofSize: size, weight: weight) as CTFont
+        guard let family = fontFamily else { return PlatformFont.systemFont(ofSize: size, weight: weight) as CTFont }
+        let key = "\(family)|\(size)|\(weight.rawValue)" as NSString
+        if let cached = fontCache.object(forKey: key) { return cached.font }
+        let font = familyFont(family, size: size, weight: weight)
+            ?? PlatformFont.systemFont(ofSize: size, weight: weight) as CTFont
+        fontCache.setObject(CachedFont(font), forKey: key)
+        return font
     }
+
+    /// `family` at `size` and `weight` — for body text without that face, its
+    /// regular one (the nearest match could be a bold for a medium, wider than
+    /// the layout measured); nil when this device doesn't have
+    /// the family (a descriptor match would substitute another one).
+    private static func familyFont(_ family: String, size: CGFloat, weight: PlatformFont.Weight) -> CTFont? {
+        func face(_ weight: CGFloat) -> CTFont? {
+            let descriptor = CTFontDescriptorCreateWithAttributes([
+                kCTFontFamilyNameAttribute: family,
+                kCTFontTraitsAttribute: [kCTFontWeightTrait: weight],
+            ] as CFDictionary)
+            let font = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+            let resolved = CTFontCopyFamilyName(font) as String
+            return resolved.caseInsensitiveCompare(family) == .orderedSame ? font : nil
+        }
+        func weightOf(_ font: CTFont) -> CGFloat {
+            let traits = CTFontCopyTraits(font) as NSDictionary
+            return (traits[kCTFontWeightTrait] as? NSNumber).map { CGFloat(truncating: $0) } ?? 0
+        }
+        guard let font = face(weight.rawValue) else { return nil }
+        // Body text in a medium takes the regular face over a bold; emphasis
+        // (semibold and up) may take the nearest heavier one.
+        let body = weight.rawValue < PlatformFont.Weight.semibold.rawValue
+        guard weight != .regular, body, weightOf(font) > weight.rawValue + 0.05 else { return font }
+        return face(PlatformFont.Weight.regular.rawValue) ?? font
+    }
+
+    private final class CachedFont { let font: CTFont; init(_ font: CTFont) { self.font = font } }
+    nonisolated(unsafe) private static let fontCache: NSCache<NSString, CachedFont> = {
+        let cache = NSCache<NSString, CachedFont>()
+        cache.countLimit = 256
+        return cache
+    }()
 
     /// Memoizes single-line text metrics by `(string, size, weight)`. Layout
     /// measures every label and the multi-line draw path measures again for
@@ -77,7 +121,7 @@ extension DiagramRenderer {
     /// Measures a single visual line (no line-break handling).
     private static func measureLine(_ text: String, size: CGFloat, weight: PlatformFont.Weight) -> CGSize {
         #if canImport(AppKit) || canImport(UIKit)
-        let key = "\(size)|\(weight.rawValue)|\(text)" as NSString
+        let key = "\(fontFamily ?? "")|\(size)|\(weight.rawValue)|\(text)" as NSString
         if let cached = measureCache.size(forKey: key) { return cached }
         let attributed = NSAttributedString(string: text, attributes: [
             kCTFontAttributeName as NSAttributedString.Key: font(size, weight: weight),

@@ -11,7 +11,7 @@ import CoreText
 import UIKit
 #endif
 
-/// The full color surface a Mermaid diagram render needs — the sole external
+/// The colors (and font family) a Mermaid diagram render needs — the sole external
 /// seam. Host apps build one (or use the light/dark presets).
 public struct DiagramTheme: Sendable {
     /// Primary text and stroke color (node borders, arrows, main labels).
@@ -33,6 +33,13 @@ public struct DiagramTheme: Sendable {
     /// Cycled by index via `categoricalColor(_:)`. Override to re-skin every
     /// diagram type at once.
     public let palette: [PlatformColor]
+    /// The font family every label is set in (`"Inter"`, `"Avenir Next"`), at
+    /// the weights the renderer asks for; nil, or a family this device
+    /// doesn't have, is the system font. Labels are measured in it too, so
+    /// boxes fit the text as drawn. Raster renders only (`MermaidView`,
+    /// `image`, `pdfData`, `attachmentString`): `scene`/`svg` stay in the
+    /// system font, since `RenderScene` carries no font.
+    public let fontFamily: String?
 
     /// The default categorical palette: six hues tuned to stay distinct on
     /// both light and dark canvases.
@@ -123,19 +130,22 @@ public struct DiagramTheme: Sendable {
     }
 
     /// Memberwise init for a fully custom theme; parameters mirror the stored
-    /// properties. `palette` defaults to `defaultPalette`.
+    /// properties. `palette` defaults to `defaultPalette`, `fontFamily` to the
+    /// system font.
     public init(ink: PlatformColor, secondaryTextColor: PlatformColor,
                 tertiaryTextColor: PlatformColor, canvas: PlatformColor,
                 accent: PlatformColor, hairline: PlatformColor, prefersDark: Bool,
-                palette: [PlatformColor] = DiagramTheme.defaultPalette) {
+                palette: [PlatformColor] = DiagramTheme.defaultPalette, fontFamily: String? = nil) {
         self.ink = ink; self.secondaryTextColor = secondaryTextColor
         self.tertiaryTextColor = tertiaryTextColor; self.canvas = canvas
         self.accent = accent; self.hairline = hairline; self.prefersDark = prefersDark
         self.palette = palette
+        self.fontFamily = fontFamily
         let all = Self.resolveAll(
             prefersDark: prefersDark,
             colors: [ink, secondaryTextColor, tertiaryTextColor, canvas, accent, hairline] + palette)
-        self.fingerprint = all.fingerprint
+        // The family is part of the cache key; the system font adds nothing.
+        self.fingerprint = all.fingerprint + (fontFamily.map { "|font:\($0)" } ?? "")
         let r = all.resolved
         self.resolved = Resolved(
             ink: r[0], secondaryText: r[1], tertiaryText: r[2],
@@ -146,7 +156,7 @@ public struct DiagramTheme: Sendable {
     /// The built-in preset: a near-black (light) or near-white (dark) ink
     /// ramp at 100/55/38% alpha, white or near-black canvas, the system
     /// accent color, 12% hairlines, and the default palette.
-    public init(prefersDark: Bool) {
+    public init(prefersDark: Bool, fontFamily: String? = nil) {
         let fg: UInt32 = prefersDark ? 0xF2F2F4 : 0x1D1D1F
         #if canImport(AppKit)
         let sys = PlatformColor.controlAccentColor
@@ -160,7 +170,7 @@ public struct DiagramTheme: Sendable {
             canvas: rgbStatic(prefersDark ? 0x1B1B1D : 0xFFFFFF),
             accent: sys,
             hairline: rgbStatic(prefersDark ? 0xFFFFFF : 0x000000, alpha: 0.12),
-            prefersDark: prefersDark)
+            prefersDark: prefersDark, fontFamily: fontFamily)
     }
 }
 #endif
