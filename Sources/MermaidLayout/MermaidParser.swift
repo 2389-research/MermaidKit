@@ -263,10 +263,11 @@ public enum MermaidParser {
     /// statement's start runs to the end of the line, as it does on a line
     /// of its own.
     static func flowchartStatements(_ line: String) -> [String] {
-        /// A node's text: closed by its own delimiter, nesting counted for that
-        /// pair only (`[[x]]`, `((x))`), as `parseNodeToken` reads a shape by
-        /// its outer delimiters — `(` inside `[…]` is text.
-        struct Shape { let open: Character?, close: Character; var depth = 1 }
+        /// A node's text, as mermaid's lexer reads it: it ends at the first of
+        /// its shape's closers (`]]` for `[[`, `)]` for `[(`, `/]` or `\]`
+        /// for `[/`…, from `shapeDelimiters`), with no nesting — `(`, `)` or
+        /// another `[` inside `[…]` is text.
+        struct Shape { let closers: [[Character]] }
         enum Mode {
             case statement
             case string(returnTo: Shape?)       // the node text to resume, if any
@@ -283,7 +284,20 @@ public enum MermaidParser {
         // asked: by then it holds a `#word`, so its first word is settled.
         var styled: Bool?
         var i = 0
-        let closer: [Character: Character] = ["[": "]", "(": ")", "{": "}"]
+        /// The shape whose opener starts at `at` (the longest that matches),
+        /// and the opener's length.
+        func shape(at: Int) -> (Shape, Int)? {
+            func starts(_ s: [Character], _ at: Int) -> Bool {
+                at + s.count <= chars.count && Array(chars[at..<at + s.count]) == s
+            }
+            let opens = shapeDelimiters.map { Array($0.open) }.filter { $0 != [">"] && starts($0, at) }
+            guard let open = opens.max(by: { $0.count < $1.count }) else { return nil }
+            let closers = shapeDelimiters.filter { Array($0.open) == open }.map { Array($0.close) }
+            return (Shape(closers: closers), open.count)
+        }
+        func closes(_ shape: Shape, at: Int) -> Int? {
+            shape.closers.first { at + $0.count <= chars.count && Array(chars[at..<at + $0.count]) == $0 }?.count
+        }
 
         /// Whether `chars[at...]` is a whole link made of `c` — mermaid's
         /// `--+[-xo>]` / `==+[=xo>]`: three or more (`---`, `====`), or two or
@@ -304,15 +318,14 @@ public enum MermaidParser {
             switch mode {
             case .string(let shape):
                 if c == "\"" { mode = shape.map { .shape($0) } ?? .statement }
-            case .shape(var shape):
+            case .shape(let shape):
                 if c == "\"" {
                     mode = .string(returnTo: shape)
-                } else if c == shape.open {
-                    shape.depth += 1
-                    mode = .shape(shape)
-                } else if c == shape.close {
-                    shape.depth -= 1
-                    mode = shape.depth > 0 ? .shape(shape) : .statement
+                } else if let length = closes(shape, at: i) {
+                    current += String(chars[i..<i + length])
+                    i += length
+                    mode = .statement
+                    continue
                 }
             case .pipe:
                 if c == "|" { mode = .statement }
@@ -357,11 +370,18 @@ public enum MermaidParser {
                         continue
                     }
                 case "\"": mode = .string(returnTo: nil)
-                case "[", "(", "{": mode = .shape(Shape(open: c, close: closer[c]!))
+                case "[", "(", "{":
+                    if let (shape, length) = shape(at: i) {
+                        current += String(chars[i..<i + length])
+                        blank = false
+                        i += length
+                        mode = .shape(shape)
+                        continue
+                    }
                 case ">":
                     // `A>flag]` (asymmetric) — not a link's arrowhead.
                     if let prev = current.last, isIDCharacter(prev) {
-                        mode = .shape(Shape(open: nil, close: "]"))
+                        mode = .shape(Shape(closers: [["]"]]))
                     }
                 case "|": mode = .pipe
                 case "-", "=":
@@ -482,13 +502,25 @@ public enum MermaidParser {
             // A `<` or `\` that would spell a line break (`&lt;br&gt;`, `#92;n`)
             // stays as written: layout reads `<br>` and `\n` as breaks.
             let after = ns.substring(from: cursor)
-            let breaks = (decoded == "<" && after.lowercased().hasPrefix("br"))
+            let breaks = (decoded == "<" && spellsBreakTag(decodingEntities(String(after.prefix(256)))))
                 || (decoded == "\\" && after.hasPrefix("n"))
             out += breaks ? ns.substring(with: match.range) : decoded ?? ns.substring(with: match.range)
         }
         out += ns.substring(from: cursor)
         return out
     }
+
+    /// Whether `<` + `text` opens a tag layout reads as a line break — the
+    /// same `<br\b[^>]*>` as `DiagramLayoutEngine.brLines`. (The caller
+    /// passes a bounded prefix, so many `&lt;` stay linear.)
+    private static func spellsBreakTag(_ text: String) -> Bool {
+        guard let breakTag else { return false }
+        let tag = "<" + text
+        return breakTag.firstMatch(in: tag, range: NSRange(location: 0, length: 1 + (text as NSString).length))?
+            .range.location == 0
+    }
+
+    private static let breakTag = try? NSRegularExpression(pattern: #"<br\b[^>]*>"#, options: .caseInsensitive)
 
     /// The character a numeric reference names, as a browser reads it:
     /// 0x80–0x9F as Windows-1252 (`#133;` is "…"), and nothing for a control
@@ -930,23 +962,25 @@ public enum MermaidParser {
         if rest.hasPrefix("@{"), rest.hasSuffix("}") {
             return shapeDataNode(id: id, body: rest.dropFirst(2).dropLast())
         }
-        // Longest delimiters first, so `{{` isn't read as `{` with a brace in
-        // the label.
-        let shapes: [(open: String, close: String, shape: Flowchart.NodeShape)] = [
-            ("(((", ")))", .doubleCircle), ("((", "))", .circle), ("([", "])", .stadium),
-            ("[(", ")]", .cylinder), ("[[", "]]", .subroutine), ("{{", "}}", .hexagon),
-            ("[/", "/]", .parallelogram), ("[\\", "\\]", .parallelogramAlt),
-            ("[/", "\\]", .trapezoid), ("[\\", "/]", .trapezoidAlt),
-            ("[", "]", .rectangle), ("(", ")", .rounded), ("{", "}", .diamond),
-            (">", "]", .asymmetric),
-        ]
-        for (open, close, shape) in shapes {
+        for (open, close, shape) in shapeDelimiters {
             if let label = stripped(open, close) {
                 return Flowchart.Node(id: id, label: label, shape: shape)
             }
         }
         return nil
     }
+
+    /// Each classic shape's delimiters, longest first so `{{` isn't read as
+    /// `{` with a brace in the label. `parseNodeToken` reads a shape by
+    /// them, and `flowchartStatements` ends a node's text at them.
+    static let shapeDelimiters: [(open: String, close: String, shape: Flowchart.NodeShape)] = [
+        ("(((", ")))", .doubleCircle), ("((", "))", .circle), ("([", "])", .stadium),
+        ("[(", ")]", .cylinder), ("[[", "]]", .subroutine), ("{{", "}}", .hexagon),
+        ("[/", "/]", .parallelogram), ("[\\", "\\]", .parallelogramAlt),
+        ("[/", "\\]", .trapezoid), ("[\\", "/]", .trapezoidAlt),
+        ("[", "]", .rectangle), ("(", ")", .rounded), ("{", "}", .diamond),
+        (">", "]", .asymmetric),
+    ]
 
     /// `id@{ shape: diam, label: "Decide" }` — mermaid's newer shape syntax.
     /// Named shapes map onto the model's; ones it has no case for (and an

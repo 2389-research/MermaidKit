@@ -396,11 +396,12 @@ final class ParserHonestyTests: XCTestCase {
                        ["A>B ", "C>D ", "E>F solid; text", "G>H thick; text", "I>J "])
     }
 
-    /// A node's text ends at its own delimiter only: `)` or `(` inside
-    /// `[…]` is text, so its `;` is too; `[[…]]` and `((…))` nest.
+    /// A node's text ends at its shape's own closer, the first one, as
+    /// mermaid's lexer reads it: `)`, `(` or another `[` inside `[…]` is
+    /// text, so its `;` is too; `[[…]]` ends at `]]`, `[(…)]` at `)]`.
     func testOnlyTheShapesOwnDelimiterEndsNodeText() throws {
-        let c = try oneLine("graph LR; A[option A); retry] --> B; B{a] b; c} --> C; C[Status (pending; retry] --> D; D[[x; y]] --> E((p; q))")
-        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C", "C>D", "D>E"])
+        let c = try oneLine("graph LR; A[option A); retry] --> B; B{a] b; c} --> C; C[Status (pending; retry] --> D; D[[x; y]] --> E((p; q)); E --> F[Array[index; retry]; F --> G[(db; x)]")
+        XCTAssertEqual(c.edges.map { "\($0.from)>\($0.to)" }, ["A>B", "B>C", "C>D", "D>E", "E>F", "F>G"])
         XCTAssertEqual(c.nodes.first { $0.id == "A" }?.label, "option A); retry")
         XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "Status (pending; retry")
     }
@@ -415,9 +416,10 @@ final class ParserHonestyTests: XCTestCase {
     /// written instead of breaking the label: layout reads `<br>` and `\n` as
     /// breaks. A real `<br>` still breaks.
     func testEscapedLineBreaksDontBreak() throws {
-        let c = try flow("A[\"show &lt;br&gt; and #lt;BR/#gt; and #92;n literally\"] --> B[\"a<br>b\"]")
+        let c = try flow("A[\"show &lt;br&gt; and #lt;BR/#gt; and #92;n literally\"] --> B[\"a<br>b\"] --> C[\"&lt;brilliant&gt;\"]")
         let label = try XCTUnwrap(c.nodes.first { $0.id == "A" }?.label)
         XCTAssertEqual(DiagramLayoutEngine.brLines(label).count, 1, label)
+        XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "<brilliant>", "only a break tag stays encoded")
         XCTAssertEqual(DiagramLayoutEngine.brLines(c.nodes.first { $0.id == "B" }?.label ?? "").count, 2)
     }
 
