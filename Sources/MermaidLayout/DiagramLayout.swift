@@ -635,7 +635,10 @@ public struct GitGraphLayout: Sendable {
 public struct ClassLayout: Sendable {
     /// A class box: name compartment on top, then attribute and method rows.
     public struct Box: Sendable {
+        /// The class id (scene node id); the header draws `label`.
         public let name: String
+        /// The header text: `Box<T>` for `class Box~T~`.
+        public let label: String
         public let attributes: [String]
         public let methods: [String]
         public let frame: CGRect

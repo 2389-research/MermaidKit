@@ -77,10 +77,23 @@ final class LinuxRenderTests: XCTestCase {
         XCTAssertEqual(Array(data.prefix(4)), Array("%PDF".utf8))
     }
 
+    /// Bold draws bold: emphasis measures (and so draws) wider than body
+    /// text, in the system font and in a chosen family. Silica took
+    /// `DejaVu Sans:bold` as a family name, so bold was always regular.
+    func testBoldIsBold() {
+        for family in [nil, "DejaVu Serif"] as [String?] {
+            let (regular, bold) = DiagramRenderer.$fontFamily.withValue(family) {
+                (DiagramRenderer.measure("Start here", size: 13, weight: .regular).width,
+                 DiagramRenderer.measure("Start here", size: 13, weight: .bold).width)
+            }
+            XCTAssertGreaterThan(bold, regular * 1.05, "bold in \(family ?? "the system font")")
+        }
+    }
+
     /// `DiagramTheme.fontFamily` on Linux: FontConfig answers a family it
     /// lacks with a substitute, so a missing family must still render
     /// byte-identically to the system font, and a family it has sets every
-    /// label, every weight, in that one face (measured as drawn).
+    /// label in its own faces (measured as drawn).
     func testFontFamilyResolvesOrFallsBackExactly() throws {
         let src = "flowchart LR\n  A[Start here] --> B{Decide?}\n  B -->|yes| C[Ship it]"
         func png(_ family: String?) throws -> Data {
@@ -93,7 +106,7 @@ final class LinuxRenderTests: XCTestCase {
                 DiagramRenderer.measure("Start here", size: 13, weight: weight).width
             }
         }
-        // Monospaced: 10 glyphs at 0.602em; one face for every weight.
+        // Monospaced, bold included: 10 glyphs at 0.602em.
         XCTAssertEqual(widths[0], widths[1], accuracy: 0.01)
         XCTAssertEqual(widths[0], 13 * 10 * 0.602, accuracy: 0.5)
     }

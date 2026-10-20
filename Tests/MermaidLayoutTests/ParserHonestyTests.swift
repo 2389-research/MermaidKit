@@ -1032,3 +1032,122 @@ extension ParserHonestyTests {
         XCTAssertEqual(s.participants.first(where: { $0.id == "Q" })?.kind, .queue)
     }
 }
+
+// MARK: class generics
+
+/// mermaid reads `~T~` as a generic: `Box~T~` is the class `Box` (relations
+/// to `Box` and `Box~T~` meet the same box) drawn as `Box<T>`, and member
+/// text pairs its tildes outside-in, so `List~List~int~~` reads
+/// `List<List<int>>`. Tildes that don't pair stay as written.
+extension ParserHonestyTests {
+    private func classes(_ body: String) throws -> ClassDiagram {
+        guard case .classDiagram(let d)? = MermaidParser.parse("classDiagram\n" + body) else {
+            throw XCTSkip("parse failed: \(body)")
+        }
+        return d
+    }
+
+    func testGenericClassNamesReadAsAngleBrackets() throws {
+        let d = try classes("""
+        class Box~T~ {
+            +List~int~ items
+            +get(i: int) T
+            +map~U~(f) Box~U~
+        }
+        class Map~K, V~
+        """)
+        XCTAssertEqual(d.classes.map(\.name), ["Box", "Map"], "the class id is the name without its generic")
+        XCTAssertEqual(d.classes.map(\.generic), ["T", "K, V"])
+        XCTAssertEqual(d.classes.map(\.label), ["Box<T>", "Map<K, V>"])
+        XCTAssertEqual(d.classes[0].attributes, ["+List<int> items"])
+        XCTAssertEqual(d.classes[0].methods, ["+get(i: int) T", "+map<U>(f) Box<U>"])
+    }
+
+    func testGenericAndBareNamesAreOneClass() throws {
+        let d = try classes("""
+        class Box~T~
+        Box~T~ --> Item
+        Box --> Item
+        Box~T~ : +peek() T
+        Box~U~ <|-- Crate
+        """)
+        XCTAssertEqual(d.classes.map(\.name), ["Box", "Item", "Crate"], "no second `Box~T~` box")
+        XCTAssertEqual(d.relations.map(\.from), ["Box", "Box", "Crate"])
+        XCTAssertEqual(d.relations.map(\.to), ["Item", "Item", "Box"])
+        XCTAssertEqual(d.classes[0].methods, ["+peek() T"], "colon shorthand on a generic name once vanished")
+        XCTAssertEqual(d.classes[0].label, "Box<T>", "the first generic written stays")
+    }
+
+    func testGenericWrittenAfterABareMentionIsKept() throws {
+        let d = try classes("Box --> Item\nclass Box~T~")
+        XCTAssertEqual(d.classes.map(\.label), ["Box<T>", "Item"])
+        let empty = try classes("class Box~~")
+        XCTAssertEqual(empty.classes.map(\.label), ["Box"])
+    }
+
+    func testMemberTildesPairAsMermaidPairsThem() throws {
+        let d = try classes("""
+        class Odd {
+            +List~List~int~~ xs
+            +Map~K, V~ m
+            ~List~int~ pkg
+            +a~b
+            +c~d~e
+            +f~g~h~i~j
+            +List~List~int~ ys
+            +Map~K,List~V~~ n
+            +a~b,c~d,e~f
+            +get() List~Map~K~~
+            +put(Map~K, V~ m, List~T~ l) Pair~A, B~
+        }
+        """)
+        XCTAssertEqual(d.classes[0].attributes, [
+            "+List<List<int>> xs",
+            "+Map<K, V> m",
+            "~List<int> pkg",       // `~` visibility is not a generic
+            "+a~b",                 // a lone tilde stays
+            "+c<d>e",
+            "+f<g<h>i>j",           // outermost pair first, as mermaid does
+            "+List<List~int> ys",   // odd count: the middle one stays
+            "+Map~K,List<V~> n",    // mermaid's comma split, kept faithfully
+            "+a<b,c>d,e~f",         // never dropped (mermaid loses `a~b,`)
+        ])
+        XCTAssertEqual(d.classes[0].methods, [
+            "+get() List<Map<K>>",
+            "+put(Map<K, V> m, List<T> l) Pair<A, B>",
+        ])
+    }
+
+    func testGenericClassDrawsAndNarratesAsAngleBrackets() throws {
+        let source = "classDiagram\nclass Box~T~ {\n +List~int~ items\n}\nBox --> Item"
+        guard case .classDiagram(let d)? = MermaidParser.parse(source) else { return XCTFail() }
+        let measure: DiagramTextMeasurer = { t, size in
+            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let layout = DiagramLayoutEngine.layout(d, measure: measure)
+        XCTAssertEqual(layout.boxes.map(\.label), ["Box<T>", "Item"])
+        XCTAssertEqual(layout.edges.count, 1)
+        let theme = RenderTheme(
+            ink: DiagramColor(hex: 0x000000), accent: DiagramColor(hex: 0x5B8FF9),
+            canvas: DiagramColor(hex: 0xFFFFFF), hairline: DiagramColor(hex: 0x000000),
+            secondaryText: DiagramColor(hex: 0x000000), tertiaryText: DiagramColor(hex: 0x000000),
+            palette: [DiagramColor(hex: 0x5B8FF9)])
+        let scene = try XCTUnwrap(RenderScene.from(.classDiagram(d), theme: theme, measure: measure))
+        let texts = scene.elements.compactMap { element -> String? in
+            if case .text(let t) = element { return t.string } else { return nil }
+        }
+        XCTAssertTrue(texts.contains("Box<T>"), "drawn texts: \(texts)")
+        XCTAssertTrue(texts.contains("+List<int> items"), "drawn texts: \(texts)")
+        XCTAssertFalse(texts.contains { $0.contains("~") }, "drawn texts: \(texts)")
+        let alt = try XCTUnwrap(MermaidAltText.describe(source: source))
+        XCTAssertTrue(alt.contains("Box<T>"), alt)
+    }
+
+    /// Pairing tildes is linear: each pair once rescanned the whole member.
+    func testLongTildeRunsPairQuickly() throws {
+        let start = Date()
+        let d = try classes("A : +" + String(repeating: "~", count: 30_000) + String(repeating: "~,", count: 9_000))
+        XCTAssertEqual(d.classes.first?.attributes.first?.count, 48_001, "every character stays")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "tilde pairing should be linear")
+    }
+}
