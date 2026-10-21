@@ -31,6 +31,15 @@
   raster image included, through one new `DiagramLayoutEngine.hasLineBreak`.
   Raster output is otherwise byte-identical. (#71)
 
+- **C4 boxes keep every word of their title and description.** The wrap
+  stopped at its last line and dropped the words after it, so "Drop-in
+  diagram view following the color scheme" drew as "Drop-in diagram view
+  following". Titles and descriptions now wrap in full and the box grows
+  taller to hold them; boxes keep their uniform width. A label too long for
+  any box (past 4 title or 12 description lines) ends in "…", and a chart
+  that would still outgrow the canvas tightens those caps, so no box runs off
+  it. (#70)
+
 ## 2.7.0 — Diagrams in your app's font
 
 Diagram labels can now be set in the font the rest of your app uses. A new

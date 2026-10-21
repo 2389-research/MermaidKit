@@ -744,6 +744,114 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.relations.first?.label, "uses")
     }
 
+    /// Every word of a C4 title and description reaches the box, each line
+    /// within the box's text width (a lone over-wide word aside): the box grows
+    /// taller instead of the wrap cutting text after its last line (#70).
+    func testC4WrapKeepsEveryWord() throws {
+        let title = "A rather long container title that needs several lines to show"
+        let descr = "Drop-in diagram view following the color scheme of the host app, "
+            + "re-rendering whenever the theme, spacing or source text changes underneath it"
+        guard case .c4(let c)? = MermaidParser.parse("""
+        C4Container
+            Container(v, "\(title)", "SwiftUI", "\(descr)")
+            Container(w, "Short", "Swift", "Images keyed by source, theme, spacing")
+        """) else { return XCTFail() }
+        let measure: DiagramTextMeasurer = { t, size in
+            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        XCTAssertEqual(layout.boxes.count, 2)
+        let v = layout.boxes[0], w = layout.boxes[1]
+
+        XCTAssertEqual(v.titleLines.joined(separator: " "), title, "title words were dropped")
+        XCTAssertEqual(v.detailLines.first, "[SwiftUI]")
+        XCTAssertEqual(v.detailLines.dropFirst().joined(separator: " "), descr,
+                       "description words past the last line were dropped")
+        XCTAssertEqual(w.detailLines.dropFirst().joined(separator: " "),
+                       "Images keyed by source, theme, spacing")
+
+        let textWidth = v.frame.width - 20          // the layout's 10pt side pads
+        for line in v.titleLines where line.contains(" ") {
+            XCTAssertLessThanOrEqual(measure(line, 12).width, textWidth, "over-wide title line: \(line)")
+        }
+        for line in v.detailLines.dropFirst() where line.contains(" ") {
+            XCTAssertLessThanOrEqual(measure(line, 10).width, textWidth, "over-wide detail line: \(line)")
+        }
+        // The box is tall enough for every line it carries.
+        let pitches = DiagramLayoutEngine.c4LinePitches(measure)
+        let needed = 10 + pitches.stereotype + 3 + CGFloat(v.titleLines.count) * pitches.title
+            + 4 + CGFloat(v.detailLines.count) * pitches.detail + 10
+        XCTAssertGreaterThanOrEqual(v.frame.height, needed)
+    }
+
+    /// A label too long for any box is cut at a generous line cap with "…",
+    /// never silently: the kept lines are the text's first words, in order,
+    /// and the box stays within the canvas instead of being clipped by it.
+    func testC4OverlongDescriptionIsCutVisibly() throws {
+        let words = (1...600).map { "word\($0)" }
+        guard case .c4(let c)? = MermaidParser.parse("""
+        C4Container
+            Container(v, "\(words.prefix(60).joined(separator: " "))", "", "\(words.joined(separator: " "))")
+        """) else { return XCTFail() }
+        let measure: DiagramTextMeasurer = { t, size in
+            CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let layout = DiagramLayoutEngine.layout(c, measure: measure)
+        let box = try XCTUnwrap(layout.boxes.first)
+        XCTAssertEqual(box.detailLines.count, 12)
+        XCTAssertEqual(box.titleLines.count, 4)
+        for lines in [box.titleLines, box.detailLines] {
+            XCTAssertTrue(lines.last?.hasSuffix("…") == true, "a cut is marked")
+            let kept = lines.joined(separator: " ").dropLast().split(separator: " ").map(String.init)
+            XCTAssertEqual(kept, Array(words.prefix(kept.count)), "the kept words are the first ones, in order")
+        }
+        XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "the box fits the canvas")
+    }
+
+    /// Many boxes at the line caps would run the chart past the 3999pt canvas,
+    /// which clips whole rows; the layout tightens its caps instead, so every
+    /// box stays on the canvas and every cut still ends in "…".
+    func testManyLongC4BoxesStayOnTheCanvas() throws {
+        // Past both caps (4 title lines of ~21 chars, 12 description lines of
+        // ~26), within MermaidParser.maxTextSize.
+        let title = (1...25).map { "t\($0)" }.joined(separator: " ")
+        let descr = (1...80).map { "w\($0)" }.joined(separator: " ")
+        // 73 boxes past both caps, then 140 with a technology line and a few
+        // description lines (each group alone outgrows the canvas).
+        let tech = (1...30).map { "w\($0)" }.joined(separator: " ")
+        let sources = [(0..<73).map { "    Container(c\($0), \"\(title)\", \"\", \"\(descr)\")" },
+                       (0..<140).map { "    Container(d\($0), \"T\", \"Swift\", \"\(tech)\")" }]
+        for elements in sources.map({ $0.joined(separator: "\n") }) {
+            guard case .c4(let c)? = MermaidParser.parse("C4Container\n" + elements) else { return XCTFail("parse") }
+            let measure: DiagramTextMeasurer = { t, size in
+                CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+            }
+            let layout = DiagramLayoutEngine.layout(c, measure: measure)
+            XCTAssertGreaterThanOrEqual(layout.boxes.count, 73)
+            for box in layout.boxes {
+                XCTAssertLessThanOrEqual(box.frame.maxY, layout.size.height, "a box runs off the canvas")
+                XCTAssertTrue(box.detailLines.last?.hasSuffix("…") == true)
+            }
+        }
+    }
+
+    /// Wrapping stops at the line cap: a description near the input limit
+    /// costs a few lines of measuring, not one per word.
+    func testC4WrapStopsMeasuringAtTheCap() throws {
+        let descr = (1...8_000).map { "w\($0)" }.joined(separator: " ")
+        guard case .c4(let c)? = MermaidParser.parse("C4Container\n    Container(v, \"T\", \"\", \"\(descr)\")") else {
+            return XCTFail("parse")
+        }
+        var measured = 0
+        let measure: DiagramTextMeasurer = { t, size in
+            measured += 1
+            return CGSize(width: CGFloat(max(t.count, 1)) * size * 0.6, height: size + 4)
+        }
+        let box = try XCTUnwrap(DiagramLayoutEngine.layout(c, measure: measure).boxes.first)
+        XCTAssertEqual(box.detailLines.count, 12)
+        XCTAssertLessThan(measured, 1_000, "measured \(measured) times for 12 lines")
+    }
+
     // MARK: gitGraph
 
     func testCherryPickAppearsOnTheTimeline() throws {

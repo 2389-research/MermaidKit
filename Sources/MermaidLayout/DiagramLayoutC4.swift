@@ -64,6 +64,22 @@ extension DiagramLayoutEngine {
     /// same-channel labels fan out vertically. Pure geometry — the renderer
     /// only draws.
     public static func layout(_ diagram: C4Diagram, measure: DiagramTextMeasurer) -> C4Layout {
+        // Long labels cost height (#70). The canvas caps at 3999pt, so if the
+        // whole chart wouldn't fit at the generous line caps, lay it out again
+        // at tighter ones, down to 2 title / 3 detail lines — every cut still
+        // ends in "…" — rather than let the canvas clip whole rows. The last
+        // caps are the ones the layout always had (technology included), so
+        // the result is never taller than it was before #70.
+        let caps: [(title: Int, detail: Int)] = [(4, 12), (3, 6), (2, 3)]
+        for cap in caps {
+            let (layout, height) = layout(diagram, measure: measure, titleCap: cap.title, detailCap: cap.detail)
+            if height <= 3999 || cap == caps.last! { return layout }
+        }
+        preconditionFailure("unreachable: the last cap always returns")
+    }
+
+    private static func layout(_ diagram: C4Diagram, measure: DiagramTextMeasurer,
+                               titleCap: Int, detailCap: Int) -> (C4Layout, height: CGFloat) {
         let margin: CGFloat = 16
         let titleHeight: CGFloat = diagram.title == nil ? 0 : Self.titleHeight(24, measure)
         // Boxes widen with the text, so a label wraps to the same lines at any
@@ -81,12 +97,16 @@ extension DiagramLayoutEngine {
         let vGap: CGFloat = grown(62, fontSize: labelFontSize, measure)
         let maxCols = 6
 
-        // Greedy word-wrap capped at `maxLines`; the last kept line absorbs the
-        // remainder so nothing is silently dropped.
+        // Greedy word-wrap to `textWidth`. Invariant: the lines, joined by
+        // single spaces, are exactly the text's words in order — none is
+        // dropped — and every line fits `textWidth` unless it is a single word
+        // wider than the box. Boxes are a uniform width but each grows to its
+        // own line count (rows top-align on their tallest box), so a long label
+        // costs height, not words (#70). Past `maxLines` (generous: no real
+        // label reaches it, but one can't grow a box past the 3999pt canvas)
+        // the last kept line ends in "…", so a cut is marked, never silent.
         func wrap(_ text: String, fontSize: Double, maxLines: Int) -> [String] {
-            guard maxLines > 0 else { return [] }
             let words = text.split(separator: " ").map(String.init)
-            guard !words.isEmpty else { return [] }
             var lines: [String] = []
             var current = ""
             for word in words {
@@ -96,11 +116,21 @@ extension DiagramLayoutEngine {
                 } else {
                     lines.append(current)
                     current = word
-                    if lines.count == maxLines - 1 { break }
+                    // A line past the cap only marks the cut; nothing after it
+                    // can change what's kept, so stop measuring.
+                    if lines.count == maxLines { break }
                 }
             }
             if !current.isEmpty { lines.append(current) }
-            return Array(lines.prefix(maxLines))
+            guard lines.count > maxLines else { return lines }
+            var last = lines[maxLines - 1].split(separator: " ").map(String.init)
+            while last.count > 1, measure(last.joined(separator: " ") + "…", fontSize).width > textWidth {
+                last.removeLast()
+            }
+            // A lone word that fits but leaves no room for "…" gives up letters.
+            var kept = last.joined(separator: " ")
+            while kept.count > 1, measure(kept + "…", fontSize).width > textWidth { kept.removeLast() }
+            return lines.prefix(maxLines - 1) + [kept + "…"]
         }
 
         func stereotype(_ e: C4Diagram.Element) -> String {
@@ -135,11 +165,12 @@ extension DiagramLayoutEngine {
         }
 
         let contents: [Content] = diagram.elements.map { e in
-            let titleLines = wrap(e.label, fontSize: nodeFontSize, maxLines: 2)
+            let titleLines = wrap(e.label, fontSize: nodeFontSize, maxLines: titleCap)
             var details: [String] = []
             if let tech = e.technology, !tech.isEmpty { details.append("[\(tech)]") }
             if let d = e.descr, !d.isEmpty {
-                details += wrap(d, fontSize: labelFontSize, maxLines: max(0, 3 - details.count))
+                // The technology line counts toward the cap, as it always has.
+                details += wrap(d, fontSize: labelFontSize, maxLines: max(1, detailCap - details.count))
             }
             let titleCount = max(titleLines.count, 1)
             let height = pad + stereoH + titleGap + CGFloat(titleCount) * titleLineH
@@ -386,7 +417,7 @@ extension DiagramLayoutEngine {
 
         let width = min(max(finalWidth, 1), 3999)
         let height = min(max(canvasHeight, 1), 3999)
-        return C4Layout(size: CGSize(width: width, height: height),
-                        title: diagram.title, boxes: boxes, edges: edges)
+        return (C4Layout(size: CGSize(width: width, height: height),
+                         title: diagram.title, boxes: boxes, edges: edges), canvasHeight)
     }
 }
