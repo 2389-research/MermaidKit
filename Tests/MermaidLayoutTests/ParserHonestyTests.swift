@@ -506,6 +506,139 @@ final class ParserHonestyTests: XCTestCase {
 
     // MARK: flowchart subgraphs
 
+    /// A subgraph id used again after its block closed is the same subgraph,
+    /// as in mermaid: the first title and direction stand and the second block
+    /// adds its members. It used to mint an anonymous second box that took
+    /// them.
+    func testAReusedSubgraphIdReopensIt() throws {
+        let c = try flow("""
+            subgraph two [First]
+              direction LR
+              A --> B
+            end
+            subgraph two [Second]
+              direction RL
+              C --> D
+            end
+            """)
+        XCTAssertEqual(c.subgraphs.map(\.id), ["two"])
+        let two = try XCTUnwrap(c.subgraphs.first)
+        XCTAssertEqual(two.label, "First")
+        XCTAssertEqual(two.direction, .leftRight)
+        XCTAssertEqual(two.nodeIDs, ["A", "B", "C", "D"])
+    }
+
+    /// A synthesized subgraph id never collides with one the source named in
+    /// the same spelling, so an untitled block is its own box, not a reopening.
+    func testSynthesizedSubgraphIdsAreAlwaysNew() throws {
+        for source in ["subgraph \u{a7}sub0 [Named]\n  A\nend\nsubgraph\n  B\nend",
+                       "subgraph\n  B\nend\nsubgraph \u{a7}sub0 [Named]\n  A\nend"] {
+            let c = try flow(source)
+            XCTAssertEqual(c.subgraphs.count, 2, source)
+            XCTAssertEqual(c.subgraphs.first { $0.label == "Named" }?.nodeIDs, ["A"], source)
+            XCTAssertEqual(c.subgraphs.first { $0.label == "" }?.nodeIDs, ["B"], source)
+        }
+    }
+
+    /// A quoted subgraph title without whitespace is its id, as in mermaid,
+    /// so an edge can target the box; one with whitespace gets a synthesized
+    /// id.
+    func testAQuotedOneWordSubgraphTitleIsItsId() throws {
+        let c = try flow("""
+            subgraph "Anon"
+              B
+            end
+            subgraph "two words"
+              D
+            end
+            Anon --> C
+            """)
+        XCTAssertEqual(c.subgraphs.first?.id, "Anon")
+        XCTAssertEqual(c.subgraphs.first?.label, "Anon")
+        XCTAssertTrue(c.subgraphs.last?.id.hasPrefix("\u{a7}sub") == true)
+        XCTAssertEqual(c.subgraphs.last?.label, "two words")
+        XCTAssertFalse(c.nodes.contains { $0.id == "Anon" }, "the edge targets the box, not a phantom node")
+    }
+
+    /// A title with whitespace that is also the header's id gives no id, as
+    /// in mermaid, quoted or bare: two `subgraph My Group` blocks are two
+    /// boxes. `subgraph My Group[T]` names its id apart from the title, so it
+    /// keeps it, and a second one reopens the first.
+    func testASpacedTitleIsNeverAnId() throws {
+        let c = try flow("""
+            subgraph My Group
+              A
+            end
+            subgraph My Group
+              B
+            end
+            subgraph "x y"
+              C
+            end
+            subgraph "x y"
+              D
+            end
+            subgraph Named Box[T]
+              E
+            end
+            subgraph Named Box[T]
+              F
+            end
+            """)
+        XCTAssertEqual(c.subgraphs.map(\.label), ["My Group", "My Group", "x y", "x y", "T"])
+        XCTAssertEqual(c.subgraphs.filter { $0.id.hasPrefix("\u{a7}sub") }.count, 4)
+        XCTAssertEqual(c.subgraphs.last?.id, "Named Box")
+        XCTAssertEqual(c.subgraphs.last?.nodeIDs, ["E", "F"])
+    }
+
+    /// A header that is one quoted string is a title, brackets and all, as
+    /// in mermaid; brackets name an id only outside quotes.
+    func testAQuotedTitleKeepsItsBrackets() throws {
+        let c = try flow("""
+            subgraph "Cache [Redis] tier"
+              A
+            end
+            subgraph "Cache [Redis] tier"
+              B
+            end
+            subgraph "[x]"
+              C
+            end
+            subgraph id["a [b] c"]
+              D
+            end
+            """)
+        XCTAssertEqual(c.subgraphs.map(\.label), ["Cache [Redis] tier", "Cache [Redis] tier", "[x]", "a [b] c"])
+        XCTAssertEqual(c.subgraphs.filter { $0.id.hasPrefix("\u{a7}sub") }.count, 2)
+        XCTAssertEqual(c.subgraphs[2].id, "[x]")
+        XCTAssertEqual(c.subgraphs[3].id, "id")
+    }
+
+    /// Reopening subgraphs in reverse nesting order keeps each one's first
+    /// parent: no cycle (`B` inside `A` inside `B`), which layout would
+    /// recurse on until it crashed.
+    func testReopeningSubgraphsNeverMakesACycle() throws {
+        let c = try flow("""
+            subgraph C
+              subgraph A
+                subgraph B
+                  x
+                end
+              end
+            end
+            subgraph B
+              subgraph A
+                y
+              end
+            end
+            """)
+        let children = Dictionary(uniqueKeysWithValues: c.subgraphs.map { ($0.id, $0.childIDs) })
+        XCTAssertEqual(children["C"], ["A"])
+        XCTAssertEqual(children["A"], ["B"])
+        XCTAssertEqual(children["B"], [])
+        XCTAssertNotNil(DiagramLayoutEngine.layout(c, measure: { t, s in CGSize(width: CGFloat(t.count) * s * 0.6, height: s + 4) }))
+    }
+
     /// Deterministic fake measurer for the layout-geometry assertions below.
     private let measure: DiagramTextMeasurer = { t, s in
         CGSize(width: CGFloat(max(t.count, 1)) * s * 0.6, height: s + 4)

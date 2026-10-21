@@ -592,6 +592,19 @@ public enum MermaidParser {
         var stack: [String] = []
         var membership: [String: String] = [:]
         var anonCount = 0
+        // Subgraphs a later block reopened: their first direction stands.
+        var reopened: Set<String> = []
+        // Every id a header names, so a synthesized one never takes it.
+        let namedSubgraphs = Set(body.compactMap { startsWithKeyword($0, "subgraph") ? subgraphHeader($0).id : nil })
+        /// Whether `id` contains `other`, at any depth.
+        func isAncestor(_ id: String, of other: String) -> Bool {
+            var seen: Set<String> = [], frontier = subgraphs[id]?.childIDs ?? []
+            while let next = frontier.popLast() {
+                if next == other { return true }
+                if seen.insert(next).inserted { frontier += subgraphs[next]?.childIDs ?? [] }
+            }
+            return false
+        }
 
         func note(_ node: Flowchart.Node) {
             if let existing = nodes[node.id] {
@@ -615,9 +628,16 @@ public enum MermaidParser {
 
         for (index, line) in body.enumerated() {
             if startsWithKeyword(line, "subgraph") {
+                let known = subgraphOrder.count
                 let id = openSubgraph(line, into: &subgraphs, order: &subgraphOrder,
-                                      stack: stack, anonCount: &anonCount)
-                if let parent = stack.last, subgraphs[parent] != nil {
+                                      stack: stack, reserved: namedSubgraphs, anonCount: &anonCount)
+                let reopening = subgraphOrder.count == known
+                if reopening { reopened.insert(id) }
+                // A subgraph has one parent, its first: a reopened block never
+                // re-parents it (that could nest it inside its own descendant,
+                // a cycle layout would recurse on forever).
+                if let parent = stack.last, subgraphs[parent] != nil,
+                   !reopening || !subgraphs.values.contains(where: { $0.childIDs.contains(id) }) && !isAncestor(id, of: parent) {
                     subgraphs[parent]!.childIDs.append(id)
                 }
                 stack.append(id)
@@ -642,7 +662,7 @@ public enum MermaidParser {
                     setAside(index, "unknown direction '\(written)'")
                 }
                 if let top = stack.last, subgraphs[top] != nil {
-                    subgraphs[top]!.direction = parsed
+                    if !reopened.contains(top) || subgraphs[top]!.direction == nil { subgraphs[top]!.direction = parsed }
                 } else if parsed != nil {
                     setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow")
                 }
@@ -705,35 +725,64 @@ public enum MermaidParser {
         return t == "TB" ? "TD" : t
     }
 
-    /// Parses a `subgraph …` header into a fresh subgraph definition and
-    /// registers it. Accepts `subgraph id[Label]`, `subgraph id`, a bare
-    /// `subgraph "Title"`, and an anonymous `subgraph` (synthesized id).
+    /// A `subgraph …` header's id and title: `subgraph id[Title]`,
+    /// `subgraph id`, `subgraph "Title"` (brackets inside the quotes are part
+    /// of the title) or a bare `subgraph`. Without
+    /// brackets the title is the id too, unless it has whitespace (as in
+    /// mermaid), so two `subgraph My Group` blocks are two boxes. A nil id is
+    /// one to synthesize.
+    private static func subgraphHeader(_ line: String) -> (id: String?, label: String) {
+        func titleID(_ title: String) -> String? {
+            title.isEmpty || title.contains(where: \.isWhitespace) ? nil : title
+        }
+        let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
+        if rest.isEmpty { return (nil, "") }
+        // One quoted string is a title, brackets and all.
+        if rest.count > 1, rest.hasPrefix("\""), rest.hasSuffix("\""), !rest.dropFirst().dropLast().contains("\"") {
+            let label = String(rest.dropFirst().dropLast())
+            return (titleID(label), label)
+        }
+        if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
+            let id = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
+            let label = String(rest[rest.index(after: open)..<close])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+            return (id.isEmpty ? nil : id, label)
+        }
+        if rest.hasPrefix("\"") {
+            let label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return (titleID(label), label)
+        }
+        return (titleID(rest), rest)
+    }
+
+    /// Opens the subgraph a `subgraph …` header names (see `subgraphHeader`):
+    /// a new definition, registered, or a closed one reopened.
     private static func openSubgraph(
         _ line: String,
         into subgraphs: inout [String: Flowchart.Subgraph],
         order: inout [String],
         stack: [String],
+        reserved: Set<String>,
         anonCount: inout Int
     ) -> String {
-        let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
-        var id: String
-        var label: String
-        if rest.isEmpty {
-            id = "\u{a7}sub\(anonCount)"; anonCount += 1
-            label = ""
-        } else if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
-            id = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
-            label = String(rest[rest.index(after: open)..<close])
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
-            if id.isEmpty { id = "\u{a7}sub\(anonCount)"; anonCount += 1 }
-        } else if rest.hasPrefix("\"") {
-            label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-            id = "\u{a7}sub\(anonCount)"; anonCount += 1
-        } else {
-            id = rest; label = rest
+        /// A synthesized id (`§sub0`, `§sub1`, …) no subgraph has, and no
+        /// header in the chart names (`reserved`), whatever the order.
+        func fresh() -> String {
+            while subgraphs["\u{a7}sub\(anonCount)"] != nil || reserved.contains("\u{a7}sub\(anonCount)") { anonCount += 1 }
+            defer { anonCount += 1 }
+            return "\u{a7}sub\(anonCount)"
         }
-        // Guard against a duplicate/reused id clobbering an open block.
-        if subgraphs[id] != nil { id = "\u{a7}sub\(anonCount)"; anonCount += 1 }
+        let header = subgraphHeader(line)
+        var id = header.id ?? fresh()
+        let label = header.label
+        // A closed subgraph's id, used again, reopens it, as in mermaid: its
+        // first title and direction stand and the block adds members. Only a
+        // named id can (a synthesized one is always new); one still open (a
+        // subgraph inside itself) gets a fresh id instead.
+        if subgraphs[id] != nil {
+            if !stack.contains(id) { return id }
+            id = fresh()
+        }
         subgraphs[id] = Flowchart.Subgraph(id: id, label: labelText(label))
         order.append(id)
         return id

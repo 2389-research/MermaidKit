@@ -40,6 +40,14 @@
   that would still outgrow the canvas tightens those caps, so no box runs off
   it. (#70)
 
+- **A reused subgraph id is one subgraph**, as in mermaid. A second
+  `subgraph two … end` block adds its members to `two` (the first title and
+  direction stand) instead of drawing an untitled second box that took them.
+  A quoted one-word title is the subgraph's id too (`subgraph "Anon"` is
+  `Anon`, so `Anon --> C` targets the box). A title with a space is never an
+  id, quoted or not, so two `subgraph My Group` blocks stay two boxes. Found
+  by the mermaid oracle's new subgraph comparison (#87).
+
 ## 2.7.0 — Diagrams in your app's font
 
 Diagram labels can now be set in the font the rest of your app uses. A new
