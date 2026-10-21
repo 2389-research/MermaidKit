@@ -164,7 +164,7 @@ draw as labelled rectangles; markdown strings and entity codes; HTML in
 labels beyond `<br/>`; FontAwesome icons; click/animation interactivity; mermaid.js
 theming directives (theming is `DiagramTheme`'s job).
 
-## Numbers the site may cite (all verified 2026-10-19)
+## Numbers the site may cite (verified 2026-10-19; test and oracle counts 2026-10-21)
 
 - **30** diagram types. **Zero** dependencies by default (Linux's Silica
   raster is an opt-in trait). Zero JavaScript, no WebView.
