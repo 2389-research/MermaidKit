@@ -31,12 +31,22 @@
   raster image included, through one new `DiagramLayoutEngine.hasLineBreak`.
   Raster output is otherwise byte-identical. (#71)
 
+- **C4 boxes keep every word of their title and description.** The wrap
+  stopped at its last line and dropped the words after it, so "Drop-in
+  diagram view following the color scheme" drew as "Drop-in diagram view
+  following". Titles and descriptions now wrap in full and the box grows
+  taller to hold them; boxes keep their uniform width. A label too long for
+  any box (past 4 title or 12 description lines) ends in "…", and a chart
+  that would still outgrow the canvas tightens those caps, so no box runs off
+  it. (#70)
+
 - **A reused subgraph id is one subgraph**, as in mermaid. A second
   `subgraph two … end` block adds its members to `two` (the first title and
   direction stand) instead of drawing an untitled second box that took them.
   A quoted one-word title is the subgraph's id too (`subgraph "Anon"` is
-  `Anon`, so `Anon --> C` targets the box). Found by the mermaid oracle's new
-  subgraph comparison (#87).
+  `Anon`, so `Anon --> C` targets the box). A title with a space is never an
+  id, quoted or not, so two `subgraph My Group` blocks stay two boxes. Found
+  by the mermaid oracle's new subgraph comparison (#87).
 
 ## 2.7.0 — Diagrams in your app's font
 
