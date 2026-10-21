@@ -388,7 +388,7 @@
       <div class="kicker" style="margin-top:22px">Install</div>
 <pre>.<span class="tt">package</span>(
   <span class="ta">url:</span> <span class="ts">"https://github.com/2389-research/MermaidKit.git"</span>,
-  <span class="ta">from:</span> <span class="ts">"2.7.0"</span>
+  <span class="ta">from:</span> <span class="ts">"2.7.1"</span>
 )</pre>
     </div>
     <div>
@@ -523,7 +523,7 @@ flowchart TD
     <div><h3>Accessibility from day one</h3><p><code>altText(source:)</code> generates a deterministic content description for every one of the 30 types; <code>MermaidAltText.narrate(_:)</code> adds a step-by-step walkthrough — decisions, states, ER cardinalities, sequence messages. Diagram text follows Dynamic Type.</p></div>
     <div><h3>Themed with a single value</h3><p><code>DiagramTheme</code> — six colors plus a categorical palette re-skin all 30 types at once, and <code>fontFamily</code> sets every label in your app's font; <code>DiagramSpacing</code> sets density, and <code>DiagramSpacing(gridSnap: 4)</code> snaps flowcharts onto a pixel grid.</p></div>
     <div><h3>Diagnose parse failures</h3><p><code>MermaidParser.diagnose(_:)</code> explains failures with line numbers and did-you-mean suggestions for typo'd headers — and, for a flowchart that parses, notes each statement it left out, at its line.</p></div>
-    <div><h3>Checked against mermaid.js</h3><p>CI parses 1,534 flowcharts with mermaid.js's own parser and with MermaidKit and compares what a reader sees; 1,029 agree, and a change that makes any chart read worse fails the build.</p></div>
+    <div><h3>Checked against mermaid.js</h3><p>CI parses 1,549 flowcharts with mermaid.js's own parser and with MermaidKit and compares what a reader sees; 1,044 agree, and a change that makes any chart read worse fails the build.</p></div>
     <div><h3>Headless geometry</h3><p>The parse → layout → scene pipeline is platform-free — no AppKit/UIKit. Tools get frames, polylines, and label boxes without rendering a pixel.</p></div>
     <div><h3>More than Mermaid in</h3><p><code>DOTParser</code>, <code>DippinParser</code>, <code>SQLDDLParser</code>, and <code>GitLogParser</code> parse Graphviz DOT, Dippin, SQL <code>CREATE TABLE</code>, and raw <code>git log</code> output into the same engine; <code>DOTExporter</code> emits DOT back — a Mermaid ⇄ DOT converter. SQL DDL renders as an ER diagram with PK/FK/UK badges; <code>git log</code> renders as a gitgraph.</p></div>
     <div><h3>Renders in the terminal</h3><p>The <code>mermaidkit-term</code> CLI draws Mermaid, DOT, Dippin, and <code>git log</code> sources in the terminal — Kitty graphics or half-block truecolor for every type, colored or plain box-drawing for flowcharts. The box tiers are pure text and run headless on Linux/CI.</p></div>
@@ -538,7 +538,7 @@ flowchart TD
     <div class="stat"><div class="n">5</div><div class="l">input front-ends: Mermaid, DOT, Dippin, SQL DDL, git log</div></div>
     <div class="stat"><div class="n">0</div><div class="l">third-party deps by default (Silica-free), JS, or WebView</div></div>
     <div class="stat"><div class="n">~25 ms</div><div class="l">worst cold render incl. rasterization (sankey); most types under ~15 ms</div></div>
-    <div class="stat"><div class="n">502</div><div class="l">tests in CI on macOS (471 on Linux)</div></div>
+    <div class="stat"><div class="n">529</div><div class="l">tests in CI on macOS (497 on Linux)</div></div>
     <div class="stat"><div class="n">6</div><div class="l">native platforms: macOS/iOS, Linux, Android, Windows, WASM, Flutter (+ framebuffer/SDL)</div></div>
     <div class="stat"><div class="n">MIT</div><div class="l">license</div></div>
   </div>

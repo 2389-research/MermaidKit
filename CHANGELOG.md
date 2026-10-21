@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.7.1 — Every word, every line, every box
+
+Fixes for labels and charts that drew less than they said. C4 boxes keep
+every word, `<br>` breaks lines in SVG and on Android, Windows and Flutter,
+class generics read `List<T>`, bold is bold on Linux, and a reused subgraph
+id is one box, as in mermaid. Additive: no existing call changes. On Apple
+platforms, raster output for every fixture is byte-identical to 2.7.0 except
+C4, whose boxes now hold the words they used to drop; on Linux, bold text is
+bold.
 
 ### Fixed
 
@@ -46,7 +54,16 @@
   A quoted one-word title is the subgraph's id too (`subgraph "Anon"` is
   `Anon`, so `Anon --> C` targets the box). A title with a space is never an
   id, quoted or not, so two `subgraph My Group` blocks stay two boxes. Found
-  by the mermaid oracle's new subgraph comparison (#87).
+  by the mermaid oracle's new subgraph comparison. (#88)
+
+### Tooling
+
+- **The mermaid.js oracle compares subgraphs too**: each one's id, title,
+  declared direction and direct members (nodes and child subgraphs). A
+  title-only subgraph, whose id each side synthesizes and numbers
+  differently, is matched by its title and named members. It found the
+  reused-id bug above. 1,044 of 1,549 charts now agree with mermaid, and the
+  recorded divergences went from 268 to 256. (#79)
 
 ## 2.7.0 — Diagrams in your app's font
 
