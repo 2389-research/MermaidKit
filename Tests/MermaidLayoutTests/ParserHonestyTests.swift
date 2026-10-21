@@ -560,6 +560,37 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertFalse(c.nodes.contains { $0.id == "Anon" }, "the edge targets the box, not a phantom node")
     }
 
+    /// A title with whitespace that is also the header's id gives no id, as
+    /// in mermaid, quoted or bare: two `subgraph My Group` blocks are two
+    /// boxes. `subgraph My Group[T]` names its id apart from the title, so it
+    /// keeps it, and a second one reopens the first.
+    func testASpacedTitleIsNeverAnId() throws {
+        let c = try flow("""
+            subgraph My Group
+              A
+            end
+            subgraph My Group
+              B
+            end
+            subgraph "x y"
+              C
+            end
+            subgraph "x y"
+              D
+            end
+            subgraph Named Box[T]
+              E
+            end
+            subgraph Named Box[T]
+              F
+            end
+            """)
+        XCTAssertEqual(c.subgraphs.map(\.label), ["My Group", "My Group", "x y", "x y", "T"])
+        XCTAssertEqual(c.subgraphs.filter { $0.id.hasPrefix("\u{a7}sub") }.count, 4)
+        XCTAssertEqual(c.subgraphs.last?.id, "Named Box")
+        XCTAssertEqual(c.subgraphs.last?.nodeIDs, ["E", "F"])
+    }
+
     /// Reopening subgraphs in reverse nesting order keeps each one's first
     /// parent: no cycle (`B` inside `A` inside `B`), which layout would
     /// recurse on until it crashed.

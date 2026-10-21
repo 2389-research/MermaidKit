@@ -36,5 +36,9 @@
   "flowchart LR\n  subgraph two [Group]\n    A --> B\n  end\n  subgraph two [Group]\n    C --> D\n  end",
   "flowchart LR\n  subgraph subGraph0 [Named]\n    A\n  end\n  subgraph \"Anonymous\"\n    B\n  end",
   "flowchart LR; A[\"x; subgraph subGraph0\"] --> B; subgraph \"Two words\"; C; end",
-  "flowchart LR\n  subgraph \"Outer box\"\n    subgraph \"Inner box\"\n      A\n    end\n    B\n  end"
+  "flowchart LR\n  subgraph \"Outer box\"\n    subgraph \"Inner box\"\n      A\n    end\n    B\n  end",
+  "flowchart TB\n  subgraph My Group[T]\n    A\n  end\n  subgraph My Group[T]\n    B\n  end",
+  "flowchart TB\n  subgraph \"x y\"\n    A\n  end\n  subgraph \"x y\"\n    B\n  end",
+  "flowchart TB\n  subgraph Solo\n    A\n  end\n  subgraph \"Solo\"\n    B\n  end",
+  "flowchart TB\n  subgraph My Group\n    A\n  end\n  subgraph My Group\n    B\n  end"
 ]

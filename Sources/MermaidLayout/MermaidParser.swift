@@ -726,10 +726,14 @@ public enum MermaidParser {
     }
 
     /// A `subgraph …` header's id and title: `subgraph id[Title]`,
-    /// `subgraph id`, `subgraph "Title"` (a one-word quoted title is the id
-    /// too, as in mermaid) or a bare `subgraph`. A nil id is one to
-    /// synthesize.
+    /// `subgraph id`, `subgraph "Title"` or a bare `subgraph`. Without
+    /// brackets the title is the id too, unless it has whitespace (as in
+    /// mermaid), so two `subgraph My Group` blocks are two boxes. A nil id is
+    /// one to synthesize.
     private static func subgraphHeader(_ line: String) -> (id: String?, label: String) {
+        func titleID(_ title: String) -> String? {
+            title.isEmpty || title.contains(where: \.isWhitespace) ? nil : title
+        }
         let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
         if rest.isEmpty { return (nil, "") }
         if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
@@ -740,9 +744,9 @@ public enum MermaidParser {
         }
         if rest.hasPrefix("\"") {
             let label = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-            return (!label.isEmpty && !label.contains(where: \.isWhitespace) ? label : nil, label)
+            return (titleID(label), label)
         }
-        return (rest, rest)
+        return (titleID(rest), rest)
     }
 
     /// Opens the subgraph a `subgraph …` header names (see `subgraphHeader`):
