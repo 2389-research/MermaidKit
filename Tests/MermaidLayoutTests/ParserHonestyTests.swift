@@ -591,6 +591,29 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.subgraphs.last?.nodeIDs, ["E", "F"])
     }
 
+    /// A header that is one quoted string is a title, brackets and all, as
+    /// in mermaid; brackets name an id only outside quotes.
+    func testAQuotedTitleKeepsItsBrackets() throws {
+        let c = try flow("""
+            subgraph "Cache [Redis] tier"
+              A
+            end
+            subgraph "Cache [Redis] tier"
+              B
+            end
+            subgraph "[x]"
+              C
+            end
+            subgraph id["a [b] c"]
+              D
+            end
+            """)
+        XCTAssertEqual(c.subgraphs.map(\.label), ["Cache [Redis] tier", "Cache [Redis] tier", "[x]", "a [b] c"])
+        XCTAssertEqual(c.subgraphs.filter { $0.id.hasPrefix("\u{a7}sub") }.count, 2)
+        XCTAssertEqual(c.subgraphs[2].id, "[x]")
+        XCTAssertEqual(c.subgraphs[3].id, "id")
+    }
+
     /// Reopening subgraphs in reverse nesting order keeps each one's first
     /// parent: no cycle (`B` inside `A` inside `B`), which layout would
     /// recurse on until it crashed.

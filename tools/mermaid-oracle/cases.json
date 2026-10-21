@@ -40,5 +40,9 @@
   "flowchart TB\n  subgraph My Group[T]\n    A\n  end\n  subgraph My Group[T]\n    B\n  end",
   "flowchart TB\n  subgraph \"x y\"\n    A\n  end\n  subgraph \"x y\"\n    B\n  end",
   "flowchart TB\n  subgraph Solo\n    A\n  end\n  subgraph \"Solo\"\n    B\n  end",
-  "flowchart TB\n  subgraph My Group\n    A\n  end\n  subgraph My Group\n    B\n  end"
+  "flowchart TB\n  subgraph My Group\n    A\n  end\n  subgraph My Group\n    B\n  end",
+  "flowchart TB\n  subgraph \"Cache [Redis] tier\"\n    A\n  end\n  subgraph \"Cache [Redis] tier\"\n    B\n  end",
+  "flowchart TB\n  subgraph \"[x]\"\n    A\n  end",
+  "flowchart TB\n  subgraph id[\"a [b] c\"]\n    A\n  end",
+  "flowchart TB\n  subgraph id [\"T\"]\n    A\n  end"
 ]

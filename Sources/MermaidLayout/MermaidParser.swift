@@ -726,7 +726,8 @@ public enum MermaidParser {
     }
 
     /// A `subgraph …` header's id and title: `subgraph id[Title]`,
-    /// `subgraph id`, `subgraph "Title"` or a bare `subgraph`. Without
+    /// `subgraph id`, `subgraph "Title"` (brackets inside the quotes are part
+    /// of the title) or a bare `subgraph`. Without
     /// brackets the title is the id too, unless it has whitespace (as in
     /// mermaid), so two `subgraph My Group` blocks are two boxes. A nil id is
     /// one to synthesize.
@@ -736,6 +737,11 @@ public enum MermaidParser {
         }
         let rest = String(line.dropFirst("subgraph".count)).trimmingCharacters(in: .whitespaces)
         if rest.isEmpty { return (nil, "") }
+        // One quoted string is a title, brackets and all.
+        if rest.count > 1, rest.hasPrefix("\""), rest.hasSuffix("\""), !rest.dropFirst().dropLast().contains("\"") {
+            let label = String(rest.dropFirst().dropLast())
+            return (titleID(label), label)
+        }
         if let open = rest.firstIndex(of: "["), let close = rest.lastIndex(of: "]"), open < close {
             let id = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
             let label = String(rest[rest.index(after: open)..<close])
