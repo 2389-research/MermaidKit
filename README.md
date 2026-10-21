@@ -32,7 +32,7 @@ Add the package with SwiftPM, then depend on the `MermaidRender` product (or
 `MermaidLayout` alone for headless parsing and layout):
 
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.7.0")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.7.1")
 ```
 
 ```swift
@@ -407,7 +407,7 @@ CLI:
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift
-  stack. Linux users opt in with `.package(url: …, from: "2.7.0", traits:
+  stack. Linux users opt in with `.package(url: …, from: "2.7.1", traits:
   ["LinuxRaster"])` (or `swift build --traits LinuxRaster`). Building requires
   Xcode 26 / Swift 6.2 (package traits, and Silica's graph when enabled, set that
   toolchain floor). The styling inputs are `DiagramTheme` (six colors, a

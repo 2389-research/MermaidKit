@@ -4,8 +4,8 @@ A differential test for the flowchart parser: MermaidKit should read a chart
 the way mermaid.js does. This parses a corpus with **mermaid.js's own parser**
 (12.2.0, pinned) and with MermaidKit, and compares what a reader would see:
 node ids, visible label text (entities decoded and HTML rendered, as the
-browser shows them), shapes, and each edge's endpoints, label, stroke, head,
-arrows and length.
+browser shows them), shapes, each edge's endpoints, label, stroke, head,
+arrows and length, and each subgraph's title, direction and members.
 
 ```sh
 scripts/check-mermaid-oracle.sh            # CI: fail on a new divergence, or a known one getting worse
@@ -71,8 +71,8 @@ accepted, and the reviewer approves it.
 `Tests/MermaidLayoutTests/MermaidOracleDump.swift` (MermaidKit's side). Shapes
 MermaidKit has no case for compare as its documented rectangle fallback.
 Subgraphs compare by id (a title-only subgraph's synthesized id by its
-title and named members, since the two sides number them differently), with their title, direction and direct members (nodes
-and child subgraphs). Styling (`classDef`, `style`, `:::class`, `linkStyle`)
+title and named members, since the two sides number them differently),
+with their title, direction and direct members (nodes and child subgraphs). Styling (`classDef`, `style`, `:::class`, `linkStyle`)
 isn't compared: MermaidKit themes every node alike on purpose, and what it
 must do with styling lines, keep reading the rest of the chart, is already
 compared. Edge order isn't either: it only matters to `linkStyle N`, which
