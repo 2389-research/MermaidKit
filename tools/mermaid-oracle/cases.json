@@ -74,5 +74,11 @@
   "flowchart LR\n  subgraph S [Storage]\n  end",
   "flowchart LR\n  linkStyle 0 stroke:red",
   "flowchart LR\n  A --> B\n  linkStyle 0 stroke:red",
-  "flowchart LR\n  linkStyle default stroke:red"
+  "flowchart LR\n  linkStyle default stroke:red",
+  "graphical",
+  "flowchart LR junk",
+  "flowchart-elk LR\n  A --> B",
+  "graph TD\n  linkStyle nope stroke:red",
+  "graph TD\n  linkStyle -1 stroke:red",
+  "flowchart LR\n  A --> B\n  linkStyle 0, stroke:red"
 ]
