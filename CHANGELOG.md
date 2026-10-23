@@ -10,12 +10,20 @@
   matches wins, legacy names need no `;` (`&amp more` reads "& more",
   `&copy 2024` "© 2024"), numeric references need none either (`&#169`), and
   mermaid's own `#name;` uses the same table (`#notin;` reads "∉"). Unknown
-  names, control characters, and anything that would spell a line break still
-  stay as written. One deliberate difference from mermaid: `&#169;` reads
-  "©", where mermaid 12.2.0 shows "&©". Decoding is now a single linear scan,
-  about 15× faster on long runs of `&lt;`. The mermaid oracle's known
-  divergences drop from 256 to 224. Output for every chart in the fixture
-  set is byte-identical to 2.7.1.
+  names and control characters still stay as written. One deliberate
+  difference from mermaid: `&#169;` reads "©", where mermaid 12.2.0 shows
+  "&©". The mermaid oracle's known divergences drop from 256 to 224. Output
+  for every chart in the fixture set is byte-identical to 2.7.1.
+- **Reading a label never spells a line break the author didn't write.**
+  Labels are now read in one linear scan of the text as written, tags and
+  references alike. Every character a break is made of must be written, side
+  by side: a `<br…>` tag's `<`, `b`, `r` and closing `>`, and both halves of
+  `\n`. Otherwise the reference that supplied one, or the tag dropped between
+  two, stays as written. This fixes breaks spelled by a reference supplying a
+  letter (`<b&#114;>`), by a `<` far from its `>`, and by a dropped tag
+  (`\<i>n`, since 2.6). A dropped tag also no longer joins a reference:
+  `&am<b></b>p;` shows as written. A seeded property test checks the rule
+  over 40,000 labels. Long runs of `&lt;` read about 15× faster.
 
 ## 2.7.1 — Every word, every line, every box
 
