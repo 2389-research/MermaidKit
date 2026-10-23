@@ -80,5 +80,8 @@
   "flowchart-elk LR\n  A --> B",
   "graph TD\n  linkStyle nope stroke:red",
   "graph TD\n  linkStyle -1 stroke:red",
-  "flowchart LR\n  A --> B\n  linkStyle 0, stroke:red"
+  "flowchart LR\n  A --> B\n  linkStyle 0, stroke:red",
+  "flowchart LR\n  direction TB",
+  "flowchart LR\n  subgraph S\n  end\n  direction TB",
+  "flowchart\tLR\n  A --> B"
 ]
