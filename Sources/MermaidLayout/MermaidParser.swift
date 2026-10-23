@@ -447,93 +447,225 @@ public enum MermaidParser {
         return next == nil || next == " " || next == "\t"
     }
 
-    /// Label text as mermaid shows it: entities decoded (`#quot;`, `#35;`,
-    /// `&amp;`, `&#35;`, `&#x2665;`) and inline formatting tags (`<b>`, `<i>`,
-    /// `<code>`, `<span …>`, …) dropped for their text, which the renderers
-    /// can't style. `<br>` line breaks stay; other angle brackets (`p<0.05`,
-    /// `List<String>`) are text.
+    /// Label text as mermaid shows it, read in one scan of the text as
+    /// written: character references decoded as a browser reads them
+    /// (`#quot;`, `#35;`, `&amp;`, `&copy`, `&#x2665;`; see `reference`), and
+    /// inline formatting tags (`<b>`, `<i>`, `<code>`, `<span …>`, …) dropped
+    /// for their text, which the renderers can't style. `<br>` line breaks
+    /// stay; other angle brackets (`p<0.05`, `List<String>`) are text. Each
+    /// tag and reference is read where it's written, so dropping a tag never
+    /// joins a reference either (`&am<b></b>p;` shows as written).
+    ///
+    /// Reading never spells a line break the text doesn't have as written
+    /// (layout reads `<br…>` and `\n` as breaks; a reference to a line
+    /// separator, `&#8232;`, is one as written). Each
+    /// character a break is made of is written: a `<br…>` tag's `<`, `b` and
+    /// `r`, side by side, and its closing `>`; both halves of `\n`, side by
+    /// side. Otherwise the reference that supplied one, or the tag dropped
+    /// between two, stays as written: `&lt;br&gt;`, `<b&#114;>`, `#92;n` and
+    /// `\<i>n` show as written instead of breaking the label. Linear: each
+    /// tag and reference is read once, and a `<br` costs the same however long
+    /// the label.
     static func labelText(_ raw: String) -> String {
         guard raw.contains("#") || raw.contains("&") || raw.contains("<") else { return raw }
-        var text = raw
-        if text.contains("<") { text = replacing(formattingTag, in: text, with: "") }
-        if text.contains("#") || text.contains("&") { text = decodingEntities(text) }
-        return text
+        let s = Array(raw.unicodeScalars)
+        // Each tag and reference, and what it reads as (a tag, nothing).
+        var spans: [(range: Range<Int>, text: [Unicode.Scalar])] = []
+        var i = 0
+        while i < s.count {
+            if s[i] == "<", let end = formattingTag(at: i, in: s) {
+                spans.append((i..<end, []))
+                i = end
+            } else if let (end, text) = reference(at: i, in: s) {
+                spans.append((i..<end, text))
+                i = end
+            } else {
+                i += 1
+            }
+        }
+        guard !spans.isEmpty else { return raw }
+        // The text as read; which span supplied each character (-1: the text
+        // as written); and the spans that read as nothing just before each.
+        var plain: [Unicode.Scalar] = []
+        var from: [Int] = []
+        var dropped: [Int: [Int]] = [:]
+        plain.reserveCapacity(s.count)
+        from.reserveCapacity(s.count)
+        var cursor = 0
+        for (k, span) in spans.enumerated() {
+            plain += s[cursor..<span.range.lowerBound]
+            from += repeatElement(-1, count: span.range.lowerBound - cursor)
+            if span.text.isEmpty { dropped[plain.count, default: []].append(k) }
+            plain += span.text
+            from += repeatElement(k, count: span.text.count)
+            cursor = span.range.upperBound
+        }
+        plain += s[cursor...]
+        from += repeatElement(-1, count: s.count - cursor)
+        // Spans to keep as written. A reference's written form has no `<`,
+        // `>` or `\`, and a tag's can't open a `<br` or end in `\`, so keeping
+        // one never makes a break either.
+        var kept = Set<Int>()
+        func written(_ i: Int) -> Bool { from[i] < 0 }
+        /// Written, and written right after the character before it.
+        func writtenBeside(_ i: Int) -> Bool { written(i) && dropped[i] == nil }
+        /// Keeps the span that supplied `i`, and those dropped just before it.
+        func keep(_ i: Int, andBefore: Bool = true) {
+            if from[i] >= 0 { kept.insert(from[i]) }
+            if andBefore { kept.formUnion(dropped[i] ?? []) }
+        }
+        let lastClose = plain.lastIndex(of: ">") ?? -1
+        var openWritten = -1, closeWritten = -1
+        for i in plain.indices {
+            switch plain[i] {
+            case "<" where opensBreakTag(plain, at: i):
+                if written(i), writtenBeside(i + 1), writtenBeside(i + 2) {
+                    openWritten = i
+                } else if lastClose > i {
+                    keep(i, andBefore: false); keep(i + 1); keep(i + 2)
+                }
+            case ">":
+                // A decoded `>` would close a written `<br…` early, or at all.
+                if written(i) { closeWritten = i } else if openWritten > closeWritten { keep(i) }
+            case "\\" where i + 1 < plain.count && plain[i + 1] == "n" && !(written(i) && writtenBeside(i + 1)):
+                keep(i, andBefore: false); keep(i + 1)
+            default:
+                break
+            }
+        }
+        var out = String.UnicodeScalarView()
+        cursor = 0
+        for (k, span) in spans.enumerated() {
+            out.append(contentsOf: s[cursor..<span.range.lowerBound])
+            out.append(contentsOf: kept.contains(k) ? Array(s[span.range]) : span.text)
+            cursor = span.range.upperBound
+        }
+        out.append(contentsOf: s[cursor...])
+        return String(out)
     }
 
-    private static let formattingTag = try? NSRegularExpression(
-        pattern: #"</?(?:b|i|u|s|em|strong|code|kbd|mark|small|big|sub|sup|strike|del|ins|span|font|a|p|div|tt|q|cite)(?:\s[^<>]*)?/?>"#,
-        options: [.caseInsensitive])
-
-    /// `&#x1F600;` / `&#123;` / `&name;` (HTML) and `#123;` / `#name;`
-    /// (mermaid's own, any `#word;`). A reference to something that isn't a
-    /// printable character stays as written, as does an unknown `&name;`; an
-    /// unknown `#name;` reads `&name;`, as mermaid shows it.
-    private static let entityPattern = try? NSRegularExpression(
-        pattern: #"&#[xX]([0-9A-Fa-f]{1,8});|&#([0-9]{1,10});|#([0-9]{1,10});|&([A-Za-z][A-Za-z0-9]{1,31});|#([A-Za-z0-9_]{1,32});"#)
-
-    private static let namedEntities: [String: String] = [
-        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00A0}",
-        "hellip": "…", "mdash": "—", "ndash": "–", "middot": "·", "bull": "•",
-        "lsquo": "‘", "rsquo": "’", "ldquo": "“", "rdquo": "”", "laquo": "«", "raquo": "»",
-        "copy": "©", "reg": "®", "trade": "™", "deg": "°", "plusmn": "±", "times": "×",
-        "divide": "÷", "micro": "µ", "para": "¶", "sect": "§", "euro": "€", "pound": "£",
-        "yen": "¥", "cent": "¢", "infin": "∞", "ne": "≠", "le": "≤", "ge": "≥",
-        "larr": "←", "rarr": "→", "uarr": "↑", "darr": "↓", "harr": "↔",
-        "lArr": "⇐", "rArr": "⇒", "hArr": "⇔", "hearts": "♥", "check": "✓", "cross": "✗",
-        "semi": ";", "colon": ":", "num": "#", "lpar": "(", "rpar": ")",
-        "lsqb": "[", "rsqb": "]", "lcub": "{", "rcub": "}", "vert": "|", "excl": "!",
+    /// Inline formatting tags the renderers can't style, dropped for their
+    /// text.
+    private static let formattingTags: Set<String> = [
+        "b", "i", "u", "s", "em", "strong", "code", "kbd", "mark", "small", "big", "sub", "sup", "strike",
+        "del", "ins", "span", "font", "a", "p", "div", "tt", "q", "cite",
     ]
 
-    /// `guardingBreaks` keeps an entity that would spell a line break as
-    /// written; the look-ahead deciding that decodes without it, so decoding
-    /// never recurses (it's linear: each `<` looks 256 characters ahead).
-    private static func decodingEntities(_ text: String, guardingBreaks: Bool = true) -> String {
-        guard let pattern = entityPattern else { return text }
-        let ns = text as NSString
-        var out = ""
-        var cursor = 0
-        for match in pattern.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            out += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-            cursor = match.range.location + match.range.length
-            func group(_ i: Int) -> String? {
-                match.range(at: i).location == NSNotFound ? nil : ns.substring(with: match.range(at: i))
-            }
-            let decoded: String?
-            if let hex = group(1) {
-                decoded = UInt32(hex, radix: 16).flatMap(referenced)
-            } else if let decimal = group(2) ?? group(3) {
-                decoded = UInt32(decimal).flatMap(referenced)
-            } else if let name = group(4) {
-                decoded = namedEntities[name]
-            } else if let name = group(5) {
-                decoded = namedEntities[name] ?? "&\(name);"
-            } else {
-                decoded = nil
-            }
-            // A `<` or `\` that would spell a line break (`&lt;br&gt;`, `#92;n`)
-            // stays as written: layout reads `<br>` and `\n` as breaks.
-            let breaks: Bool
-            if guardingBreaks, decoded == "<" || decoded == "\\" {
-                let after = ns.substring(with: NSRange(location: cursor, length: min(256, ns.length - cursor)))
-                breaks = decoded == "<"
-                    ? spellsBreakTag(decodingEntities(after, guardingBreaks: false))
-                    : after.hasPrefix("n")
-            } else {
-                breaks = false
-            }
-            out += breaks ? ns.substring(with: match.range) : decoded ?? ns.substring(with: match.range)
+    /// Where a formatting tag (`<b>`, `</i>`, `<span …>`, `<b/>`) opening at
+    /// `i` ends, or nil: `</?name(\s[^<>]*)?/?>`, any case.
+    /// Linear: attributes are read no further than the next `<`.
+    private static func formattingTag(at i: Int, in s: [Unicode.Scalar]) -> Int? {
+        var j = i + 1
+        if j < s.count, s[j] == "/" { j += 1 }
+        let name = j
+        while j < s.count, ("a"..."z").contains(s[j]) || ("A"..."Z").contains(s[j]) { j += 1 }
+        guard j < s.count, formattingTags.contains(String(String.UnicodeScalarView(s[name..<j])).lowercased()) else {
+            return nil
         }
-        out += ns.substring(from: cursor)
-        return out
+        if s[j].properties.isWhitespace {
+            while j < s.count, s[j] != "<", s[j] != ">" { j += 1 }
+        } else if s[j] == "/" {
+            j += 1
+        }
+        return j < s.count && s[j] == ">" ? j + 1 : nil
     }
 
-    /// Whether `<` + `text` opens a tag layout reads as a line break — the
-    /// same `<br\b[^>]*>` as `DiagramLayoutEngine.brLines`.
-    private static func spellsBreakTag(_ text: String) -> Bool {
-        guard let breakTag else { return false }
-        let tag = "<" + text
-        return breakTag.firstMatch(in: tag, range: NSRange(location: 0, length: 1 + (text as NSString).length))?
-            .range.location == 0
+    /// The character reference at `i`, as mermaid's text reaches its reader:
+    /// where it ends, and what it reads as. Mermaid first makes its own
+    /// `#name;` and `#123;` (any `#word;`) `&name;` and `&#123;`; then the
+    /// browser reads every reference by HTML's algorithm over the full table
+    /// (`htmlEntities`): the longest name that matches wins (`&notit;` is
+    /// "¬it;"), a legacy name needs no `;` (`&amp`, `&copy`), and neither
+    /// does a numeric reference. `&#123;` is one reference, as its author
+    /// meant (mermaid's rewrite strands the `&`). A reference to something
+    /// that isn't a printable character reads as written, whole; an unknown `&name;` isn't a reference (nil); an unknown `#name;`
+    /// reads `&name;`, as mermaid shows it. Linear: a name is at most `htmlEntityMaxLength`
+    /// long, and a run of digits or of `#word` is read once.
+    private static func reference(at i: Int, in s: [Unicode.Scalar]) -> (end: Int, text: [Unicode.Scalar])? {
+        func isAlphanumeric(_ c: Unicode.Scalar) -> Bool {
+            ("a"..."z").contains(c) || ("A"..."Z").contains(c) || ("0"..."9").contains(c)
+        }
+        /// The longest name in the table starting at `k`, read no further
+        /// than `limit`: its text and where it ends.
+        func named(at k: Int, limit: Int) -> (String, Int)? {
+            var run = k
+            while run < min(limit, s.count), run - k < htmlEntityMaxLength, isAlphanumeric(s[run]) { run += 1 }
+            func name(_ end: Int) -> String { String(String.UnicodeScalarView(s[k..<end])) }
+            if run < min(limit, s.count), s[run] == ";", let text = htmlEntities[name(run) + ";"] {
+                return (text, run + 1)
+            }
+            for end in stride(from: run, to: k, by: -1) {
+                if let text = htmlEntities[name(end)] { return (text, end) }
+            }
+            return nil
+        }
+        /// A numeric reference's digits from `k` (after `&#`), hex after an
+        /// `x`; the `;` is optional. Nil without digits.
+        func numeric(at k: Int) -> (UInt32, Int)? {
+            var j = k
+            let hex = j < s.count && (s[j] == "x" || s[j] == "X")
+            if hex { j += 1 }
+            let digits = j
+            var value: UInt32 = 0
+            while j < s.count, let d = hex ? hexValue(s[j]) : decimalValue(s[j]) {
+                value = min(value * (hex ? 16 : 10) + d, 0x110000)
+                j += 1
+            }
+            guard j > digits else { return nil }
+            if j < s.count, s[j] == ";" { j += 1 }
+            return (value, j)
+        }
+        // Where the reference ends, and what it reads as (nil: as written).
+        var end: Int?
+        var text: String?
+        if s[i] == "&", i + 1 < s.count {
+            if s[i + 1] == "#", let (value, after) = numeric(at: i + 2) {
+                (text, end) = (referenced(value), after)
+            } else if isAlphanumeric(s[i + 1]), let (name, after) = named(at: i + 1, limit: s.count) {
+                (text, end) = (name, after)
+            }
+        } else if s[i] == "#" {
+            var j = i + 1
+            while j < s.count, isAlphanumeric(s[j]) || s[j] == "_" { j += 1 }
+            guard j > i + 1, j < s.count, s[j] == ";" else { return nil }
+            if s[(i + 1)..<j].allSatisfy({ ("0"..."9").contains($0) }) {
+                (text, end) = (numeric(at: i + 1).flatMap { referenced($0.0) }, j + 1)
+            } else if let (name, after) = named(at: i + 1, limit: j + 1) {
+                (text, end) = (name, after)
+            } else {
+                (text, end) = ("&" + String(String.UnicodeScalarView(s[(i + 1)...j])), j + 1)
+            }
+        }
+        guard let end else { return nil }
+        // A control character stays as written: it can't be drawn. (A line
+        // or paragraph separator, `&#8232;`, is the author's line break.)
+        if let text, !text.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) {
+            return (end, Array(text.unicodeScalars))
+        }
+        return (end, Array(s[i..<end]))
+    }
+
+    /// Whether `text` opens a `<br…>` tag at `i`, as layout reads one (`<br`
+    /// at a word boundary): the same `<br\b[^>]*>` as
+    /// `DiagramLayoutEngine.brLines`, asked of the four characters that decide
+    /// it, so it costs the same however long the text. (The closing `>` is
+    /// `labelText`'s to check.)
+    private static func opensBreakTag(_ text: [Unicode.Scalar], at i: Int) -> Bool {
+        guard i + 3 < text.count, text[i + 1] == "b" || text[i + 1] == "B", text[i + 2] == "r" || text[i + 2] == "R",
+              let breakTag else { return false }
+        let probe = "<br" + String(Character(text[i + 3])) + ">"
+        return breakTag.firstMatch(in: probe, range: NSRange(location: 0, length: (probe as NSString).length)) != nil
+    }
+
+    private static func decimalValue(_ c: Unicode.Scalar) -> UInt32? {
+        ("0"..."9").contains(c) ? c.value - 48 : nil
+    }
+
+    private static func hexValue(_ c: Unicode.Scalar) -> UInt32? {
+        if let d = decimalValue(c) { return d }
+        if ("a"..."f").contains(c) { return c.value - 87 }
+        if ("A"..."F").contains(c) { return c.value - 55 }
+        return nil
     }
 
     private static let breakTag = try? NSRegularExpression(pattern: #"<br\b[^>]*>"#, options: .caseInsensitive)
@@ -555,12 +687,6 @@ public enum MermaidParser {
         "€", nil, "‚", "ƒ", "„", "…", "†", "‡", "ˆ", "‰", "Š", "‹", "Œ", nil, "Ž", nil,
         nil, "‘", "’", "“", "”", "•", "–", "—", "˜", "™", "š", "›", "œ", nil, "ž", "Ÿ",
     ]
-
-    private static func replacing(_ pattern: NSRegularExpression?, in text: String, with template: String) -> String {
-        guard let pattern else { return text }
-        return pattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
-                                                withTemplate: template)
-    }
 
     /// Parses a flowchart's header and body statements. `setAside` hears about
     /// each statement it couldn't use — by body index, or -1 for the header —

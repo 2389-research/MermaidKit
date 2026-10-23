@@ -363,6 +363,32 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.nodes.first?.label, "&nosuch; and #12; and &bogus;")
     }
 
+    /// Character references read as a browser reads them (HTML's
+    /// named-reference algorithm, over the full WHATWG table): the longest
+    /// name that matches wins, a legacy name (`&amp`, `&copy`, `&lt`…) needs
+    /// no `;`, and neither does a numeric one. Mermaid's `#name;` is
+    /// `&name;`, read the same way. Each expectation is mermaid 12.2.0's.
+    func testCharacterReferencesReadAsBrowsersDo() {
+        let cases: [(String, String)] = [
+            ("&amp more", "& more"), ("&copy 2024", "© 2024"), ("&lt", "<"), ("&LT", "<"),
+            ("x &amp", "x &"), ("&ampfoo", "&foo"), ("&notit; x", "¬it; x"), ("&AMP;", "&"),
+            ("&#169 x", "© x"), ("&#x41B", "Л"), ("&#128512", "😀"),
+            ("&Aacute;", "Á"), ("&ccedil;a", "ça"), ("&NotEqualTilde;", "≂̸"),
+            ("#copyx;", "©x;"), ("#notin;", "∉"), ("#amp;", "&"),
+            ("&unknown; y", "&unknown; y"), ("a&b", "a&b"), ("&amp;amp;", "&amp;"), ("#35;35;", "#35;"),
+        ]
+        for (raw, shown) in cases {
+            XCTAssertEqual(MermaidParser.labelText(raw), shown, raw)
+        }
+    }
+
+    /// `&#169;` reads "©", as its author meant. (mermaid 12.2.0 shows "&©":
+    /// its `#169;` rewrite strands the `&`. A deliberate leniency, as with
+    /// tag-like text.)
+    func testANumericReferenceWithItsAmpersandIsOneReference() {
+        XCTAssertEqual(MermaidParser.labelText("&#169; and &#xA9"), "© and ©")
+    }
+
     /// Numeric references read as a browser reads them: 0x80–0x9F as
     /// Windows-1252. A C1 control, a noncharacter or a non-scalar stays as
     /// written, never reaching SVG or a terminal.
@@ -447,6 +473,49 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(DiagramLayoutEngine.brLines(label).count, 1, label)
         XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "<brilliant>", "only a break tag stays encoded")
         XCTAssertEqual(DiagramLayoutEngine.brLines(c.nodes.first { $0.id == "B" }?.label ?? "").count, 2)
+        // Decoding never makes a break the text as written doesn't have,
+        // whichever character a reference supplies (`<`, `b`, `r`, the
+        // closing `>`, either half of `\n`), however far the `>`.
+        let far = "&ltbr " + String(repeating: "x", count: 300) + ">"
+        for spelled in ["&ltbr&gt", "&LT;BR>", "&lt;b&#114;>", "&#60br>", "&bsol;&#110;", "&bsol;n",
+                        "<b&#114;>", "<B&#82;>", "<br&#62;", "\\&#110;", far] {
+            let shown = MermaidParser.labelText("a \(spelled) b")
+            XCTAssertEqual(DiagramLayoutEngine.brLines(shown).count, 1, "\(spelled) → \(shown)")
+            XCTAssertFalse(shown.contains("\\n"), "\(spelled) → \(shown)")
+        }
+        // A break the author wrote still breaks, entities inside it or not.
+        for written in ["a<br>b", "a <br &amp; x> b", "a <BR/> b"] {
+            XCTAssertEqual(DiagramLayoutEngine.brLines(MermaidParser.labelText(written)).count, 2, written)
+        }
+    }
+
+    /// Reading a label never spells a line break its text doesn't have as
+    /// written: not by decoding a reference, not by dropping a formatting tag
+    /// between two halves (`\<i>n`), not by both. Labels built from every
+    /// fragment a break is made of, from a fixed seed. (A reference to a line
+    /// separator, `&#8232;`, is a break as written; see SceneLineBreakTests.)
+    func testReadingALabelNeverMakesALineBreak() {
+        let breakTag = try! NSRegularExpression(pattern: "<br\\b[^>]*>", options: .caseInsensitive)
+        func breaks(_ t: String) -> Int {
+            breakTag.numberOfMatches(in: t, range: NSRange(t.startIndex..., in: t))
+                + t.components(separatedBy: "\\n").count - 1
+        }
+        let parts = ["<", ">", "b", "r", "B", "R", "\\", "n", " ", "x", "/", "&lt;", "&gt;", "&lt", "&gt", "&#114;", "&#98;",
+                     "&#60", "&#62;", "#92;", "&bsol;", "&#110;", "#lt;", "#gt;", "<b>", "</b>", "<i>", "<span x>",
+                     "&amp;", "&am", "p;", ";", "#", "&", "<br>"]
+        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func next() -> Int {
+            state ^= state << 13; state ^= state >> 7; state ^= state << 17
+            return Int(state % UInt64(parts.count))
+        }
+        var failures: [String] = []
+        for _ in 0..<40_000 {
+            let raw = (0..<(2 + next() % 6)).map { _ in parts[next()] }.joined()
+            let shown = MermaidParser.labelText(raw)
+            if breaks(shown) > breaks(raw), failures.count < 5 { failures.append("\(raw.debugDescription) → \(shown.debugDescription)") }
+        }
+        XCTAssertEqual(failures, [])
+        XCTAssertEqual(MermaidParser.labelText("&am<b></b>p;"), "&amp;", "a reference is read as written, not assembled")
     }
 
     /// Splitting is linear: a long run of blanks after a `;` once rescanned
