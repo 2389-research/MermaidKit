@@ -107,6 +107,17 @@ final class AdversarialInputTests: XCTestCase {
         for i in 0..<MermaidParser.maxEdges { long += " n\(i) \(i == 0 ? link : "---------->") n\(i + 1)\n" }
         pipeline(long, "at-cap longest links")
 
+        // The same edges on one line, a chain and a fan, each read in one
+        // pass over the line (a per-link rescan of the rest was quadratic).
+        // Parsing is what's at stake, so only parse.
+        let chain = "flowchart LR\n" + (0...MermaidParser.maxEdges).map { "n\($0)" }.joined(separator: " --> ")
+        guard case .flowchart(let read)? = MermaidParser.parse(chain) else { return XCTFail("at-cap chain on one line") }
+        XCTAssertEqual(read.edges.count, MermaidParser.maxEdges)
+        let fan = "flowchart LR\n" + (0..<MermaidParser.maxEdges).map { "n\($0)>\"a & b\"]" }.joined(separator: " & ") + " --> z"
+        guard case .flowchart(let fanned)? = MermaidParser.parse(fan) else { return XCTFail("at-cap fan on one line") }
+        XCTAssertEqual(fanned.edges.count, MermaidParser.maxEdges)
+        XCTAssertEqual(Set(fanned.nodes.filter { $0.id != "z" }.map(\.label)), ["a & b"])
+
         var sank = "sankey-beta\n"
         for i in 0..<1_000 { sank += "a\(i),b\(i),1\n" }
         pipeline(sank, "1k sankey links")

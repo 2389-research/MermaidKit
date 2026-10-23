@@ -56,8 +56,12 @@ const unknownElement = name => {
   try { return document.createElement(name) instanceof document.defaultView.HTMLUnknownElement; }
   catch { return true; }
 };
+// An unclosed one at the end (`List<String`), which a browser drops too.
+const unclosedTagLike = /<([A-Za-z][^\s/>]*)[^>]*$/;
 /** MermaidKit's text with its tag-like text removed, as a browser shows it. */
-const hidingUnknownTags = text => collapse(text.replace(tagLike, (tag, name) => unknownElement(name) ? '' : tag));
+const hidingUnknownTags = text => collapse(text
+  .replace(tagLike, (tag, name) => unknownElement(name) ? '' : tag)
+  .replace(unclosedTagLike, (tag, name) => unknownElement(name) ? '' : tag));
 
 /**
  * Whether MermaidKit's `kitText` reads as mermaid's: the same, or the same
@@ -144,7 +148,8 @@ sentinels.forEach((src, i) => {
 const tagRule = [
   ['List<String>', 'List', true], ['Map<K,V> x', 'Map x', true], ['a <T> b', 'a b', true],
   ['x<b>y</b>z', 'xyz', false], ['Vec<i> and List<a>', 'Vec and List', false], ['a<br>b', 'a\nb', false],
-  ['<my-el>x', 'x', false], ['List<String>', 'Lis', false], ['List<Strin', 'List', false], ['p<0.05', 'p', false],
+  ['<my-el>x', 'x', false], ['List<String>', 'Lis', false], ['p<0.05', 'p', false],
+  ['List<String', 'List', true], ['<bbold</b', '', true], ['x<b', 'x', false], ['List<String x', 'List<String', false],
 ];
 for (const [kitText, mermaidText, excused] of tagRule) {
   if ((kitText !== mermaidText && hidingUnknownTags(kitText) === mermaidText) !== excused) {

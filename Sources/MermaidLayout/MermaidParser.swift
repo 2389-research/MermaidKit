@@ -263,6 +263,23 @@ public enum MermaidParser {
     /// statement's start runs to the end of the line, as it does on a line
     /// of its own.
     static func flowchartStatements(_ line: String) -> [String] {
+        lexFlowchart(line, splitting: true).map(\.text)
+    }
+
+    /// `statement` with each label's contents (strings, node text, pipe
+    /// labels, inline link text) replaced by `masked`, character for
+    /// character but for spaces and tabs: what's left is the statement's
+    /// syntax, so a search for a
+    /// link or an `&` can't find one inside a label. The same lexer as
+    /// `flowchartStatements`, so the two can't disagree on where a label is.
+    static func flowchartSyntax(_ statement: String) -> [Character] {
+        Array(lexFlowchart(statement, splitting: false).first?.masked ?? "")
+    }
+
+    /// What a label's character reads as in `flowchartSyntax`: no syntax.
+    static let masked: Character = "\u{1}"
+
+    private static func lexFlowchart(_ line: String, splitting: Bool) -> [(text: String, masked: String)] {
         /// A node's text, as mermaid's lexer reads it: it ends at the first of
         /// its shape's closers (`]]` for `[[`, `)]` for `[(`, `/]` or `\]`
         /// for `[/`…, from `shapeDelimiters`), with no nesting — `(`, `)` or
@@ -276,9 +293,16 @@ public enum MermaidParser {
             case linkText(closer: Character)    // after `--`, `==` or `-.`
         }
         let chars = Array(line)
-        var statements: [String] = []
+        var statements: [(text: String, masked: String)] = []
         var current = ""
+        // `current` with each label character masked.
+        var syntax = ""
         var mode = Mode.statement
+        /// Appends written syntax (`visible`) or label text to both.
+        func take(_ text: some StringProtocol, visible: Bool) {
+            current += text
+            syntax += visible ? String(text) : String(text.map { $0 == " " || $0 == "\t" ? $0 : masked })
+        }
         var blank = true    // `current` is only whitespace so far
         // Whether `current` is a style/classDef/linkStyle statement, once
         // asked: by then it holds a `#word`, so its first word is settled.
@@ -315,20 +339,35 @@ public enum MermaidParser {
 
         while i < chars.count {
             let c = chars[i]
+            // Whether `c` is read inside a label (decided before it can
+            // change the mode, so an opening `|` or `"` is syntax).
+            let inLabel: Bool
+            if case .statement = mode { inLabel = false } else { inLabel = true }
             switch mode {
             case .string(let shape):
-                if c == "\"" { mode = shape.map { .shape($0) } ?? .statement }
+                if c == "\"" {
+                    // A top-level string's closing quote is syntax again.
+                    mode = shape.map { .shape($0) } ?? .statement
+                    take(String(c), visible: shape == nil)
+                    i += 1
+                    continue
+                }
             case .shape(let shape):
                 if c == "\"" {
                     mode = .string(returnTo: shape)
                 } else if let length = closes(shape, at: i) {
-                    current += String(chars[i..<i + length])
+                    take(String(chars[i..<i + length]), visible: true)
                     i += length
                     mode = .statement
                     continue
                 }
             case .pipe:
-                if c == "|" { mode = .statement }
+                if c == "|" {
+                    mode = .statement
+                    take("|", visible: true)
+                    i += 1
+                    continue
+                }
             case .linkText(let closer):
                 // Ends at the link that closes it: `-->`/`---`/`--x`/`--o`,
                 // `==>`/`===`…, or `.->`/`.-`. The whole link is taken, so
@@ -344,13 +383,13 @@ public enum MermaidParser {
                     } else {
                         // The run can't close the text; take it whole so no
                         // later dot in it rescans it (linear, not quadratic).
-                        current += String(chars[i..<j])
+                        take(String(chars[i..<j]), visible: false)
                         i = j
                         continue
                     }
                 }
                 if end > i {
-                    current += String(chars[i..<end])
+                    take(String(chars[i..<end]), visible: true)
                     i = end
                     mode = .statement
                     continue
@@ -359,6 +398,7 @@ public enum MermaidParser {
                 if blank, c == "%", i + 1 < chars.count, chars[i + 1] == "%" {
                     i = chars.count     // a comment: the rest of the line
                     current = ""
+                    syntax = ""
                     continue
                 }
                 switch c {
@@ -369,9 +409,10 @@ public enum MermaidParser {
                         if styled == nil { styled = styling(current) }
                         return styled!
                     }()
-                    if !entity {
-                        statements.append(current)
+                    if splitting, !entity {
+                        statements.append((current, syntax))
                         current = ""
+                        syntax = ""
                         blank = true
                         styled = nil
                         i += 1
@@ -380,7 +421,7 @@ public enum MermaidParser {
                 case "\"": mode = .string(returnTo: nil)
                 case "[", "(", "{":
                     if let (shape, length) = shape(at: i) {
-                        current += String(chars[i..<i + length])
+                        take(String(chars[i..<i + length]), visible: true)
                         blank = false
                         i += length
                         mode = .shape(shape)
@@ -399,21 +440,21 @@ public enum MermaidParser {
                         // whole link (`-->`, `---`, `--x`, `==>`…), as in
                         // mermaid's lexer.
                         if !link(at: i, c) {
-                            current += String(chars[i...i + 1])
+                            take(String(chars[i...i + 1]), visible: true)
                             blank = false
                             i += 2
                             mode = .linkText(closer: c)
                             continue
                         }
                         // Skip the whole link so its tail can't reopen text.
-                        while i < chars.count, chars[i] == c { current.append(chars[i]); i += 1 }
+                        while i < chars.count, chars[i] == c { take(String(chars[i]), visible: true); i += 1 }
                         blank = false
                         continue
                     }
                     if c == "-", next == "." {
                         let after = i + 2 < chars.count ? chars[i + 2] : " "
                         if after != "." && after != "-" {
-                            current += "-."
+                            take("-.", visible: true)
                             blank = false
                             i += 2
                             mode = .linkText(closer: ".")
@@ -423,12 +464,20 @@ public enum MermaidParser {
                 default: break
                 }
             }
-            current.append(c)
+            take(String(c), visible: !inLabel)
             if c != " " && c != "\t" { blank = false }
             i += 1
         }
-        statements.append(current)
-        return statements.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        statements.append((current, syntax))
+        // Trimmed alike: the syntax keeps the text's whitespace at each end.
+        return statements.compactMap { statement in
+            let text = Array(statement.text), syntax = Array(statement.masked)
+            let blank: (Character) -> Bool = { $0.unicodeScalars.allSatisfy(CharacterSet.whitespaces.contains) }
+            let lead = text.prefix(while: blank).count
+            let trail = text.dropFirst(lead).reversed().prefix(while: blank).count
+            guard lead < text.count else { return nil }
+            return (String(text[lead..<(text.count - trail)]), String(syntax[lead..<(syntax.count - trail)]))
+        }
     }
 
     /// A character a node id is made of (Unicode letters included).
@@ -810,7 +859,17 @@ public enum MermaidParser {
                 }
                 continue
             }
-            if ["classDef", "class", "style", "click"].contains(where: { startsWithKeyword(line, $0) }) {
+            // `style X …` names a node, as in mermaid, which draws it even if
+            // nothing else does (but not as a member of an open subgraph).
+            if startsWithKeyword(line, "style") {
+                let target = line.dropFirst("style".count).split(whereSeparator: \.isWhitespace).first ?? ""
+                if let node = parseNodeToken(target), node.label == node.id, nodes[node.id] == nil {
+                    nodes[node.id] = node
+                    order.append(node.id)
+                }
+                continue
+            }
+            if ["classDef", "class", "click"].contains(where: { startsWithKeyword(line, $0) }) {
                 continue
             }
 
@@ -941,25 +1000,130 @@ public enum MermaidParser {
     /// every link (`-- text -->` becomes `-->|text|`, `<-. text .-o` becomes
     /// `<-.-o|text|`), and drops edge IDs (`e1@-->`), which are animation
     /// targets.
-    private static func normalizeEdgeSyntax(_ line: String) -> String {
-        func sub(_ pattern: String, _ template: String, _ s: String) -> String {
-            (try? NSRegularExpression(pattern: pattern))
-                .map { $0.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s),
-                                                   withTemplate: template) } ?? s
+    private static func normalizeEdgeSyntax(_ line: Written) -> Written {
+        var line = line
+        for (pattern, template) in edgeRewrites {
+            guard let pattern else { continue }
+            var text: [Character] = [], syntax: [Character] = []
+            var cursor = 0
+            for groups in Searchable(line.syntax).matches(of: pattern) {
+                guard let whole = groups[0] else { continue }
+                text += line.text[cursor..<whole.lowerBound]
+                syntax += line.syntax[cursor..<whole.lowerBound]
+                for piece in template {
+                    switch piece {
+                    case .literal(let c): text.append(c); syntax.append(c)
+                    case .group(let n):
+                        if let range = groups[n] { text += line.text[range]; syntax += line.syntax[range] }
+                    }
+                }
+                cursor = whole.upperBound
+            }
+            text += line.text[cursor...]
+            syntax += line.syntax[cursor...]
+            line = Written(text: text, syntax: syntax)
         }
+        return line
+    }
+
+    private enum TemplatePiece { case literal(Character), group(Int) }
+
+    /// `normalizeEdgeSyntax`'s rewrites, matched against a statement's
+    /// syntax, so inline text can hold anything but a link (`-- a-b -->`).
+    private static let edgeRewrites: [(NSRegularExpression?, [TemplatePiece])] = {
         // A start head: `<`, or an `o`/`x` that isn't the end of an id. The
         // opener can't begin inside a longer link, or `A --- B --- C` would
         // read from the first `---`'s second dash as `-- B ---`.
         let start = #"((?<![^\s])[ox]|<)?(?<![-=.~])"#
         // An `o`/`x` end head is followed by a space, `|` or the line's end.
         let head = #"[ox](?=[\s|]|$)"#
-        var s = line
-        // An edge id only right before a link, so `ops@xmail` in a label stays.
-        s = sub(#"\s\w+@(?=[ox<]?(?:--|==|-\.|~~~))"#, " ", s)                    // edge IDs
-        s = sub(start + #"--\s+([^-|>][^-]*?)\s+(-{2,}>|-{2,}\#(head)|-{3,})"#, "$1$3|$2|", s) // -- text -->
-        s = sub(start + #"-\.\s+([^.|]+?)\s+(\.+->|\.+-\#(head)|\.+-)"#, "$1-$3|$2|", s)    // -. text .->
-        s = sub(start + #"==\s+([^=|>][^=]*?)\s+(={2,}>|={2,}\#(head)|={3,})"#, "$1$3|$2|", s) // == text ==>
-        return s
+        let moved: [TemplatePiece] = [.group(1), .group(3), .literal("|"), .group(2), .literal("|")]
+        return [
+            // An edge id only right before a link, so `ops@xmail` in a label stays.
+            (#"\s\w+@(?=[ox<]?(?:--|==|-\.|~~~))"#, [.literal(" ")]),                          // edge IDs
+            (start + #"--\s+([^-|>][^-]*?)\s+(-{2,}>|-{2,}\#(head)|-{3,})"#, moved),              // -- text -->
+            (start + #"-\.\s+([^.|]+?)\s+(\.+->|\.+-\#(head)|\.+-)"#,
+             [.group(1), .literal("-"), .group(3), .literal("|"), .group(2), .literal("|")]),     // -. text .->
+            (start + #"==\s+([^=|>][^=]*?)\s+(={2,}>|={2,}\#(head)|={3,})"#, moved),              // == text ==>
+        ].map { (try? NSRegularExpression(pattern: $0.0), $0.1) }
+    }()
+
+    /// A statement as written, and its syntax (`flowchartSyntax`), character
+    /// for character: searches read the syntax, and what they find is cut
+    /// from the text.
+    private struct Written {
+        var text: [Character]
+        var syntax: [Character]
+
+        init(text: [Character], syntax: [Character]) {
+            self.text = text
+            self.syntax = syntax
+        }
+
+        init(_ statement: String) {
+            text = Array(statement.trimmingCharacters(in: .whitespaces))
+            let syntax = MermaidParser.flowchartSyntax(String(text))
+            // An unreadable statement has no syntax to trust; search it whole.
+            self.syntax = syntax.count == text.count ? syntax : text
+        }
+
+        var count: Int { text.count }
+        subscript(range: Range<Int>) -> Written { Written(text: Array(text[range]), syntax: Array(syntax[range])) }
+
+        /// Without the whitespace at either end.
+        func trimmed() -> Written {
+            let blank: (Character) -> Bool = { $0.unicodeScalars.allSatisfy(CharacterSet.whitespaces.contains) }
+            let lead = text.prefix(while: blank).count
+            let trail = text.dropFirst(lead).reversed().prefix(while: blank).count
+            return self[lead..<(count - trail)]
+        }
+    }
+
+    /// A statement's syntax, indexed once for regex searches that report
+    /// characters (the regex engine counts UTF-16).
+    private struct Searchable {
+        let string: String
+        /// The character each UTF-16 offset starts (-1 inside one), and the end.
+        private let characterAt: [Int]
+        /// Each character's UTF-16 offset, and the end's.
+        private let offsetOf: [Int]
+
+        init(_ syntax: [Character]) {
+            string = String(syntax)
+            var characterAt = [Int](repeating: -1, count: string.utf16.count + 1)
+            var offsetOf: [Int] = []
+            offsetOf.reserveCapacity(syntax.count + 1)
+            var offset = 0
+            for (k, c) in syntax.enumerated() {
+                characterAt[offset] = k
+                offsetOf.append(offset)
+                offset += c.utf16.count
+            }
+            characterAt[offset] = syntax.count
+            offsetOf.append(offset)
+            self.characterAt = characterAt
+            self.offsetOf = offsetOf
+        }
+
+        /// A match's groups, in characters (nil for one that didn't take part).
+        func groups(_ match: NSTextCheckingResult) -> [Range<Int>?] {
+            (0..<match.numberOfRanges).map { g in
+                let range = match.range(at: g)
+                guard range.location != NSNotFound else { return nil }
+                return characterAt[range.location]..<characterAt[range.location + range.length]
+            }
+        }
+
+        func matches(of pattern: NSRegularExpression) -> [[Range<Int>?]] {
+            pattern.matches(in: string, range: NSRange(location: 0, length: offsetOf.last!)).map(groups)
+        }
+
+        /// The first match at or after character `start`, reading nothing
+        /// before it (as if the text began there).
+        func firstMatch(of pattern: NSRegularExpression, from start: Int) -> [Range<Int>?]? {
+            pattern.firstMatch(in: string, range: NSRange(location: offsetOf[start], length: offsetOf.last! - offsetOf[start]))
+                .map(groups)
+        }
     }
 
     /// One link token between two endpoint lists.
@@ -993,15 +1157,15 @@ public enum MermaidParser {
         return try? NSRegularExpression(pattern: #"((?<![^\s])[ox]|<)?("# + body + ")")
     }()
 
-    /// The first link token in `text`: its range (without a start head that
-    /// doesn't match the end's, which stays with the endpoint before it) and
+    /// The first link token in a statement's `syntax` at or after `start`:
+    /// its range, in characters (with a start head only when it's the
+    /// link's: `<-->`, or one written after the endpoint before it), and
     /// what it draws.
-    private static func firstLink(in text: Substring) -> (range: Range<Substring.Index>, link: Link)? {
-        let string = String(text)
-        guard let pattern = linkPattern,
-              let match = pattern.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)),
-              let bodyRange = Range(match.range(at: 2), in: string) else { return nil }
-        var body = string[bodyRange]
+    private static func firstLink(in syntax: [Character], from start: Int,
+                                  searching search: Searchable) -> (range: Range<Int>, link: Link)? {
+        guard let pattern = linkPattern, let groups = search.firstMatch(of: pattern, from: start),
+              let bodyRange = groups[2] else { return nil }
+        var body = syntax[bodyRange]
         var link = Link()
         switch body.last {
         case ">": link.hasArrow = true; link.head = .arrow
@@ -1011,94 +1175,102 @@ public enum MermaidParser {
         }
         if link.hasArrow { body = body.dropLast() }
         var lower = bodyRange.lowerBound
-        if let startRange = Range(match.range(at: 1), in: string) {
-            let start = string[startRange]
+        // A start head that doesn't match the end isn't one: mermaid reads it
+        // as the link's first character (`<---` is `----`).
+        var unmatchedStart = false
+        let from = start
+        if let startRange = groups[1] {
+            let start = syntax[startRange.lowerBound]
             let matches = link.hasArrow &&
                 ((start == "<" && link.head == .arrow) || (start == "o" && link.head == .circle) ||
                  (start == "x" && link.head == .cross))
             if matches {
                 link.backArrow = true
                 lower = startRange.lowerBound
-            } else if start == "<" || !string[..<startRange.lowerBound]
-                        .trimmingCharacters(in: .whitespaces).isEmpty {
-                // A start head that doesn't match the end (`<---`, `o-->`) is
-                // one mermaid rejects; drop it and keep the link. An `o`/`x`
-                // with nothing before it is the endpoint itself (`x-->o`).
+            } else if start == "<" || syntax[from..<startRange.lowerBound].contains(where: { $0 != " " && $0 != "\t" }) {
+                // An `o`/`x` with nothing before it is the endpoint itself
+                // (`x-->o`); after an endpoint it's the link's.
                 lower = startRange.lowerBound
+                unmatchedStart = true
             }
         }
         // Lengths as mermaid counts them: dots for a dotted link, otherwise
         // the body less its first character (less one more for an open link,
-        // whose body has no head to stand in for it).
-        if body.hasPrefix("~") {
+        // whose body has no head to stand in for it). An unmatched start
+        // counts, and makes the link solid: mermaid's stroke is the line's
+        // first character.
+        if body.first == "~" {
             link.invisible = true
             link.length = body.count - 2
         } else if body.contains(".") {
             link.dashed = true
             link.length = body.filter { $0 == "." }.count
         } else {
-            link.thick = body.hasPrefix("=")
-            link.length = body.count - (link.hasArrow ? 1 : 2)
+            link.thick = body.first == "=" && !unmatchedStart
+            link.length = body.count - (link.hasArrow ? 1 : 2) + (unmatchedStart ? 1 : 0)
         }
         link.length = min(max(link.length, 1), maxLinkLength)
-        let offset = string.distance(from: string.startIndex, to: lower)
-        let length = string.distance(from: lower, to: bodyRange.upperBound)
-        let from = text.index(text.startIndex, offsetBy: offset)
-        return (from..<text.index(from, offsetBy: length), link)
+        return (lower..<bodyRange.upperBound, link)
     }
 
-    /// Splits an endpoint list on `&` at bracket depth 0 only, so labels
-    /// like `A[Tom & Jerry]` stay intact. Depth floors at 0: the asymmetric
-    /// `id>Flag]` closes a bracket it never opened.
-    private static func splitEndpoints(_ text: String) -> [Substring] {
-        var parts: [Substring] = []
-        var depth = 0
-        var start = text.startIndex
-        for i in text.indices {
-            switch text[i] {
-            case "[", "(", "{": depth += 1
-            case "]", ")", "}": depth = max(0, depth - 1)
-            case "&" where depth == 0:
-                parts.append(text[start..<i])
-                start = text.index(after: i)
-            default: break
-            }
+    /// Splits an endpoint list on each `&` in its syntax, so `A[Tom & Jerry]`
+    /// and `A>Tom & Jerry]` stay whole; an `&` written between two id
+    /// characters is part of the id (`B&C`), as in mermaid.
+    private static func splitEndpoints(_ list: Written) -> [Written] {
+        var parts: [Written] = []
+        var start = 0
+        for i in 0..<list.count where list.syntax[i] == "&" {
+            let joinsAnID = i > 0 && i + 1 < list.count && isIDCharacter(list.text[i - 1]) && isIDCharacter(list.text[i + 1])
+            guard !joinsAnID else { continue }
+            parts.append(list[start..<i])
+            start = i + 1
         }
-        parts.append(text[start...])
+        parts.append(list[start..<list.count])
         return parts
     }
 
     /// Parses one line's worth of edges — chained (`A --> B --> C`) and
     /// fanned (`A & B --> C`) forms yield several. The old single-edge parser
     /// silently erased any line it couldn't fully tokenize, which killed the
-    /// most common idioms in real flowcharts.
+    /// most common idioms in real flowcharts. Links, `|labels|` and `&` are
+    /// found in the line's syntax, never inside a label.
     /// `unread` collects the endpoints of an `&` fan that aren't nodes.
     private static func parseEdgeLine(_ raw: String, unread: inout [Substring]) -> [ParsedEdge]? {
-        let line = normalizeEdgeSyntax(raw)
-        var segments: [String] = []
+        let line = normalizeEdgeSyntax(Written(raw))
+        // Indexed once, so each link is found from where the last one ended
+        // (linear in the line, however long the chain).
+        let search = Searchable(line.syntax)
+        var nextBar = [Int](repeating: line.count, count: line.count + 1)
+        for i in stride(from: line.count - 1, through: 0, by: -1) {
+            nextBar[i] = line.syntax[i] == "|" ? i : nextBar[i + 1]
+        }
+        var segments: [Written] = []
         var joins: [Link] = []
-        var rest = Substring(line)
+        var cursor = 0
         while true {
-            guard let found = firstLink(in: rest) else {
-                segments.append(String(rest))
+            guard let found = firstLink(in: line.syntax, from: cursor, searching: search) else {
+                segments.append(line[cursor..<line.count])
                 break
             }
-            segments.append(String(rest[..<found.range.lowerBound]).trimmingCharacters(in: .whitespaces))
+            segments.append(line[cursor..<found.range.lowerBound].trimmed())
             var link = found.link
-            var after = rest[found.range.upperBound...].drop(while: { $0 == " " })
-            if after.hasPrefix("|"), let close = after.dropFirst().firstIndex(of: "|") {
-                link.label = labelText(String(after[after.index(after: after.startIndex)..<close]))
-                after = after[after.index(after: close)...]
+            var after = found.range.upperBound
+            while after < line.count, line.syntax[after] == " " { after += 1 }
+            if after < line.count, line.syntax[after] == "|", nextBar[after + 1] < line.count {
+                let close = nextBar[after + 1]
+                link.label = labelText(String(line.text[(after + 1)..<close]))
+                after = close + 1
             }
             joins.append(link)
-            rest = after
+            cursor = after
         }
         guard !joins.isEmpty, segments.count == joins.count + 1 else { return nil }
 
         var ends: [[Flowchart.Node]] = []
         for segment in segments {
             var nodes: [Flowchart.Node] = []
-            for token in splitEndpoints(segment) {
+            for part in splitEndpoints(segment) {
+                let token = Substring(String(part.text))
                 if let node = parseNodeToken(token) { nodes.append(node) } else { unread.append(token) }
             }
             guard !nodes.isEmpty else { unread = []; return nil }
@@ -1126,8 +1298,12 @@ public enum MermaidParser {
     /// `id((Label))`, `id(((Label)))`, `id[(Label)]`, `id[[Label]]`,
     /// `id{{Label}}`, the slanted `id[/Label/]`, `id[\Label\]`, `id[/Label\]`
     /// and `id[\Label/]`, the asymmetric `id>Label]`, and the
-    /// `id@{ shape: …, label: … }` shape-data form. Ids may contain `-` and `.`
-    /// between word characters (`api-gateway`, `auth.service`), as in mermaid.
+    /// `id@{ shape: …, label: … }` shape-data form. Ids may contain `-`, `.`
+    /// and `&` between word characters (`api-gateway`, `auth.service`,
+    /// `B&C`), as in mermaid. A shape must close where the token ends: its
+    /// text is read as `flowchartStatements` reads it (the first closer
+    /// outside a string), so `x>a] --> B[c]` isn't one node labeled
+    /// `a] --> B[c`.
     static func parseNodeToken(_ token: Substring) -> Flowchart.Node? {
         var trimmed = token.trimmingCharacters(in: .whitespaces)
         // `:::className` binds a style class — styling we ignore; without
@@ -1146,9 +1322,10 @@ public enum MermaidParser {
             let next = trimmed.index(after: index)
             if isWord(c) {
                 id.append(c)
-            } else if (c == "-" || c == "."), !id.isEmpty, next < trimmed.endIndex, isWord(trimmed[next]) {
-                // `api-gateway`, `auth.service`: a separator between word
-                // characters. Edge connectors are split off before this runs.
+            } else if (c == "-" || c == "." || c == "&"), !id.isEmpty, next < trimmed.endIndex, isWord(trimmed[next]) {
+                // `api-gateway`, `auth.service`, `B&C`: a separator between
+                // word characters. Edge connectors and `&` fans are split off
+                // before this runs.
                 id.append(c)
             } else {
                 break
@@ -1157,12 +1334,19 @@ public enum MermaidParser {
         }
         guard !id.isEmpty else { return nil }
         let rest = String(trimmed[index...])
+        // The rest's syntax: a shape's text is all label (masked or blank).
+        let syntax = flowchartSyntax(trimmed)
+        let restSyntax = syntax.count == trimmed.count ? syntax.dropFirst(id.count) : []
+        /// Whether `open` and `close` wrap nothing but the shape's text.
+        func wraps(_ open: String, _ close: String) -> Bool {
+            rest.hasPrefix(open) && rest.hasSuffix(close) && rest.count >= open.count + close.count
+                && restSyntax.dropFirst(open.count).dropLast(close.count).allSatisfy { $0 == masked || $0 == " " || $0 == "\t" }
+        }
 
         /// The label between `open` and `close` when they wrap the rest of the
         /// token, quotes and padding trimmed; nil for another shape.
         func stripped(_ open: String, _ close: String) -> String? {
-            guard rest.hasPrefix(open), rest.hasSuffix(close),
-                  rest.count >= open.count + close.count else { return nil }
+            guard wraps(open, close) else { return nil }
             return labelText(String(rest.dropFirst(open.count).dropLast(close.count))
                 .trimmingCharacters(in: .whitespaces)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\"")))
@@ -1171,7 +1355,7 @@ public enum MermaidParser {
         if rest.isEmpty {
             return Flowchart.Node(id: id, label: id, shape: .rectangle)
         }
-        if rest.hasPrefix("@{"), rest.hasSuffix("}") {
+        if wraps("@{", "}") {
             return shapeDataNode(id: id, body: rest.dropFirst(2).dropLast())
         }
         for (open, close, shape) in shapeDelimiters {

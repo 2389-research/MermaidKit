@@ -10,12 +10,29 @@
   author wrote disappears, and the oracle now treats it as agreeing instead of
   as a divergence. The rule only excuses unknown elements: a real tag (`<b>`,
   `<i>`, `<br>`) and any other difference still count, and the rule checks
-  itself on every run. Its summary line counts the charts it excuses.
+  itself on every run. Its summary line counts the charts it excuses. A tag
+  left unclosed at the end (`-- List<String -->`) counts too.
 
 ### Fixed
 
+- **A label is text to every step of reading a line.** The statement
+  scanner now also gives each statement's syntax, its labels masked, and
+  links, `|labels|` and `&` fans are found only there. So an asymmetric
+  node's text can hold `&` and `]` (`B --- S>"a & b"]` was dropped whole;
+  `x>a & b] -..-> Y` read as one node labeled `a & b] -..-> Y`), and inline
+  link text can hold `-` or `&` (`-- a-b -->`). A node's shape must close
+  where its token ends, so a line that doesn't parse as links is never read
+  as one node with the rest of the line as its label.
+- **`B&C` is one node**, as in mermaid: `&` joins a fan only between
+  whitespace.
+- **A start head that doesn't match the end counts toward the link**, as in
+  mermaid: `<---` is two ranks long, like `----`, and `o==>` is solid.
+- **`style X …` draws node `X`** even if nothing else names it, as in
+  mermaid; the styling itself is still ignored.
+
 - **A flowchart with nothing to draw draws empty**, as in mermaid: a header
-  alone (`graph LR;`), or only comments, styling, `click` or `class` lines.
+  alone (`graph LR;`), or only comments and `classDef`, `class`, `linkStyle`
+  or `click` lines.
   `diagnose` notes "nothing to draw" at the header, so a host can still tell,
   and alt text reads "Empty flowchart." A flowchart with a statement
   MermaidKit couldn't read still doesn't parse. **Behavior change:** `parse`

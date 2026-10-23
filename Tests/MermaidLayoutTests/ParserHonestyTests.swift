@@ -518,6 +518,56 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(MermaidParser.labelText("&am<b></b>p;"), "&amp;", "a reference is read as written, not assembled")
     }
 
+    /// A label is text to every step of reading a line, not only to
+    /// splitting it into statements: a `>`, `&` or `-` in an asymmetric
+    /// node's text, or in inline link text, is never syntax. Each
+    /// expectation is mermaid 12.2.0's.
+    func testSyntaxIsNeverReadInsideALabel() throws {
+        func edges(_ c: Flowchart) -> [String] { c.edges.map { "\($0.from)→\($0.to) \($0.label ?? "")" } }
+        func label(_ c: Flowchart, _ id: String) -> String? { c.nodes.first { $0.id == id }?.label }
+        let fan = try oneLine("flowchart LR; B --- S>\"a & b\"]")
+        XCTAssertEqual(edges(fan), ["B→S "])
+        XCTAssertEqual(label(fan, "S"), "a & b")
+        XCTAssertEqual(fan.nodes.first { $0.id == "S" }?.shape, .asymmetric)
+        let flag = try oneLine("flowchart LR; x>a & b] -..-> Y[(\"u\")]")
+        XCTAssertEqual(edges(flag), ["x→Y "])
+        XCTAssertEqual(label(flag, "x"), "a & b")
+        XCTAssertEqual(label(flag, "Y"), "u")
+        let both = try oneLine("flowchart LR; P>a & b] --x Q>\"a & b\"]")
+        XCTAssertEqual(edges(both), ["P→Q "])
+        XCTAssertEqual([label(both, "P"), label(both, "Q")], ["a & b", "a & b"])
+        XCTAssertEqual(edges(try oneLine("flowchart LR; A -- a-b --> B")), ["A→B a-b"])
+        XCTAssertEqual(edges(try oneLine("flowchart LR; A -- a & b --> B")), ["A→B a & b"])
+        XCTAssertEqual(edges(try oneLine("flowchart LR; A -- x --> B -- y --> C")), ["A→B x", "B→C y"])
+    }
+
+    /// `&` joins a fan only between whitespace (mermaid's `\s&\s`): written
+    /// between two id characters it's part of the id (`B&C`).
+    func testAnAmpersandInsideAnIdIsTheId() throws {
+        let c = try oneLine("graph LR; A-->B&C; C-->D")
+        XCTAssertEqual(c.nodes.map(\.id), ["A", "B&C", "C", "D"])
+        XCTAssertEqual(try oneLine("flowchart LR; A & B --> C").edges.map(\.from), ["A", "B"])
+    }
+
+    /// A start head that doesn't match the end isn't a head: mermaid reads it
+    /// as part of the link, so it counts toward the length (`<---` is
+    /// `----`, two ranks).
+    func testAnUnmatchedStartHeadCountsTowardTheLength() throws {
+        let c = try oneLine("flowchart LR; A <--- B; C <--o D; E o--> F; G x---> H")
+        XCTAssertEqual(c.edges.map(\.length), [2, 2, 2, 3])
+        XCTAssertEqual(c.edges.map(\.hasArrow), [false, true, true, true])
+        XCTAssertEqual(c.edges.map(\.backArrow), [false, false, false, false])
+    }
+
+    /// `style X …` names a node, and mermaid draws it even if nothing else
+    /// does; the styling itself is still ignored. (`class` and `click` lines
+    /// don't make one.)
+    func testAStyleLineNamesItsNode() throws {
+        let c = try oneLine("flowchart LR; A --> B; style Z fill:#f96,stroke:#333; class Q hot; click R cb")
+        XCTAssertEqual(c.nodes.map(\.id), ["A", "B", "Z"])
+        XCTAssertEqual(c.nodes.last?.label, "Z")
+    }
+
     /// Splitting is linear: a long run of blanks after a `;` once rescanned
     /// itself at every character (quadratic within `maxTextSize`).
     func testLongBlankRunsSplitInLinearTime() throws {
