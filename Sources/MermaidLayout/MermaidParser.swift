@@ -640,7 +640,12 @@ public enum MermaidParser {
     /// and why; styling it ignores on purpose (`classDef`, `style`, `click`…)
     /// isn't reported.
     static func parseFlowchart(header: String, body: [String],
-                               setAside: (_ index: Int, _ reason: String) -> Void = { _, _ in }) -> Flowchart? {
+                               setAside report: (_ index: Int, _ reason: String) -> Void = { _, _ in }) -> Flowchart? {
+        var setAsideCount = 0
+        func setAside(_ index: Int, _ reason: String) {
+            setAsideCount += 1
+            report(index, reason)
+        }
         let parts = header.split(separator: " ")
         var direction = Flowchart.Direction.topDown
         if parts.count > 1 {
@@ -742,7 +747,17 @@ public enum MermaidParser {
                 continue
             }
             // Styling, ignored on purpose: the theme draws every node alike.
-            if ["classDef", "class", "style", "linkStyle", "click"].contains(where: { startsWithKeyword(line, $0) }) {
+            // A `linkStyle` index must name a link read before it (mermaid
+            // rejects the chart otherwise).
+            if startsWithKeyword(line, "linkStyle") {
+                let target = line.dropFirst("linkStyle".count).split(whereSeparator: \.isWhitespace).first ?? ""
+                if target != "default",
+                   let missing = target.split(separator: ",").first(where: { Int($0).map { $0 >= edges.count } ?? false }) {
+                    setAside(index, "linkStyle \(missing) names no link (\(edges.count) read before it); ignored")
+                }
+                continue
+            }
+            if ["classDef", "class", "style", "click"].contains(where: { startsWithKeyword(line, $0) }) {
                 continue
             }
 
@@ -783,7 +798,9 @@ public enum MermaidParser {
             subgraphs[key]!.nodeIDs.removeAll { subgraphIDs.contains($0) }
         }
 
-        guard !nodes.isEmpty else { return nil }
+        // A chart with nothing to draw is an empty chart, as in mermaid; one
+        // that drew nothing because it couldn't read a statement isn't.
+        guard !nodes.isEmpty || setAsideCount == 0 else { return nil }
         return Flowchart(
             direction: direction,
             nodes: order.compactMap { nodes[$0] },

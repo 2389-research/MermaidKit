@@ -8,6 +8,49 @@ final class ParseDiagnosticsTests: XCTestCase {
         XCTAssertEqual(MermaidParser.diagnose("pie\n \"a\": 1"), [])
     }
 
+    /// A flowchart with nothing to draw parses as an empty chart, as in
+    /// mermaid (a header alone, or only comments, styling, `click` or `class`
+    /// lines), and `diagnose` notes it, so a host can still tell. One whose
+    /// statements couldn't be read still doesn't parse.
+    func testAFlowchartWithNothingToDrawIsEmpty() throws {
+        for source in ["graph LR;", "flowchart TD\n  %% only a comment", "flowchart LR\n  click A callback",
+                       "flowchart LR\n  classDef hot fill:#f96\n  class A hot", "graph TB\n  style A fill:#f96"] {
+            guard case .flowchart(let chart)? = MermaidParser.parse(source) else {
+                return XCTFail("should parse empty: \(source.debugDescription)")
+            }
+            XCTAssertEqual(chart.nodes.count, 0, source)
+            let notes = MermaidParser.diagnose(source)
+            XCTAssertEqual(notes.map(\.severity), [.note], source)
+            XCTAssertEqual(notes.first?.line, 1, source)
+            XCTAssertTrue(notes.first?.message.contains("nothing to draw") == true, "\(notes)")
+        }
+        guard case .flowchart(let lr)? = MermaidParser.parse("graph LR;") else { return XCTFail() }
+        XCTAssertEqual(lr.direction, .leftRight)
+        XCTAssertNil(MermaidParser.parse("flowchart LR\n  -->"), "unreadable isn't empty")
+        XCTAssertEqual(MermaidParser.diagnose("flowchart LR\n  -->").first?.severity, .error)
+        XCTAssertEqual(MermaidAltText.describe(source: "graph LR;"), "Empty flowchart.")
+        XCTAssertEqual(MermaidAltText.describe(source: "flowchart LR\n  subgraph S [Storage]\n  end"),
+                       "Flowchart with no nodes, only 1 empty group: Storage.")
+    }
+
+    /// A `linkStyle` index must name a link read before it, as in mermaid,
+    /// which rejects the chart otherwise. MermaidKit draws the rest and notes
+    /// it; a chart with nothing else in it doesn't parse.
+    func testALinkStyleNamingNoLinkIsNoted() throws {
+        for source in ["flowchart LR\n  linkStyle 0 stroke:red\n  A --> B", "flowchart LR\n  A --> B\n  linkStyle 1 stroke:red",
+                       "flowchart LR\n  A --> B\n  linkStyle 0,1 stroke:red", "flowchart LR\n  A --> B\n  linkStyle\t1 stroke:red"] {
+            XCTAssertNotNil(MermaidParser.parse(source), source)
+            let notes = MermaidParser.diagnose(source)
+            XCTAssertEqual(notes.map(\.severity), [.note], source)
+            XCTAssertTrue(notes.first?.message.contains("names no link") == true, "\(notes)")
+        }
+        for source in ["flowchart LR\n  A --> B\n  linkStyle 0 stroke:red", "flowchart LR\n  A --> B & C\n  linkStyle 1 stroke:red",
+                       "flowchart LR\n  linkStyle default stroke:red", "flowchart LR\n  A --> B\n  linkStyle 0 interpolate basis"] {
+            XCTAssertEqual(MermaidParser.diagnose(source).filter { $0.message.contains("link") }, [], source)
+        }
+        XCTAssertNil(MermaidParser.parse("graph TD\n  linkStyle 0 stroke:red"))
+    }
+
     func testEmptySource() {
         let d = MermaidParser.diagnose("   \n \n")
         XCTAssertEqual(d.count, 1)

@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- **A flowchart with nothing to draw draws empty**, as in mermaid: a header
+  alone (`graph LR;`), or only comments, styling, `click` or `class` lines.
+  `diagnose` notes "nothing to draw" at the header, so a host can still tell,
+  and alt text reads "Empty flowchart." A flowchart with a statement
+  MermaidKit couldn't read still doesn't parse. **Behavior change:** `parse`
+  used to return nil for these; hosts that treat nil as "show the source"
+  now get a blank diagram.
+- **A `linkStyle` that names no link is noted.** Its index must name a link
+  read before it (`linkStyle 1` after one link names none); mermaid rejects
+  such a chart. MermaidKit draws the rest, as before, and `diagnose` now
+  notes the statement; a chart with nothing else in it doesn't parse.
+
 - **Entities read as a browser reads them.** Labels decode every named
   character reference HTML defines (2,231 names, from the WHATWG table, up
   from 66), the way mermaid's labels reach the reader: the longest name that
