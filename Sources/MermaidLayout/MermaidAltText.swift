@@ -14,6 +14,12 @@ public enum MermaidAltText {
     /// A description of the parsed diagram, suitable for VoiceOver.
     public static func describe(_ diagram: MermaidDiagram) -> String {
         switch diagram {
+        case .flowchart(let d) where d.nodes.isEmpty:
+            let connections = d.edges.filter { !$0.invisible }.count
+            return d.subgraphs.isEmpty ? "Empty flowchart."
+                : "Flowchart with no nodes, only \(count(d.subgraphs.count, "empty group"))" +
+                  "\(connections > 0 ? " and \(count(connections, "connection"))" : ""): " +
+                  "\(list(d.subgraphs.map(\.label)))."
         case .flowchart(let d):
             let names = list(d.nodes.map(\.label))
             // Invisible links (`~~~`) only position nodes; they aren't connections.

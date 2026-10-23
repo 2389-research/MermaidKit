@@ -66,5 +66,22 @@
   "flowchart LR\n  A[&#128512]",
   "flowchart LR\n  A[&ccedil;a]",
   "flowchart LR\n  A[&AMP;]",
-  "flowchart LR\n  A[\"#quot;hi#quot;\"]"
+  "flowchart LR\n  A[\"#quot;hi#quot;\"]",
+  "graph LR;",
+  "flowchart TD\n  %% only a comment",
+  "flowchart LR\n  click A callback",
+  "flowchart LR\n  classDef hot fill:#f96\n  class A hot",
+  "flowchart LR\n  subgraph S [Storage]\n  end",
+  "flowchart LR\n  linkStyle 0 stroke:red",
+  "flowchart LR\n  A --> B\n  linkStyle 0 stroke:red",
+  "flowchart LR\n  linkStyle default stroke:red",
+  "graphical",
+  "flowchart LR junk",
+  "flowchart-elk LR\n  A --> B",
+  "graph TD\n  linkStyle nope stroke:red",
+  "graph TD\n  linkStyle -1 stroke:red",
+  "flowchart LR\n  A --> B\n  linkStyle 0, stroke:red",
+  "flowchart LR\n  direction TB",
+  "flowchart LR\n  subgraph S\n  end\n  direction TB",
+  "flowchart\tLR\n  A --> B"
 ]

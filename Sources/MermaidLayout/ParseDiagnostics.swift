@@ -40,8 +40,8 @@ extension MermaidParser {
     ]
 
     /// Explains a source that `parse` rejects, or, for a flowchart it accepts,
-    /// notes what it left out (`.note`s; other types return `[]` once they
-    /// parse). Deliberately cheap — safe to call on every parse to build an
+    /// notes what it left out, or that it has nothing to draw (`.note`s;
+    /// other types return `[]` once they parse). Deliberately cheap — safe to call on every parse to build an
     /// error UI, a log line, or a host's "show the source instead" check:
     ///
     /// ```swift
@@ -112,8 +112,12 @@ extension MermaidParser {
         guard let first = statements.first else { return [] }
 
         var notes: [ParseDiagnostic] = []
-        _ = parseFlowchart(header: first.text, body: statements.dropFirst().map(\.text)) { index, reason in
+        let chart = parseFlowchart(header: first.text, body: statements.dropFirst().map(\.text)) { index, reason in
             notes.append(.init(severity: .note, line: statements[index + 1].line, message: reason))
+        }
+        if let chart, chart.nodes.isEmpty, chart.subgraphs.isEmpty {
+            notes.append(.init(severity: .note, line: first.line,
+                               message: "the flowchart has no nodes, so there's nothing to draw; it renders empty"))
         }
         return notes
     }

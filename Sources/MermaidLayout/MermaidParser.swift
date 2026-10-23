@@ -693,8 +693,22 @@ public enum MermaidParser {
     /// and why; styling it ignores on purpose (`classDef`, `style`, `click`…)
     /// isn't reported.
     static func parseFlowchart(header: String, body: [String],
-                               setAside: (_ index: Int, _ reason: String) -> Void = { _, _ in }) -> Flowchart? {
-        let parts = header.split(separator: " ")
+                               setAside report: (_ index: Int, _ reason: String) -> Void = { _, _ in }) -> Flowchart? {
+        // Statements left out of the chart; a note that loses nothing (a
+        // top-level `direction`) doesn't count.
+        var setAsideCount = 0
+        func setAside(_ index: Int, _ reason: String, losing: Bool = true) {
+            if losing { setAsideCount += 1 }
+            report(index, reason)
+        }
+        let parts = header.split(whereSeparator: \.isWhitespace)
+        // The header mermaid reads: a keyword, then at most a direction.
+        if let keyword = parts.first, !["graph", "flowchart", "flowchart-elk"].contains(String(keyword)) {
+            setAside(-1, "unknown header '\(keyword)'; read as a flowchart")
+        }
+        if parts.count > 2 {
+            setAside(-1, "'\(parts.dropFirst(2).joined(separator: " "))' after the direction; ignored")
+        }
         var direction = Flowchart.Direction.topDown
         if parts.count > 1 {
             let token = normalizedDirectionToken(parts[1])
@@ -790,12 +804,27 @@ public enum MermaidParser {
                 if let top = stack.last, subgraphs[top] != nil {
                     if !reopened.contains(top) || subgraphs[top]!.direction == nil { subgraphs[top]!.direction = parsed }
                 } else if parsed != nil {
-                    setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow")
+                    setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow",
+                             losing: false)
                 }
                 continue
             }
             // Styling, ignored on purpose: the theme draws every node alike.
-            if ["classDef", "class", "style", "linkStyle", "click"].contains(where: { startsWithKeyword(line, $0) }) {
+            // A `linkStyle` index must name a link read before it (mermaid
+            // rejects the chart otherwise).
+            if startsWithKeyword(line, "linkStyle") {
+                let target = line.dropFirst("linkStyle".count).split(whereSeparator: \.isWhitespace).first ?? ""
+                /// A link read before this statement, by its index.
+                func names(_ index: Substring) -> Bool {
+                    !index.isEmpty && index.allSatisfy { ("0"..."9").contains($0) } && (Int(index).map { $0 < edges.count } ?? false)
+                }
+                if target != "default",
+                   let missing = target.split(separator: ",", omittingEmptySubsequences: false).first(where: { !names($0) }) {
+                    setAside(index, "linkStyle '\(missing)' names no link (\(edges.count) read before it); ignored")
+                }
+                continue
+            }
+            if ["classDef", "class", "style", "click"].contains(where: { startsWithKeyword(line, $0) }) {
                 continue
             }
 
@@ -836,7 +865,10 @@ public enum MermaidParser {
             subgraphs[key]!.nodeIDs.removeAll { subgraphIDs.contains($0) }
         }
 
-        guard !nodes.isEmpty else { return nil }
+        // A chart with nothing to draw is an empty chart, as in mermaid; one
+        // that drew nothing because it couldn't read a statement isn't. A
+        // subgraph's box is something drawn, as a node is.
+        guard !nodes.isEmpty || !subgraphOrder.isEmpty || setAsideCount == 0 else { return nil }
         return Flowchart(
             direction: direction,
             nodes: order.compactMap { nodes[$0] },
