@@ -3,7 +3,11 @@
 //   node compare.mjs corpus.json mermaid.jsonl kit.jsonl [--baseline known-divergences.json] [--update | --accept]
 //
 // Each chart is one of:
-//   agree       same vertices (id, label, shape), edges and direction
+//   agree       same vertices (id, label, shape), edges and direction. A
+//               label or title MermaidKit shows with tag-like text a browser
+//               hides as an element it doesn't know (`List<String>`, mermaid
+//               "List") agrees too, on purpose: no text the author wrote
+//               disappears. The summary counts those charts.
 //   lenient     mermaid errors, MermaidKit draws (allowed: degrade, never break)
 //   rejects     mermaid draws, MermaidKit returns nothing          (divergence)
 //   differs     both draw, but something a reader sees differs     (divergence)
@@ -26,6 +30,8 @@
 // baseline or a changed corpus; its diff is the reviewer's to approve.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { JSDOM } from 'jsdom';
+import { collapse } from './normalize.mjs';
 
 const [corpusPath, mermaidPath, kitPath] = process.argv.slice(2);
 const baselineIdx = process.argv.indexOf('--baseline');
@@ -42,9 +48,36 @@ if (mermaid.length !== corpus.length || kit.length !== corpus.length) {
 const hash = s => createHash('sha256').update(s).digest('hex').slice(0, 16);
 const key = o => JSON.stringify(o, Object.keys(o).sort());
 
+// Tag-like text: `<name …>` or `</name>` naming an element a browser doesn't
+// know, which it hides. Asked of the HTML parser itself, as `visibleText`
+// reads labels: `<svg>` and `<math>` are real (SVG and MathML), and a name
+// only the parser accepts (`<K,V>`) is unknown.
+const { document } = new JSDOM('').window;
+const tagLike = /<\/?([A-Za-z][^\s/>]*)[^>]*>/g;
+const unknownElement = name => {
+  const fragment = document.createElement('template');
+  fragment.innerHTML = `<${name}>`;
+  return fragment.content.firstElementChild instanceof document.defaultView.HTMLUnknownElement;
+};
+/** MermaidKit's text with its tag-like text removed, as a browser shows it. */
+const hidingUnknownTags = text => collapse(text.replace(tagLike, (tag, name) => unknownElement(name) ? '' : tag));
+
+/**
+ * Whether MermaidKit's `kitText` reads as mermaid's: the same, or the same
+ * but for tag-like text MermaidKit shows and the browser hides. (Notes that.)
+ */
+const sameText = (mermaidText, kitText, out) => {
+  if (kitText === mermaidText) return true;
+  if (hidingUnknownTags(kitText) !== mermaidText) return false;
+  out.keptTags = true;
+  return true;
+};
+const sameEdge = (e, f, out) =>
+  key({ ...e, label: '' }) === key({ ...f, label: '' }) && sameText(e.label, f.label, out);
+
 /** What a reader sees differently, sorted by how bad it is (see above). */
 function differences(m, k) {
-  const out = { missing: [], wrong: [], extra: [] };
+  const out = { missing: [], wrong: [], extra: [], keptTags: false };
   if (!k.ok) k = { direction: null, vertices: [], edges: [] };
   if (k.direction === null) out.missing.push(`direction ${m.direction}`);
   else if (m.direction !== k.direction) out.wrong.push(`direction ${m.direction} vs ${k.direction}`);
@@ -56,7 +89,7 @@ function differences(m, k) {
   for (const [id, v] of mv) {
     const w = kv.get(id);
     if (!w) { out.missing.push(`node ${JSON.stringify(id)}`); continue; }
-    if (v.label !== w.label) out.wrong.push(`node ${id} label ${JSON.stringify(v.label)} vs ${JSON.stringify(w.label)}`);
+    if (!sameText(v.label, w.label, out)) out.wrong.push(`node ${id} label ${JSON.stringify(v.label)} vs ${JSON.stringify(w.label)}`);
     if (v.shape !== w.shape) out.wrong.push(`node ${id} shape ${v.shape} vs ${w.shape}`);
   }
   for (const id of kv.keys()) if (!mv.has(id)) out.extra.push(`node ${JSON.stringify(id)}`);
@@ -65,7 +98,8 @@ function differences(m, k) {
   // edge, one per pair), and the rest is missing or extra, copy by copy.
   const left = [...k.edges], unmatched = [];
   for (const e of m.edges) {
-    const i = left.findIndex(f => key(f) === key(e));
+    let i = left.findIndex(f => key(f) === key(e));
+    if (i < 0) i = left.findIndex(f => sameEdge(e, f, out));
     if (i >= 0) left.splice(i, 1); else unmatched.push(e);
   }
   for (const e of unmatched) {
@@ -83,7 +117,7 @@ function differences(m, k) {
   for (const [id, s] of ms) {
     const t = ks.get(id);
     if (!t) { out.missing.push(`subgraph ${JSON.stringify(id)}`); continue; }
-    if (s.title !== t.title) out.wrong.push(`subgraph ${id} title ${JSON.stringify(s.title)} vs ${JSON.stringify(t.title)}`);
+    if (!sameText(s.title, t.title, out)) out.wrong.push(`subgraph ${id} title ${JSON.stringify(s.title)} vs ${JSON.stringify(t.title)}`);
     if (s.direction !== t.direction) out.wrong.push(`subgraph ${id} direction ${s.direction} vs ${t.direction}`);
     for (const n of s.members) if (!t.members.includes(n)) out.wrong.push(`subgraph ${id} lacks ${JSON.stringify(n)}`);
     for (const n of t.members) if (!s.members.includes(n)) out.wrong.push(`subgraph ${id} wrongly holds ${JSON.stringify(n)}`);
@@ -108,7 +142,22 @@ sentinels.forEach((src, i) => {
     process.exit(2);
   }
 });
-const tally = { agree: 0, lenient: 0, rejects: 0, differs: 0 };
+// The tag-like-text rule must only ever excuse unknown tags: if it excuses
+// anything else, it could hide a real divergence, so nothing else counts.
+const tagRule = [
+  ['List<String>', 'List', true], ['Map<K,V> x', 'Map x', true], ['a <T> b', 'a b', true],
+  ['x<b>y</b>z', 'xyz', false], ['Vec<i> and List<a>', 'Vec and List', false], ['a<br>b', 'a\nb', false],
+  ['x<svg>y', 'xy', false], ['x<math>y</math>', 'xy', false],
+  ['<my-el>x', 'x', false], ['List<String>', 'Lis', false], ['List<Strin', 'List', false], ['p<0.05', 'p', false],
+];
+for (const [kitText, mermaidText, excused] of tagRule) {
+  if ((kitText !== mermaidText && hidingUnknownTags(kitText) === mermaidText) !== excused) {
+    console.error(`the tag-like-text rule is broken: ${JSON.stringify(kitText)} vs ${JSON.stringify(mermaidText)} ` +
+                  `should ${excused ? '' : 'not '}agree`);
+    process.exit(2);
+  }
+}
+const tally = { agree: 0, lenient: 0, rejects: 0, differs: 0, keptTags: 0 };
 const divergent = {};
 corpus.forEach((src, i) => {
   const m = mermaid[i], k = kit[i];
@@ -118,13 +167,14 @@ corpus.forEach((src, i) => {
   else if (!k.ok) kind = 'rejects';
   else kind = total(differences(m, k)) ? 'differs' : 'agree';
   tally[kind]++;
+  if (kind === 'agree' && m.ok && k.ok && differences(m, k).keptTags) tally.keptTags++;
   if (kind === 'rejects' || kind === 'differs') {
     const diff = differences(m, k);
     divergent[hash(src)] = { index: i, kind, ...counts(diff), detail: describe(diff), source: src };
   }
 });
 
-console.log(`mermaid oracle: ${corpus.length} charts — ${tally.agree} agree, ${tally.lenient} lenient, ` +
+console.log(`mermaid oracle: ${corpus.length} charts — ${tally.agree} agree (${tally.keptTags} keeping tag-like text), ${tally.lenient} lenient, ` +
             `${tally.rejects} rejected, ${tally.differs} differ`);
 const tallyOf = d => `${d.missing} missing, ${d.wrong} wrong, ${d.extra} extra`;
 const show = (tag, d) =>

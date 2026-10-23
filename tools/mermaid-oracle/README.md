@@ -28,7 +28,12 @@ ends the run.
 
 **Each chart is one of:**
 
-- **agree:** both draw the same thing.
+- **agree:** both draw the same thing. This includes a label MermaidKit shows
+  with tag-like text that the browser hides as an element it doesn't know
+  (`List<String>`, which mermaid shows as "List"). MermaidKit keeps that text
+  on purpose, so nothing the author wrote disappears. The summary counts
+  those charts, and the rule checks itself before every run (exit 2 if it
+  would excuse anything else, such as a real `<b>` tag).
 - **lenient:** mermaid errors and MermaidKit draws. This is allowed: degrade,
   never break.
 - **rejects:** mermaid draws and MermaidKit returns nothing. A divergence.
