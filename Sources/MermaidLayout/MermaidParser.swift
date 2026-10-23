@@ -694,12 +694,14 @@ public enum MermaidParser {
     /// isn't reported.
     static func parseFlowchart(header: String, body: [String],
                                setAside report: (_ index: Int, _ reason: String) -> Void = { _, _ in }) -> Flowchart? {
+        // Statements left out of the chart; a note that loses nothing (a
+        // top-level `direction`) doesn't count.
         var setAsideCount = 0
-        func setAside(_ index: Int, _ reason: String) {
-            setAsideCount += 1
+        func setAside(_ index: Int, _ reason: String, losing: Bool = true) {
+            if losing { setAsideCount += 1 }
             report(index, reason)
         }
-        let parts = header.split(separator: " ")
+        let parts = header.split(whereSeparator: \.isWhitespace)
         // The header mermaid reads: a keyword, then at most a direction.
         if let keyword = parts.first, !["graph", "flowchart", "flowchart-elk"].contains(String(keyword)) {
             setAside(-1, "unknown header '\(keyword)'; read as a flowchart")
@@ -802,7 +804,8 @@ public enum MermaidParser {
                 if let top = stack.last, subgraphs[top] != nil {
                     if !reopened.contains(top) || subgraphs[top]!.direction == nil { subgraphs[top]!.direction = parsed }
                 } else if parsed != nil {
-                    setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow")
+                    setAside(index, "'direction \(written)' outside a subgraph has no effect; the header sets the flow",
+                             losing: false)
                 }
                 continue
             }
