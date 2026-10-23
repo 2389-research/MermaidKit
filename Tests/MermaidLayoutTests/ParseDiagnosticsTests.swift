@@ -51,6 +51,13 @@ final class ParseDiagnosticsTests: XCTestCase {
         XCTAssertEqual(MermaidAltText.describe(source: "graph LR;"), "Empty flowchart.")
         XCTAssertEqual(MermaidAltText.describe(source: "flowchart LR\n  subgraph S [Storage]\n  end"),
                        "Flowchart with no nodes, only 1 empty group: Storage.")
+        XCTAssertEqual(MermaidAltText.describe(source: "flowchart LR\n  subgraph A\n  end\n  subgraph B\n  end\n  A --> B"),
+                       "Flowchart with no nodes, only 2 empty groups and 1 connection: A, B.")
+        // A box is content: it draws, and what couldn't be read is noted, as
+        // for a chart with nodes.
+        let boxed = "flowchart LR\n  subgraph S\n  end\n  linkStyle 0 stroke:red"
+        XCTAssertNotNil(MermaidParser.parse(boxed))
+        XCTAssertEqual(MermaidParser.diagnose(boxed).map(\.line), [4])
     }
 
     /// A `linkStyle` index must name a link read before it, as in mermaid,
