@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Tooling
+
+- **The mermaid.js oracle counts tag-like text as agreeing.** MermaidKit
+  shows `List<String>` where a browser hides `<String>` as an element it
+  doesn't know, and mermaid shows "List". That's deliberate, so nothing the
+  author wrote disappears, and the oracle now treats it as agreeing instead of
+  as a divergence. The rule only excuses unknown elements: a real tag (`<b>`,
+  `<i>`, `<br>`) and any other difference still count, and the rule checks
+  itself on every run. Its summary line counts the charts it excuses.
+
 ### Fixed
 
 - **A flowchart with nothing to draw draws empty**, as in mermaid: a header
