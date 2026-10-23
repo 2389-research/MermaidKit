@@ -210,8 +210,8 @@ mermaid.js, and the failure mode is deliberate:
   `accTitle:`/`accDescr:` accessibility statements (all types — they feed
   the generated alt text and read back via `MermaidParser.metadata(in:)`,
   never appearing as content); flowchart `;`-separated statements
-  (`graph LR; A --> B; B --> C`), entities in labels (`#quot;`, `#35;`,
-  `&amp;`, `&#x2665;`), chained edges
+  (`graph LR; A --> B; B --> C`), entities in labels (every HTML name, read
+  as a browser reads it, and mermaid's `#quot;`, `#35;`), chained edges
   (`A --> B --> C`), `&` fan-out, inline `-- text -->` labels,
   bidirectional `<-->`, longer links (`--->` spans two ranks), thick `==>`
   and invisible `~~~` links, circle `--o` and cross `--x` heads, edge IDs,

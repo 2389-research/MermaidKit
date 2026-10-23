@@ -447,8 +447,9 @@ public enum MermaidParser {
         return next == nil || next == " " || next == "\t"
     }
 
-    /// Label text as mermaid shows it: entities decoded (`#quot;`, `#35;`,
-    /// `&amp;`, `&#35;`, `&#x2665;`) and inline formatting tags (`<b>`, `<i>`,
+    /// Label text as mermaid shows it: character references decoded as a
+    /// browser reads them (`#quot;`, `#35;`, `&amp;`, `&copy`, `&#x2665;`; see
+    /// `decodingEntities`) and inline formatting tags (`<b>`, `<i>`,
     /// `<code>`, `<span …>`, …) dropped for their text, which the renderers
     /// can't style. `<br>` line breaks stay; other angle brackets (`p<0.05`,
     /// `List<String>`) are text.
@@ -464,67 +465,139 @@ public enum MermaidParser {
         pattern: #"</?(?:b|i|u|s|em|strong|code|kbd|mark|small|big|sub|sup|strike|del|ins|span|font|a|p|div|tt|q|cite)(?:\s[^<>]*)?/?>"#,
         options: [.caseInsensitive])
 
-    /// `&#x1F600;` / `&#123;` / `&name;` (HTML) and `#123;` / `#name;`
-    /// (mermaid's own, any `#word;`). A reference to something that isn't a
-    /// printable character stays as written, as does an unknown `&name;`; an
-    /// unknown `#name;` reads `&name;`, as mermaid shows it.
-    private static let entityPattern = try? NSRegularExpression(
-        pattern: #"&#[xX]([0-9A-Fa-f]{1,8});|&#([0-9]{1,10});|#([0-9]{1,10});|&([A-Za-z][A-Za-z0-9]{1,31});|#([A-Za-z0-9_]{1,32});"#)
-
-    private static let namedEntities: [String: String] = [
-        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00A0}",
-        "hellip": "…", "mdash": "—", "ndash": "–", "middot": "·", "bull": "•",
-        "lsquo": "‘", "rsquo": "’", "ldquo": "“", "rdquo": "”", "laquo": "«", "raquo": "»",
-        "copy": "©", "reg": "®", "trade": "™", "deg": "°", "plusmn": "±", "times": "×",
-        "divide": "÷", "micro": "µ", "para": "¶", "sect": "§", "euro": "€", "pound": "£",
-        "yen": "¥", "cent": "¢", "infin": "∞", "ne": "≠", "le": "≤", "ge": "≥",
-        "larr": "←", "rarr": "→", "uarr": "↑", "darr": "↓", "harr": "↔",
-        "lArr": "⇐", "rArr": "⇒", "hArr": "⇔", "hearts": "♥", "check": "✓", "cross": "✗",
-        "semi": ";", "colon": ":", "num": "#", "lpar": "(", "rpar": ")",
-        "lsqb": "[", "rsqb": "]", "lcub": "{", "rcub": "}", "vert": "|", "excl": "!",
-    ]
-
-    /// `guardingBreaks` keeps an entity that would spell a line break as
-    /// written; the look-ahead deciding that decodes without it, so decoding
-    /// never recurses (it's linear: each `<` looks 256 characters ahead).
-    private static func decodingEntities(_ text: String, guardingBreaks: Bool = true) -> String {
-        guard let pattern = entityPattern else { return text }
-        let ns = text as NSString
-        var out = ""
-        var cursor = 0
-        for match in pattern.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            out += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-            cursor = match.range.location + match.range.length
-            func group(_ i: Int) -> String? {
-                match.range(at: i).location == NSNotFound ? nil : ns.substring(with: match.range(at: i))
-            }
-            let decoded: String?
-            if let hex = group(1) {
-                decoded = UInt32(hex, radix: 16).flatMap(referenced)
-            } else if let decimal = group(2) ?? group(3) {
-                decoded = UInt32(decimal).flatMap(referenced)
-            } else if let name = group(4) {
-                decoded = namedEntities[name]
-            } else if let name = group(5) {
-                decoded = namedEntities[name] ?? "&\(name);"
-            } else {
-                decoded = nil
-            }
-            // A `<` or `\` that would spell a line break (`&lt;br&gt;`, `#92;n`)
-            // stays as written: layout reads `<br>` and `\n` as breaks.
-            let breaks: Bool
-            if guardingBreaks, decoded == "<" || decoded == "\\" {
-                let after = ns.substring(with: NSRange(location: cursor, length: min(256, ns.length - cursor)))
-                breaks = decoded == "<"
-                    ? spellsBreakTag(decodingEntities(after, guardingBreaks: false))
-                    : after.hasPrefix("n")
-            } else {
-                breaks = false
-            }
-            out += breaks ? ns.substring(with: match.range) : decoded ?? ns.substring(with: match.range)
+    /// Decodes character references the way mermaid's text reaches its
+    /// reader. Mermaid first makes its own `#name;` and `#123;` (any `#word;`)
+    /// `&name;` and `&#123;`; then the browser reads every reference by HTML's
+    /// algorithm over the full table (`htmlEntities`): the longest name that
+    /// matches wins (`&notit;` is "¬it;"), a legacy name needs no `;` (`&amp`,
+    /// `&copy`), and neither does a numeric reference. `&#123;` is one
+    /// reference, as its author meant (mermaid's rewrite strands the `&`).
+    /// A reference to something that isn't a printable character stays as
+    /// written, as does an unknown `&name;`; an unknown `#name;` reads
+    /// `&name;`, as mermaid shows it.
+    ///
+    /// A `<` or `\` that would spell a line break with the text after it
+    /// (`&lt;br&gt;`, `#92;n`) stays as written: layout reads `<br>` and `\n`
+    /// as breaks. One scan finds every reference, so the text after one is
+    /// read with every reference decoded, and nothing is decoded twice.
+    /// Linear: a name is at most `htmlEntityMaxLength` long, a run of digits
+    /// or of `#word` is read once, and a `<` before `br` looks 256 ahead.
+    private static func decodingEntities(_ text: String) -> String {
+        let s = Array(text.unicodeScalars)
+        func isAlphanumeric(_ c: Unicode.Scalar) -> Bool {
+            ("a"..."z").contains(c) || ("A"..."Z").contains(c) || ("0"..."9").contains(c)
         }
-        out += ns.substring(from: cursor)
-        return out
+        /// The longest name in the table starting at `k`, read no further
+        /// than `limit`: its text and where it ends.
+        func named(at k: Int, limit: Int) -> (String, Int)? {
+            var run = k
+            while run < min(limit, s.count), run - k < htmlEntityMaxLength, isAlphanumeric(s[run]) { run += 1 }
+            func name(_ end: Int) -> String { String(String.UnicodeScalarView(s[k..<end])) }
+            if run < min(limit, s.count), s[run] == ";", let text = htmlEntities[name(run) + ";"] {
+                return (text, run + 1)
+            }
+            for end in stride(from: run, to: k, by: -1) {
+                if let text = htmlEntities[name(end)] { return (text, end) }
+            }
+            return nil
+        }
+        /// A numeric reference's digits from `k` (after `&#`), hex after an
+        /// `x`; the `;` is optional. Nil without digits.
+        func numeric(at k: Int) -> (UInt32, Int)? {
+            var j = k
+            let hex = j < s.count && (s[j] == "x" || s[j] == "X")
+            if hex { j += 1 }
+            let digits = j
+            var value: UInt32 = 0
+            while j < s.count, let d = hex ? hexValue(s[j]) : decimalValue(s[j]) {
+                value = min(value * (hex ? 16 : 10) + d, 0x110000)
+                j += 1
+            }
+            guard j > digits else { return nil }
+            if j < s.count, s[j] == ";" { j += 1 }
+            return (value, j)
+        }
+        // Each reference, and the text it reads as.
+        var references: [(range: Range<Int>, text: [Unicode.Scalar])] = []
+        var i = 0
+        while i < s.count {
+            var decoded: String?
+            var end = i + 1
+            if s[i] == "&", i + 1 < s.count {
+                if s[i + 1] == "#", let (value, after) = numeric(at: i + 2) {
+                    decoded = referenced(value)
+                    end = after
+                } else if isAlphanumeric(s[i + 1]), let (text, after) = named(at: i + 1, limit: s.count) {
+                    decoded = text
+                    end = after
+                }
+            } else if s[i] == "#" {
+                var j = i + 1
+                while j < s.count, isAlphanumeric(s[j]) || s[j] == "_" { j += 1 }
+                if j > i + 1, j < s.count, s[j] == ";" {
+                    end = j + 1
+                    if s[(i + 1)..<j].allSatisfy({ ("0"..."9").contains($0) }) {
+                        decoded = numeric(at: i + 1).flatMap { referenced($0.0) }
+                    } else if let (text, after) = named(at: i + 1, limit: j + 1) {
+                        decoded = text
+                        end = after
+                    } else {
+                        decoded = "&" + String(String.UnicodeScalarView(s[(i + 1)...j]))
+                    }
+                }
+            }
+            if let text = decoded, !text.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) {
+                references.append((i..<end, Array(text.unicodeScalars)))
+            }
+            i = end
+        }
+        guard !references.isEmpty else { return text }
+        // The text with every reference decoded, and where each one's text
+        // ends in it: what a `<` or `\` is followed by.
+        var plain: [Unicode.Scalar] = []
+        plain.reserveCapacity(s.count)
+        var ends: [Int] = []
+        var cursor = 0
+        for reference in references {
+            plain += s[cursor..<reference.range.lowerBound]
+            plain += reference.text
+            ends.append(plain.count)
+            cursor = reference.range.upperBound
+        }
+        plain += s[cursor...]
+        func breaks(_ k: Int) -> Bool {
+            let at = ends[k]
+            switch references[k].text {
+            case ["<"]:
+                guard at + 1 < plain.count, plain[at] == "b" || plain[at] == "B",
+                      plain[at + 1] == "r" || plain[at + 1] == "R" else { return false }
+                return spellsBreakTag(String(String.UnicodeScalarView(plain[at..<min(plain.count, at + 256)])))
+            case ["\\"]:
+                return at < plain.count && plain[at] == "n"
+            default:
+                return false
+            }
+        }
+        var out = String.UnicodeScalarView()
+        cursor = 0
+        for (k, reference) in references.enumerated() {
+            out.append(contentsOf: s[cursor..<reference.range.lowerBound])
+            out.append(contentsOf: breaks(k) ? Array(s[reference.range]) : reference.text)
+            cursor = reference.range.upperBound
+        }
+        out.append(contentsOf: s[cursor...])
+        return String(out)
+    }
+
+    private static func decimalValue(_ c: Unicode.Scalar) -> UInt32? {
+        ("0"..."9").contains(c) ? c.value - 48 : nil
+    }
+
+    private static func hexValue(_ c: Unicode.Scalar) -> UInt32? {
+        if let d = decimalValue(c) { return d }
+        if ("a"..."f").contains(c) { return c.value - 87 }
+        if ("A"..."F").contains(c) { return c.value - 55 }
+        return nil
     }
 
     /// Whether `<` + `text` opens a tag layout reads as a line break — the

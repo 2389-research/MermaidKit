@@ -363,6 +363,32 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(c.nodes.first?.label, "&nosuch; and #12; and &bogus;")
     }
 
+    /// Character references read as a browser reads them (HTML's
+    /// named-reference algorithm, over the full WHATWG table): the longest
+    /// name that matches wins, a legacy name (`&amp`, `&copy`, `&lt`…) needs
+    /// no `;`, and neither does a numeric one. Mermaid's `#name;` is
+    /// `&name;`, read the same way. Each expectation is mermaid 12.2.0's.
+    func testCharacterReferencesReadAsBrowsersDo() {
+        let cases: [(String, String)] = [
+            ("&amp more", "& more"), ("&copy 2024", "© 2024"), ("&lt", "<"), ("&LT", "<"),
+            ("x &amp", "x &"), ("&ampfoo", "&foo"), ("&notit; x", "¬it; x"), ("&AMP;", "&"),
+            ("&#169 x", "© x"), ("&#x41B", "Л"), ("&#128512", "😀"),
+            ("&Aacute;", "Á"), ("&ccedil;a", "ça"), ("&NotEqualTilde;", "≂̸"),
+            ("#copyx;", "©x;"), ("#notin;", "∉"), ("#amp;", "&"),
+            ("&unknown; y", "&unknown; y"), ("a&b", "a&b"), ("&amp;amp;", "&amp;"), ("#35;35;", "#35;"),
+        ]
+        for (raw, shown) in cases {
+            XCTAssertEqual(MermaidParser.labelText(raw), shown, raw)
+        }
+    }
+
+    /// `&#169;` reads "©", as its author meant. (mermaid 12.2.0 shows "&©":
+    /// its `#169;` rewrite strands the `&`. A deliberate leniency, as with
+    /// tag-like text.)
+    func testANumericReferenceWithItsAmpersandIsOneReference() {
+        XCTAssertEqual(MermaidParser.labelText("&#169; and &#xA9"), "© and ©")
+    }
+
     /// Numeric references read as a browser reads them: 0x80–0x9F as
     /// Windows-1252. A C1 control, a noncharacter or a non-scalar stays as
     /// written, never reaching SVG or a terminal.
@@ -447,6 +473,12 @@ final class ParserHonestyTests: XCTestCase {
         XCTAssertEqual(DiagramLayoutEngine.brLines(label).count, 1, label)
         XCTAssertEqual(c.nodes.first { $0.id == "C" }?.label, "<brilliant>", "only a break tag stays encoded")
         XCTAssertEqual(DiagramLayoutEngine.brLines(c.nodes.first { $0.id == "B" }?.label ?? "").count, 2)
+        // Spelled without `;`, or with letters a later reference supplies.
+        for spelled in ["&ltbr&gt", "&LT;BR>", "&lt;b&#114;>", "&#60br>", "&bsol;&#110;", "&bsol;n"] {
+            let shown = MermaidParser.labelText("a \(spelled) b")
+            XCTAssertEqual(DiagramLayoutEngine.brLines(shown).count, 1, "\(spelled) → \(shown)")
+            XCTAssertFalse(shown.contains("\\n"), "\(spelled) → \(shown)")
+        }
     }
 
     /// Splitting is linear: a long run of blanks after a `;` once rescanned

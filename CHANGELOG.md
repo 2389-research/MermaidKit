@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Entities read as a browser reads them.** Labels decode every named
+  character reference HTML defines (2,231 names, from the WHATWG table, up
+  from 66), the way mermaid's labels reach the reader: the longest name that
+  matches wins, legacy names need no `;` (`&amp more` reads "& more",
+  `&copy 2024` "© 2024"), numeric references need none either (`&#169`), and
+  mermaid's own `#name;` uses the same table (`#notin;` reads "∉"). Unknown
+  names, control characters, and anything that would spell a line break still
+  stay as written. One deliberate difference from mermaid: `&#169;` reads
+  "©", where mermaid 12.2.0 shows "&©". Decoding is now a single linear scan,
+  about 15× faster on long runs of `&lt;`. The mermaid oracle's known
+  divergences drop from 256 to 224. Output for every chart in the fixture
+  set is byte-identical to 2.7.1.
+
 ## 2.7.1 — Every word, every line, every box
 
 Fixes for labels and charts that drew less than they said. C4 boxes keep
