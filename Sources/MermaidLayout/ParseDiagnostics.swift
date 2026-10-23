@@ -115,7 +115,7 @@ extension MermaidParser {
         let chart = parseFlowchart(header: first.text, body: statements.dropFirst().map(\.text)) { index, reason in
             notes.append(.init(severity: .note, line: statements[index + 1].line, message: reason))
         }
-        if chart?.nodes.isEmpty == true {
+        if let chart, chart.nodes.isEmpty, chart.subgraphs.isEmpty {
             notes.append(.init(severity: .note, line: first.line,
                                message: "the flowchart has no nodes, so there's nothing to draw; it renders empty"))
         }

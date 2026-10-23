@@ -28,6 +28,16 @@ final class ParseDiagnosticsTests: XCTestCase {
         guard case .flowchart(let lr)? = MermaidParser.parse("graph LR;") else { return XCTFail() }
         XCTAssertEqual(lr.direction, .leftRight)
         XCTAssertNil(MermaidParser.parse("flowchart LR\n  -->"), "unreadable isn't empty")
+        // Nor is a header mermaid doesn't read (it rejects each of these).
+        for header in ["graphical", "flowchart LR junk", "flowchart QQ"] {
+            XCTAssertNil(MermaidParser.parse(header), header)
+        }
+        XCTAssertNotNil(MermaidParser.parse("flowchart-elk LR"))
+        XCTAssertNotNil(MermaidParser.parse("graph"))
+        // With content it still draws, and says what it didn't read.
+        XCTAssertEqual(MermaidParser.diagnose("flowchart LR junk\n  A --> B").map(\.line), [1])
+        // An empty box is something to draw.
+        XCTAssertEqual(MermaidParser.diagnose("flowchart LR\n  subgraph S [Storage]\n  end"), [])
         XCTAssertEqual(MermaidParser.diagnose("flowchart LR\n  -->").first?.severity, .error)
         XCTAssertEqual(MermaidAltText.describe(source: "graph LR;"), "Empty flowchart.")
         XCTAssertEqual(MermaidAltText.describe(source: "flowchart LR\n  subgraph S [Storage]\n  end"),
@@ -50,6 +60,13 @@ final class ParseDiagnosticsTests: XCTestCase {
             XCTAssertEqual(MermaidParser.diagnose(source).filter { $0.message.contains("link") }, [], source)
         }
         XCTAssertNil(MermaidParser.parse("graph TD\n  linkStyle 0 stroke:red"))
+        // A target that isn't a link's index names none either (mermaid
+        // rejects the chart).
+        for target in ["nope", "-1", "99999999999999999999", "0,x", "0,"] {
+            let source = "flowchart LR\n  A --> B\n  linkStyle \(target) stroke:red"
+            XCTAssertEqual(MermaidParser.diagnose(source).map(\.severity), [.note], source)
+            XCTAssertNil(MermaidParser.parse("graph TD\n  linkStyle \(target) stroke:red"), target)
+        }
     }
 
     func testEmptySource() {

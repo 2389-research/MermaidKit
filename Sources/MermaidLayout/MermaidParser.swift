@@ -749,6 +749,13 @@ public enum MermaidParser {
             report(index, reason)
         }
         let parts = header.split(separator: " ")
+        // The header mermaid reads: a keyword, then at most a direction.
+        if let keyword = parts.first, !["graph", "flowchart", "flowchart-elk"].contains(String(keyword)) {
+            setAside(-1, "unknown header '\(keyword)'; read as a flowchart")
+        }
+        if parts.count > 2 {
+            setAside(-1, "'\(parts.dropFirst(2).joined(separator: " "))' after the direction; ignored")
+        }
         var direction = Flowchart.Direction.topDown
         if parts.count > 1 {
             let token = normalizedDirectionToken(parts[1])
@@ -853,9 +860,13 @@ public enum MermaidParser {
             // rejects the chart otherwise).
             if startsWithKeyword(line, "linkStyle") {
                 let target = line.dropFirst("linkStyle".count).split(whereSeparator: \.isWhitespace).first ?? ""
+                /// A link read before this statement, by its index.
+                func names(_ index: Substring) -> Bool {
+                    !index.isEmpty && index.allSatisfy { ("0"..."9").contains($0) } && (Int(index).map { $0 < edges.count } ?? false)
+                }
                 if target != "default",
-                   let missing = target.split(separator: ",").first(where: { Int($0).map { $0 >= edges.count } ?? false }) {
-                    setAside(index, "linkStyle \(missing) names no link (\(edges.count) read before it); ignored")
+                   let missing = target.split(separator: ",", omittingEmptySubsequences: false).first(where: { !names($0) }) {
+                    setAside(index, "linkStyle '\(missing)' names no link (\(edges.count) read before it); ignored")
                 }
                 continue
             }
