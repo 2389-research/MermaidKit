@@ -34,8 +34,9 @@
   alone (`graph LR;`), or only comments and `classDef`, `class`, `linkStyle`
   or `click` lines.
   `diagnose` notes "nothing to draw" at the header, so a host can still tell,
-  and alt text reads "Empty flowchart." A flowchart with a statement
-  MermaidKit couldn't read still doesn't parse. **Behavior change:** `parse`
+  and alt text reads "Empty flowchart." A flowchart with nothing drawn and a
+  statement MermaidKit couldn't read still doesn't parse (a subgraph's box
+  counts as drawn). **Behavior change:** `parse`
   used to return nil for these; hosts that treat nil as "show the source"
   now get a blank diagram.
 - **A `linkStyle` that names no link is noted.** Its index must name a link

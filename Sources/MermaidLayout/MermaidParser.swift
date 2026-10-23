@@ -925,8 +925,9 @@ public enum MermaidParser {
         }
 
         // A chart with nothing to draw is an empty chart, as in mermaid; one
-        // that drew nothing because it couldn't read a statement isn't.
-        guard !nodes.isEmpty || setAsideCount == 0 else { return nil }
+        // that drew nothing because it couldn't read a statement isn't. A
+        // subgraph's box is something drawn, as a node is.
+        guard !nodes.isEmpty || !subgraphOrder.isEmpty || setAsideCount == 0 else { return nil }
         return Flowchart(
             direction: direction,
             nodes: order.compactMap { nodes[$0] },
