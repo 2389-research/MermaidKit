@@ -49,12 +49,15 @@ const hash = s => createHash('sha256').update(s).digest('hex').slice(0, 16);
 const key = o => JSON.stringify(o, Object.keys(o).sort());
 
 // Tag-like text: `<name …>` or `</name>` naming an element a browser doesn't
-// know, which it hides. A name only the HTML parser accepts (`<K,V>`) is one.
+// know, which it hides. Asked of the HTML parser itself, as `visibleText`
+// reads labels: `<svg>` and `<math>` are real (SVG and MathML), and a name
+// only the parser accepts (`<K,V>`) is unknown.
 const { document } = new JSDOM('').window;
 const tagLike = /<\/?([A-Za-z][^\s/>]*)[^>]*>/g;
 const unknownElement = name => {
-  try { return document.createElement(name) instanceof document.defaultView.HTMLUnknownElement; }
-  catch { return true; }
+  const fragment = document.createElement('template');
+  fragment.innerHTML = `<${name}>`;
+  return fragment.content.firstElementChild instanceof document.defaultView.HTMLUnknownElement;
 };
 /** MermaidKit's text with its tag-like text removed, as a browser shows it. */
 const hidingUnknownTags = text => collapse(text.replace(tagLike, (tag, name) => unknownElement(name) ? '' : tag));
@@ -144,6 +147,7 @@ sentinels.forEach((src, i) => {
 const tagRule = [
   ['List<String>', 'List', true], ['Map<K,V> x', 'Map x', true], ['a <T> b', 'a b', true],
   ['x<b>y</b>z', 'xyz', false], ['Vec<i> and List<a>', 'Vec and List', false], ['a<br>b', 'a\nb', false],
+  ['x<svg>y', 'xy', false], ['x<math>y</math>', 'xy', false],
   ['<my-el>x', 'x', false], ['List<String>', 'Lis', false], ['List<Strin', 'List', false], ['p<0.05', 'p', false],
 ];
 for (const [kitText, mermaidText, excused] of tagRule) {
