@@ -33,6 +33,16 @@ final class ParseDiagnosticsTests: XCTestCase {
             XCTAssertNil(MermaidParser.parse(header), header)
         }
         XCTAssertNotNil(MermaidParser.parse("flowchart-elk LR"))
+        // A top-level `direction` is noted but loses nothing (mermaid draws
+        // these); an empty box is something to draw.
+        for source in ["flowchart LR\n  direction TB", "flowchart LR\n  subgraph S\n  end\n  direction TB"] {
+            guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail(source) }
+            XCTAssertEqual(chart.direction, .leftRight, source)
+        }
+        // A header is split on any whitespace, as mermaid splits it.
+        guard case .flowchart(let tabbed)? = MermaidParser.parse("flowchart\tLR\n  A --> B") else { return XCTFail("tab") }
+        XCTAssertEqual(tabbed.direction, .leftRight)
+        XCTAssertEqual(MermaidParser.diagnose("flowchart\tLR\n  A --> B"), [])
         XCTAssertNotNil(MermaidParser.parse("graph"))
         // With content it still draws, and says what it didn't read.
         XCTAssertEqual(MermaidParser.diagnose("flowchart LR junk\n  A --> B").map(\.line), [1])
