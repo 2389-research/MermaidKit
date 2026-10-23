@@ -9,12 +9,13 @@ final class ParseDiagnosticsTests: XCTestCase {
     }
 
     /// A flowchart with nothing to draw parses as an empty chart, as in
-    /// mermaid (a header alone, or only comments, styling, `click` or `class`
-    /// lines), and `diagnose` notes it, so a host can still tell. One whose
+    /// mermaid (a header alone, or only comments and `classDef`, `class`,
+    /// `linkStyle` or `click` lines), and `diagnose` notes it, so a host can still tell. (A
+    /// `style X` line names node `X`, which mermaid draws.) One whose
     /// statements couldn't be read still doesn't parse.
     func testAFlowchartWithNothingToDrawIsEmpty() throws {
         for source in ["graph LR;", "flowchart TD\n  %% only a comment", "flowchart LR\n  click A callback",
-                       "flowchart LR\n  classDef hot fill:#f96\n  class A hot", "graph TB\n  style A fill:#f96"] {
+                       "flowchart LR\n  classDef hot fill:#f96\n  class A hot"] {
             guard case .flowchart(let chart)? = MermaidParser.parse(source) else {
                 return XCTFail("should parse empty: \(source.debugDescription)")
             }
