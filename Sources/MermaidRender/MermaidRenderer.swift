@@ -1,6 +1,6 @@
 #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
 import Foundation
-#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+#if os(macOS)
 import CoreGraphics
 import CoreText
 import AppKit
@@ -218,7 +218,7 @@ public enum MermaidRenderer {
     #endif
 
     private static func encodePNG(_ img: PlatformImage) -> Data? {
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        #if os(macOS)
         var rect = CGRect(origin: .zero, size: img.size)
         guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
         let data = NSMutableData()
@@ -330,7 +330,7 @@ public enum MermaidRenderer {
         // exhaust memory allocating `bytesPerRow * h`. A terminal is at most a
         // few hundred columns wide, so 4096 px is comfortably generous.
         guard (1...maxRasterDimension).contains(targetWidth) else { return nil }
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        #if os(macOS)
         var rect = CGRect(origin: .zero, size: img.size)
         guard let cg = img.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
         #else

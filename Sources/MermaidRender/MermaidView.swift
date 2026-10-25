@@ -120,7 +120,7 @@ extension MermaidView: Equatable {
 
 private extension Image {
     init(platformImage: PlatformImage) {
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        #if os(macOS)
         self.init(nsImage: platformImage)
         #else
         self.init(uiImage: platformImage)

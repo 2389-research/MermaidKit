@@ -105,7 +105,7 @@ JSON; each platform paints it.
 
 | Platform | Renderer | Bridge | Get it |
 |---|---|---|---|
-| macOS / iOS / visionOS | CoreGraphics / CoreText | in-process | `import MermaidRender` |
+| macOS / iOS / Mac Catalyst / visionOS | CoreGraphics / CoreText | in-process | `import MermaidRender` |
 | Linux | Silica (Cairo/FontConfig) | in-process | `LinuxRaster` trait |
 | **Android** | Kotlin `Canvas` (Skia) | JNI → `.so` | `implementation("ai.2389:mermaidkit-android:…")` via `mavenLocal()` until it's on Maven Central — [`android/`](android/) |
 | **Windows / .NET** | SkiaSharp | P/Invoke → `.dll` | `MermaidKit` .NET library (NuGet package planned) — [`windows/`](windows/) |

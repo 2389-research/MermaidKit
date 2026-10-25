@@ -20,13 +20,17 @@ final class FrontMatterCaptionTests: XCTestCase {
     }
 
     func testCaptionTextIsActuallyDrawn() throws {
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst) && DEBUG
+        #if DEBUG
         var captured: [String] = []
         DiagramRenderer.textCaptureHook = { text, _ in captured.append(text) }
         defer { DiagramRenderer.textCaptureHook = nil }
         let source = "---\ntitle: Pipeline\n---\nflowchart TD\n  A --> B\n%% caption-draw"
         let image = try XCTUnwrap(MermaidRenderer.image(source: source, theme: theme))
+        #if os(macOS)
         _ = image.cgImage(forProposedRect: nil, context: nil, hints: nil)  // force the deferred draw
+        #else
+        _ = image  // UIGraphicsImageRenderer has already drawn it
+        #endif
         XCTAssertTrue(captured.contains("Pipeline"), "caption never hit the context: \(captured)")
         #endif
     }

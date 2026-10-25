@@ -2,18 +2,16 @@
 // Linux counterpart — the same PlatformColor/Font/Image surface over Silica —
 // lives in `PlatformLinux.swift`.
 //
-// Choosing AppKit over UIKit: test
-// `canImport(AppKit) && !targetEnvironment(macCatalyst)`, never
-// `canImport(AppKit)` alone. Mac Catalyst can import AppKit, but most of what
-// this package uses from it (NSFont.Weight, NSColor.withAlphaComponent,
-// NSAppearance, NSImage drawing) is unavailable there, so Catalyst has to take
-// the UIKit branch like iOS. The `canImport(AppKit) || canImport(UIKit)` guards
-// and the Linux-only `!canImport(AppKit) && !canImport(UIKit)` guards need no
-// such care: UIKit already places Catalyst correctly in both.
+// Choosing AppKit over UIKit: test `os(macOS)`, never `canImport(AppKit)`.
+// Mac Catalyst can import AppKit, but most of what this package uses from it
+// (NSFont.Weight, NSColor.withAlphaComponent, NSAppearance, NSImage drawing) is
+// unavailable there, so Catalyst has to take the UIKit branch like iOS. The
+// `canImport(AppKit) || canImport(UIKit)` and Linux-only
+// `!canImport(AppKit) && !canImport(UIKit)` guards are fine as they are.
 #if canImport(AppKit) || canImport(UIKit)
 import Foundation
 import CoreGraphics
-#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+#if os(macOS)
 import AppKit
 /// `NSColor` on macOS, `UIColor` on UIKit platforms.
 public typealias PlatformColor = NSColor
@@ -42,7 +40,7 @@ func rgbStatic(_ hex: UInt32, alpha: CGFloat = 1) -> PlatformColor {
 /// effective `NSAppearance` best-matches dark aqua (macOS) or the trait
 /// collection's `userInterfaceStyle` is dark (UIKit), else `light`.
 func themeDynamic(light: PlatformColor, dark: PlatformColor) -> PlatformColor {
-    #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+    #if os(macOS)
     return NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
     #else
     return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
@@ -54,7 +52,7 @@ func themeDynamic(light: PlatformColor, dark: PlatformColor) -> PlatformColor {
 /// plain `cgColor` when conversion fails); UIKit's `cgColor` already
 /// resolves against the current trait collection.
 func resolvedCGColor(_ color: PlatformColor) -> CGColor {
-    #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+    #if os(macOS)
     return color.usingColorSpace(.sRGB)?.cgColor ?? color.cgColor
     #else
     return color.cgColor

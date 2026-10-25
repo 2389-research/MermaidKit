@@ -2,7 +2,7 @@
 import Foundation
 import MermaidLayout
 
-#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+#if os(macOS)
 import CoreGraphics
 import CoreText
 import AppKit
@@ -367,7 +367,7 @@ enum DiagramRenderer {
             renderPlan(for: diagram, theme: theme, spacing: spacing),
             caption: title, diagram: diagram, theme: theme, textScale: spacing.textScale)
         guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        #if os(macOS)
         let appearance = NSAppearance(named: theme.prefersDark ? .darkAqua : .aqua)
         let image = NSImage(size: canvasSize, flipped: true) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
@@ -409,7 +409,7 @@ enum DiagramRenderer {
                 caption: metadata.title, diagram: diagram, theme: theme, textScale: spacing.textScale)
             guard let (canvasSize, originX, originY) = paddedCanvas(size: size, edgePolylines: edgePolylines) else { return nil }
 
-            #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+            #if os(macOS)
             let appearance = NSAppearance(named: theme.prefersDark ? .darkAqua : .aqua)
             let image = NSImage(size: canvasSize, flipped: true) { _ in
                 guard let context = NSGraphicsContext.current?.cgContext else { return false }
@@ -445,7 +445,7 @@ enum DiagramRenderer {
             // Cost = actual backing bytes, not point-size bytes: UIKit
             // rasterizes at screen scale; AppKit's handler-backed NSImage caches
             // a rep per destination scale (2x assumed) on first draw.
-            #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+            #if os(macOS)
             let scale: CGFloat = 2
             #else
             let scale = image.scale
@@ -461,13 +461,13 @@ enum DiagramRenderer {
     /// instance out lets an innocent `image.size = fitted` poison every future
     /// cache hit. (UIImage is immutable; no copy needed.)
     private static func attributedString(for entry: Entry) -> NSAttributedString {
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        #if os(macOS)
         let image = (entry.image.copy() as? NSImage) ?? entry.image
         #else
         let image = entry.image
         #endif
         if let altText = entry.altText {
-            #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+            #if os(macOS)
             image.accessibilityDescription = altText
             #else
             // UIImage.accessibilityLabel is @MainActor in the iOS SDK (NSImage's
@@ -515,7 +515,7 @@ enum DiagramRenderer {
         guard let diagram = parse(),
               let image = image(for: diagram, title: nil, theme: theme, spacing: spacing) else { return nil }
         let entry = Entry(image: image, altText: MermaidAltText.describe(diagram))
-        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        #if os(macOS)
         let scale: CGFloat = 2
         #else
         let scale = image.scale

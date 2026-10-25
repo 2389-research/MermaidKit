@@ -18,9 +18,8 @@
 - **MermaidRender builds for Mac Catalyst.** Catalyst can `import AppKit`,
   so every `#if canImport(AppKit)` took the AppKit branch there and hit
   `NSFont.Weight`, `NSColor.withAlphaComponent` and other APIs Catalyst
-  doesn't have. Those checks now read
-  `canImport(AppKit) && !targetEnvironment(macCatalyst)`, so Catalyst draws
-  with UIKit like iOS; macOS is unchanged. CI builds for Catalyst too.
+  doesn't have. Those checks now test `os(macOS)`, so Catalyst draws with
+  UIKit like iOS; macOS is unchanged. CI runs the tests on Catalyst too.
 - **A label is text to every step of reading a line.** The statement
   scanner now also gives each statement's syntax, its labels masked, and
   links, `|labels|` and `&` fans are found only there. So an asymmetric
