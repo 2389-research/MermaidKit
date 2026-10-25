@@ -64,6 +64,20 @@ jobs:
           fi
           tail -5 ios-build.log
 
+      # Mac Catalyst can `import AppKit` but lacks most of it, so a bare
+      # `canImport(AppKit)` check sends Catalyst down the AppKit branch and
+      # breaks the build. Catalyst must take the UIKit branch, like iOS.
+      - name: Build for Mac Catalyst
+        run: |
+          set -o pipefail
+          if ! xcodebuild -scheme MermaidRender \
+            -destination 'generic/platform=macOS,variant=Mac Catalyst' build > catalyst-build.log 2>&1; then
+            grep -E "error:" catalyst-build.log | sort -u | head -40
+            tail -20 catalyst-build.log
+            exit 1
+          fi
+          tail -5 catalyst-build.log
+
   linux:
     name: swift test (Linux)
     runs-on: ubuntu-latest

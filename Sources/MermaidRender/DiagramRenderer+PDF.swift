@@ -1,7 +1,7 @@
 #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
 import Foundation
 import MermaidLayout
-#if canImport(AppKit)
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import CoreGraphics
 import CoreText
 import AppKit
@@ -65,7 +65,7 @@ extension DiagramRenderer {
 
         // Pin appearance resolution exactly like the raster paths, so dynamic
         // platform colors resolve to the theme's variant, not the ambient one.
-        #if canImport(AppKit)
+        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
         if let appearance = NSAppearance(named: theme.prefersDark ? .darkAqua : .aqua) {
             appearance.performAsCurrentDrawingAppearance { plan.draw(context) }
         } else {

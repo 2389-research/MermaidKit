@@ -20,7 +20,7 @@ final class FrontMatterCaptionTests: XCTestCase {
     }
 
     func testCaptionTextIsActuallyDrawn() throws {
-        #if canImport(AppKit) && DEBUG
+        #if canImport(AppKit) && !targetEnvironment(macCatalyst) && DEBUG
         var captured: [String] = []
         DiagramRenderer.textCaptureHook = { text, _ in captured.append(text) }
         defer { DiagramRenderer.textCaptureHook = nil }

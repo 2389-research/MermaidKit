@@ -1,4 +1,4 @@
-#if canImport(AppKit)
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import XCTest
 import CoreGraphics
 @testable import MermaidRender

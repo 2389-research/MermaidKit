@@ -98,7 +98,7 @@ final class FormatAwareEntryTests: XCTestCase {
         }
     }
 
-    #if canImport(AppKit)
+    #if canImport(AppKit) && !targetEnvironment(macCatalyst)
     /// A caption passed to the diagram-based attachment is rendered visually AND
     /// folded into the narration, so assistive-tech users get the same context.
     func testCaptionIsNarrated() throws {

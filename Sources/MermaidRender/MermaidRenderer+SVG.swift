@@ -1,6 +1,6 @@
 #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
 import Foundation
-#if canImport(AppKit)
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import CoreGraphics
 import AppKit
 #elseif canImport(UIKit)
