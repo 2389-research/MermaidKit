@@ -160,8 +160,9 @@ no extensions):
 
 Known gaps (say them plainly if the site mentions coverage): mermaid's
 newer named flowchart shapes without a model case (e.g. `@{ shape: doc }`)
-draw as labelled rectangles; markdown strings and entity codes; HTML in
-labels beyond `<br/>`; FontAwesome icons; click/animation interactivity; mermaid.js
+draw as labelled rectangles; markdown strings; HTML styling in labels
+(tags other than `<br/>` are dropped for their text; entities decode);
+FontAwesome icons; click/animation interactivity; mermaid.js
 theming directives (theming is `DiagramTheme`'s job).
 
 ## Numbers the site may cite (verified 2026-10-19; test and oracle counts 2026-10-26)

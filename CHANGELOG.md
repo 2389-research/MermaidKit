@@ -11,8 +11,8 @@ every chart in the fixture set is byte-identical to 2.7.1.
 ### Changed
 
 - **A flowchart with nothing to draw draws empty**, as in mermaid: a header
-  alone (`graph LR;`), or only comments and `classDef`, `class`, `linkStyle`
-  or `click` lines. `diagnose` notes "nothing to draw" at the header, so a
+  alone (`graph LR;`), or only comments and `classDef`, `class`, `click` or
+  valid `linkStyle` lines. `diagnose` notes "nothing to draw" at the header, so a
   host can still tell, and alt text reads "Empty flowchart." A chart with
   nothing drawn and a statement MermaidKit couldn't read, or a header mermaid
   doesn't accept (`graphical`, `flowchart LR junk`), still doesn't parse; a
@@ -24,11 +24,12 @@ every chart in the fixture set is byte-identical to 2.7.1.
 
 - **Entities read as a browser reads them.** Labels decode every named
   character reference HTML defines (2,231 names from the WHATWG table, up
-  from 66), the way mermaid's labels reach the reader. The longest name that
+  from 57), the way mermaid's labels reach the reader. The longest name that
   matches wins, legacy names need no `;` (`&amp more` reads "& more",
   `&copy 2024` "© 2024"), numeric references need none either (`&#169`), and
-  mermaid's own `#name;` uses the same table (`#notin;` reads "∉"). Unknown
-  names and control characters stay as written. One deliberate difference
+  mermaid's own `#name;` uses the same table (`#notin;` reads "∉"). An
+  unknown `&name;` and control characters stay as written; an unknown
+  `#name;` reads `&name;`, as mermaid shows it. One deliberate difference
   from mermaid: `&#169;` reads "©", where mermaid shows "&©". (#90)
 - **Reading a label never spells a line break the author didn't write.**
   Labels are read in one linear scan of the text as written, tags and
