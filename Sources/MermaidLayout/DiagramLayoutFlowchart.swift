@@ -181,7 +181,9 @@ extension DiagramLayoutEngine {
             let lo = min(lu, lv), hi = max(lu, lv)
             if hi - lo <= 1 {
                 chains.append([edge.from, edge.to])
-                segmentEdges.append((edge.from, edge.to))
+                // A self-loop links no two nodes, so it must not count as a
+                // neighbour in ordering or chain straightening.
+                if edge.from != edge.to { segmentEdges.append((edge.from, edge.to)) }
                 continue
             }
             var midByLayer: [(layer: Int, id: String)] = []
@@ -201,7 +203,20 @@ extension DiagramLayoutEngine {
         // 3. Order every layer (real + dummy) by barycenter; 4. assign cross
         // coordinates with Brandes–Köpf so chains and dummy channels align into
         // straight runs (the cross axis is x for TD, y for LR).
-        let ordered = barycenterOrder(layers: layers, edges: segmentEdges)
+        var ordered = barycenterOrder(layers: layers, edges: segmentEdges)
+        let selfLoops = selfLoopPaths(chart, sizes: sizes, horizontal: horizontal, measure: measure)
+        // A looped node keeps its loop and caption clear of its row
+        // neighbours: a blank stand-in right after it in its layer, on the
+        // cross-far side where the loop runs, holds the space out to the
+        // caption's outer edge. Nothing is reserved on the near side.
+        for (index, loop) in selfLoops.sorted(by: { $0.key < $1.key }) where loop.isOutermost {
+            guard let layer = layerOf[loop.node],
+                  let at = ordered[layer].firstIndex(of: loop.node) else { continue }
+            let room = "\u{a7}loop\(index)"
+            let breadth = max(0, loop.clearance - flowchartLabelGap - flowchartNodeGap)
+            sizes[room] = horizontal ? CGSize(width: 1, height: breadth) : CGSize(width: breadth, height: 1)
+            ordered[layer].insert(room, at: at + 1)
+        }
         var crossBreadth: [String: CGFloat] = [:]
         for layer in ordered {
             for id in layer { crossBreadth[id] = horizontal ? (sizes[id]?.height ?? 0) : (sizes[id]?.width ?? 0) }
@@ -241,20 +256,48 @@ extension DiagramLayoutEngine {
             layerGaps[boundary] = max(
                 layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub)
         }
+        // A self-loop's bars stand off the node's main-axis faces into the
+        // neighbouring layer gaps; keep the gap's middle, where other edges
+        // jog, clear of them, and every track a jog takes off that middle for
+        // its fan-in and fan-out (`routeChains`' jog bias, from the same
+        // `jogFanGroups`). A loop in the first or last layer stands off into
+        // the margin instead, which then grows to fit it.
+        let fans = jogFanGroups(chart, chains: chains)
+        var gapJogBias = [CGFloat](repeating: 0, count: max(layerCount, 1))
+        for (target, idxs) in fans.into {
+            for index in idxs {
+                let source = chains[index][0]
+                guard let lu = layerOf[source], let lv = layerOf[target] else { continue }
+                let spread = jogSpread(idxs.count) + jogSpread(fans.outOf[source]?.count ?? 1)
+                for gap in min(lu, lv)..<max(lu, lv) { gapJogBias[gap] = max(gapJogBias[gap], spread) }
+            }
+        }
+        var leadPad: CGFloat = 0, tailPad: CGFloat = 0
+        for loop in selfLoops.values {
+            guard let layer = layerOf[loop.node] else { continue }
+            func needed(_ gap: Int) -> CGFloat {
+                2 * (loop.excursion + flowchartJogTrack + gapJogBias[gap]) + 4
+            }
+            if layer > 0 { layerGaps[layer - 1] = max(layerGaps[layer - 1], needed(layer - 1)) } else { leadPad = max(leadPad, loop.excursion) }
+            if layer < layerCount - 1 { layerGaps[layer] = max(layerGaps[layer], needed(layer)) } else { tailPad = max(tailPad, loop.excursion) }
+        }
         let placement = placeFlowchartFrames(
             layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal,
-            layerGaps: layerGaps)
+            layerGaps: layerGaps, leadPad: leadPad, tailPad: tailPad)
 
         // 5. Route each edge through its chain's waypoints.
         let (placedEdges, crossLimit) = routeChains(
             chart: chart, chains: chains, frames: placement.frames,
             horizontal: horizontal, crossExtent: placement.crossExtent,
-            backEdges: backEdges
+            backEdges: backEdges, selfLoops: selfLoops
         )
 
-        // 6. Place edge labels clear of node boxes and each other.
+        // 6. Place edge labels clear of node boxes and each other. A
+        // self-loop's caption rides its far run, the run its space was
+        // reserved beside, even where a bar is longer.
         let labeledEdges = placeEdgeLabels(
-            placedEdges, nodeFrames: chart.nodes.compactMap { placement.frames[$0.id] }, measure: measure
+            placedEdges, nodeFrames: chart.nodes.compactMap { placement.frames[$0.id] }, measure: measure,
+            labelRuns: chart.edges.indices.map { selfLoops[$0] == nil ? nil : SelfLoopPath.farRunSegment }
         )
 
         let contentCross = crossLimit + flowchartMargin
@@ -289,7 +332,8 @@ extension DiagramLayoutEngine {
     private static func placeEdgeLabels(
         _ edges: [FlowchartLayout.PlacedEdge],
         nodeFrames: [CGRect],
-        measure: DiagramTextMeasurer
+        measure: DiagramTextMeasurer,
+        labelRuns: [Int?] = []
     ) -> [FlowchartLayout.PlacedEdge] {
         let labelSizes = edges.map { edge -> CGSize? in
             // An invisible link draws no label either.
@@ -305,7 +349,8 @@ extension DiagramLayoutEngine {
         // An invisible link is no obstacle: no bend, crossing or tip to avoid.
         let anchors = placeRunLabels(routes: edges.map { $0.invisible ? [] : $0.points },
                                      labelSizes: labelSizes, nodeFrames: nodeFrames,
-                                     headInsets: headInsets, tailInsets: tailInsets)
+                                     headInsets: headInsets, tailInsets: tailInsets,
+                                     labelRuns: labelRuns)
         return zip(edges, anchors).map { edge, anchor in
             anchor.map { placed(edge, at: $0) } ?? edge
         }
@@ -345,12 +390,15 @@ extension DiagramLayoutEngine {
     /// back-arrow head), so the caption centers on the arrow-FREE stretch and
     /// keeps a real stub clear of the arrowhead. Only the terminal runs — the
     /// ones touching the route's first/last point — are shrunk.
+    /// `labelRuns[i]` (default nil) limits route i's caption to that one
+    /// segment, for a route whose space was reserved beside a given run.
     static func placeRunLabels(
         routes: [[CGPoint]],
         labelSizes: [CGSize?],
         nodeFrames: [CGRect],
         headInsets: [CGFloat] = [],
-        tailInsets: [CGFloat] = []
+        tailInsets: [CGFloat] = [],
+        labelRuns: [Int?] = []
     ) -> [CGPoint?] {
         let obstacles = nodeFrames.map { $0.insetBy(dx: -3, dy: -3) }
         // Fixtures every caption must avoid: the interior bends of every route
@@ -390,7 +438,8 @@ extension DiagramLayoutEngine {
             // tail arrowhead so the caption centers on the arrow-free stretch.
             struct Run { let horizontal: Bool; let lo: CGFloat; let hi: CGFloat; let fixed: CGFloat; let index: Int }
             var runs: [Run] = []
-            for k in 0..<(pts.count - 1) {
+            let onlyRun = i < labelRuns.count ? labelRuns[i] : nil
+            for k in 0..<(pts.count - 1) where onlyRun == nil || onlyRun == k {
                 let a = pts[k], b = pts[k + 1]
                 let dx = abs(a.x - b.x), dy = abs(a.y - b.y)
                 guard max(dx, dy) > 0.5 else { continue }
@@ -615,7 +664,9 @@ extension DiagramLayoutEngine {
         sizes: [String: CGSize],
         crossCenter: [String: CGFloat],
         horizontal: Bool,
-        layerGaps: [CGFloat]
+        layerGaps: [CGFloat],
+        leadPad: CGFloat = 0,
+        tailPad: CGFloat = 0
     ) -> (frames: [String: CGRect], mainContentEnd: CGFloat, crossExtent: CGFloat) {
         let margin = flowchartMargin
 
@@ -634,7 +685,7 @@ extension DiagramLayoutEngine {
         let crossExtent = maxCross > minCross ? maxCross - minCross : 0
 
         var frames: [String: CGRect] = [:]
-        var mainOffset = margin
+        var mainOffset = margin + leadPad
         for (li, layer) in layers.enumerated() {
             let mainSize = layer.map { horizontal ? sizes[$0]!.width : sizes[$0]!.height }.max() ?? 0
             for id in layer {
@@ -660,7 +711,99 @@ extension DiagramLayoutEngine {
             }
         }
 
-        return (frames, mainOffset + margin, crossExtent)
+        return (frames, mainOffset + tailPad + margin, crossExtent)
+    }
+
+    /// The edges `routeChains` spreads over jog tracks, grouped by the node
+    /// each enters (`into`) and the node each leaves (`outOf`): every drawn
+    /// link between two different nodes. A group of n spreads its jogs over
+    /// n tracks centred on the gap's middle, `jogSpread(n)` either way.
+    static func jogFanGroups(
+        _ chart: Flowchart, chains: [[String]]
+    ) -> (into: [String: [Int]], outOf: [String: [Int]]) {
+        var into: [String: [Int]] = [:], outOf: [String: [Int]] = [:]
+        for (index, edge) in chart.edges.enumerated() where !edge.invisible && index < chains.count {
+            let chain = chains[index]
+            guard chain.count >= 2, chain[0] != chain[chain.count - 1] else { continue }
+            into[chain[chain.count - 1], default: []].append(index)
+            outOf[chain[0], default: []].append(index)
+        }
+        return (into, outOf)
+    }
+
+    /// How far a fan of `n` edges moves its outermost jog off a gap's middle.
+    static func jogSpread(_ n: Int) -> CGFloat { CGFloat(max(n, 1) - 1) / 2 * flowchartJogTrack }
+
+    /// Geometry of one self-loop (`A --> A`). The loop wraps around the node's
+    /// cross-far side — the right in a top-down chart, the bottom in a
+    /// left-right one: it leaves the exit face near that side, stands off by
+    /// `excursion`, runs past the node at `reach` beyond its far face, and
+    /// comes back into the entry face. That far run spans the node plus both
+    /// standoffs, so it is long enough to carry a caption beside it with a
+    /// full stub each side, which a loop on the node's side face never is.
+    /// Several loops on one node nest outward (`nest` 0 is the innermost),
+    /// each clear of the caption inside it.
+    struct SelfLoopPath {
+        var node: String
+        var nest: Int
+        /// Cross-axis distance from the node's far face to the loop's far run.
+        var reach: CGFloat
+        /// Main-axis distance the loop's bars stand off the node's faces.
+        var excursion: CGFloat
+        /// Cross-axis space beyond the far face this loop, its caption and the
+        /// loops inside it occupy, including the gap to whatever comes next.
+        var clearance: CGFloat
+        var isOutermost: Bool
+        /// The far run's segment in the loop's route (`selfLoopRoute`: exit,
+        /// past the exit face, far run, before the entry face, entry).
+        static let farRunSegment = 2
+    }
+
+    /// How far a loop's far run sits beyond the node, and its bars beyond the
+    /// node's faces, when it carries no caption.
+    private static let selfLoopReach: CGFloat = 24
+    private static let selfLoopStandoff: CGFloat = 12
+
+    /// The path of every self-loop in `chart`, keyed by edge index. Captions
+    /// are sized the way `placeRunLabels` boxes them, so the far run fits the
+    /// caption with a stub each side and `clearance` covers it.
+    static func selfLoopPaths(
+        _ chart: Flowchart, sizes: [String: CGSize], horizontal: Bool,
+        measure: DiagramTextMeasurer
+    ) -> [Int: SelfLoopPath] {
+        var paths: [Int: SelfLoopPath] = [:]
+        var lastOnNode: [String: Int] = [:]
+        // An invisible self-loop draws nothing, so it reserves nothing.
+        for (index, edge) in chart.edges.enumerated() where edge.from == edge.to && !edge.invisible {
+            guard let size = sizes[edge.from] else { continue }
+            var along: CGFloat = 0, across: CGFloat = 0
+            if let text = edge.label, !text.isEmpty {
+                let sz = measure(text, labelFontSize)
+                along = horizontal ? sz.width + 6 : sz.height + 2
+                across = horizontal ? sz.height + 2 : sz.width + 6
+            }
+            let mainSize = horizontal ? size.width : size.height
+            var excursion = max(selfLoopStandoff, (along + 2 * edgeLabelStub - mainSize) / 2)
+            var inner: CGFloat = 0
+            var nest = 0
+            if let previous = lastOnNode[edge.from], var outer = paths[previous] {
+                inner = outer.clearance
+                excursion = max(excursion, outer.excursion + flowchartJogTrack)
+                nest = outer.nest + 1
+                outer.isOutermost = false
+                paths[previous] = outer
+            }
+            let reach = inner + selfLoopReach
+            // The caption rides beside the far run, half a gap off the line
+            // (`placeRunLabels`' perpendicular nudge), then keeps a full gap
+            // to the next thing out.
+            let caption = across > 0 ? flowchartLabelGap / 2 + across : 0
+            paths[index] = SelfLoopPath(
+                node: edge.from, nest: nest, reach: reach, excursion: excursion,
+                clearance: reach + caption + flowchartLabelGap, isOutermost: true)
+            lastOnNode[edge.from] = index
+        }
+        return paths
     }
 
     /// Routes every edge through its dummy-node waypoint chain. The exit/enter
@@ -680,9 +823,41 @@ extension DiagramLayoutEngine {
         frames: [String: CGRect],
         horizontal: Bool,
         crossExtent: CGFloat,
-        backEdges: Set<Int> = []
+        backEdges: Set<Int> = [],
+        selfLoops: [Int: SelfLoopPath] = [:]
     ) -> (edges: [FlowchartLayout.PlacedEdge], crossLimit: CGFloat) {
         let shapeOf = Dictionary(uniqueKeysWithValues: chart.nodes.map { ($0.id, $0.shape) })
+        var loopCount: [String: Int] = [:]
+        var loopExcursion: [String: CGFloat] = [:]
+        for loop in selfLoops.values {
+            loopCount[loop.node, default: 0] += 1
+            loopExcursion[loop.node] = max(loopExcursion[loop.node] ?? 0, loop.excursion)
+        }
+
+        // Whether a decision's branch toward `next` heads for its cross-far
+        // side, beyond ~15% of its half-breadth (`diamondPort`'s side test).
+        func headsFarSide(_ f: CGRect, toward next: CGPoint) -> Bool {
+            horizontal ? next.y - f.midY > f.height * 0.15 : next.x - f.midX > f.width * 0.15
+        }
+        // A looped decision's branches toward its loops' side each get a slot
+        // on the face they leave (`diamondPort`), in the order they head, so
+        // no two share a point.
+        var farSlot: [Int: (slot: Int, of: Int)] = [:]
+        var farGroups: [String: [(edge: Int, cross: CGFloat)]] = [:]
+        for (index, edge) in chart.edges.enumerated() where !edge.invisible && index < chains.count {
+            let chain = chains[index]
+            guard chain.count >= 2, chain[0] != chain[chain.count - 1], loopCount[chain[0]] != nil,
+                  shapeOf[chain[0]] == .diamond,
+                  let f = frames[chain[0]], let n = frames[chain[1]] else { continue }
+            let next = CGPoint(x: n.midX, y: n.midY)
+            guard headsFarSide(f, toward: next) else { continue }
+            let forward = horizontal ? next.x >= f.midX : next.y >= f.midY
+            farGroups["\(chain[0])|\(forward)", default: []].append((index, horizontal ? next.y : next.x))
+        }
+        for group in farGroups.values {
+            let sorted = group.sorted { ($0.cross, $0.edge) < ($1.cross, $1.edge) }
+            for (slot, member) in sorted.enumerated() { farSlot[member.edge] = (slot, sorted.count) }
+        }
 
         // Projects a cross coordinate onto a node's outline on the chosen face.
         // `isSource` marks the edge's tail (the node it leaves) vs. its head.
@@ -741,8 +916,17 @@ extension DiagramLayoutEngine {
         // vertices for the branches. An *outgoing* branch whose neighbor sits
         // clearly to a side (beyond ~15% of the half-width) leaves from the
         // west/east vertex with a short stub carrying it out before vertical
-        // routing resumes; otherwise it leaves the south/north vertex.
-        func diamondPort(_ f: CGRect, toward next: CGPoint, isSource: Bool) -> (vertex: CGPoint, stub: CGPoint?) {
+        // routing resumes; otherwise it leaves the south/north vertex. A
+        // decision with self-loops (`farLoops` of them) has its cross-far
+        // vertex inside them, so a branch heading that way leaves the face it
+        // runs from (exit side forward, entry side back) between the loops and
+        // the main-axis vertex (see `selfLoopRoute`), at its `farSlot` there,
+        // clear of the loops, a straight branch and its sibling branches.
+        func diamondPort(
+            _ f: CGRect, toward next: CGPoint, isSource: Bool, farLoops: Int = 0,
+            farSlot: (slot: Int, of: Int) = (0, 1)
+        ) -> (vertex: CGPoint, stub: CGPoint?) {
+            let farT = 0.5 / CGFloat(max(farLoops, 1)) * CGFloat(farSlot.slot + 1) / CGFloat(farSlot.of + 1)
             if !isSource {
                 return horizontal
                     ? (CGPoint(x: next.x <= f.midX ? f.minX : f.maxX, y: f.midY), nil)
@@ -754,6 +938,9 @@ extension DiagramLayoutEngine {
                 if dy < -eps {
                     let v = CGPoint(x: f.midX, y: f.minY)
                     return (v, next.y < v.y - 1 ? CGPoint(x: v.x, y: next.y) : nil)
+                } else if farLoops > 0, headsFarSide(f, toward: next) {
+                    let x = next.x >= f.midX ? f.maxX - farT * f.width / 2 : f.minX + farT * f.width / 2
+                    return (CGPoint(x: x, y: f.midY + farT * f.height / 2), nil)
                 } else if dy > eps {
                     let v = CGPoint(x: f.midX, y: f.maxY)
                     return (v, next.y > v.y + 1 ? CGPoint(x: v.x, y: next.y) : nil)
@@ -765,6 +952,9 @@ extension DiagramLayoutEngine {
                 if dx < -eps {
                     let v = CGPoint(x: f.minX, y: f.midY)
                     return (v, next.x < v.x - 1 ? CGPoint(x: next.x, y: v.y) : nil)
+                } else if farLoops > 0, headsFarSide(f, toward: next) {
+                    let y = next.y >= f.midY ? f.maxY - farT * f.height / 2 : f.minY + farT * f.height / 2
+                    return (CGPoint(x: f.midX + farT * f.width / 2, y: y), nil)
                 } else if dx > eps {
                     let v = CGPoint(x: f.maxX, y: f.midY)
                     return (v, next.x > v.x + 1 ? CGPoint(x: next.x, y: v.y) : nil)
@@ -776,9 +966,13 @@ extension DiagramLayoutEngine {
         // The cross coordinate at which an edge descends out of its source — a
         // decision's vertex/stub, or a plain box's face port clamped toward the
         // next waypoint. Used to line the target port up with the actual run.
-        func sourceExitCross(srcDiamond: Bool, from f: CGRect, toward next: CGPoint) -> CGFloat {
+        func sourceExitCross(
+            srcDiamond: Bool, from f: CGRect, toward next: CGPoint, farLoops: Int = 0,
+            farSlot: (slot: Int, of: Int) = (0, 1)
+        ) -> CGFloat {
             if srcDiamond {
-                let (v, stub) = diamondPort(f, toward: next, isSource: true)
+                let (v, stub) = diamondPort(f, toward: next, isSource: true, farLoops: farLoops,
+                                            farSlot: farSlot)
                 let p = stub ?? v
                 return horizontal ? p.y : p.x
             }
@@ -804,6 +998,7 @@ extension DiagramLayoutEngine {
             var dstDiamond = false
             var exitBottom = false
             var enterBottom = false
+            var selfLoop: SelfLoopPath?
         }
         var geos = [EdgeGeo](repeating: EdgeGeo(), count: chart.edges.count)
 
@@ -827,6 +1022,23 @@ extension DiagramLayoutEngine {
             g.enterBottom = horizontal ? (g.lastPrev.x > tf.midX) : (g.lastPrev.y > tf.midY)
             g.srcDiamond = shapeOf[chain[0]] == .diamond
             g.dstDiamond = shapeOf[chain[chain.count - 1]] == .diamond
+            if let loop = selfLoops[index], chain.count == 2, chain[0] == chain[1] {
+                // A self-loop leaves the exit face and re-enters the entry face
+                // at their cross-far ends. Wanting past every real port parks
+                // it there and slides the real ports aside; an inner loop sits
+                // nearer the far end than the loops around it, so they never
+                // cross.
+                g.selfLoop = loop
+                g.exitBottom = true
+                g.enterBottom = false
+                geos[index] = g
+                if !g.srcDiamond {
+                    let wanted = CGFloat(1_000_000 - loop.nest)
+                    buckets[faceKey(chain[0], bottom: true), default: []].append((index, true, wanted))
+                    buckets[faceKey(chain[0], bottom: false), default: []].append((index, false, wanted))
+                }
+                continue
+            }
             geos[index] = g
             // An invisible link (`~~~`) routes on its natural channel; it takes
             // no face slot, so it never pushes a drawn edge's port aside.
@@ -843,7 +1055,9 @@ extension DiagramLayoutEngine {
                 // or a single clean bend instead of an S back to the source x.
                 let wanted: CGFloat
                 if g.dummyCenters.isEmpty {
-                    wanted = sourceExitCross(srcDiamond: g.srcDiamond, from: ff, toward: g.firstNext)
+                    wanted = sourceExitCross(srcDiamond: g.srcDiamond, from: ff, toward: g.firstNext,
+                                             farLoops: loopCount[chain[0], default: 0],
+                                             farSlot: farSlot[index] ?? (0, 1))
                 } else {
                     wanted = horizontal ? g.lastPrev.y : g.lastPrev.x
                 }
@@ -886,18 +1100,14 @@ extension DiagramLayoutEngine {
         // by its approach position, so their bend corners don't nest into one
         // another (the "double corner" where two edges turn into one box).
         var jogBias = [CGFloat](repeating: 0, count: chart.edges.count)
-        var targetGroups: [String: [Int]] = [:]
-        for index in chart.edges.indices where geos[index].valid && !chart.edges[index].invisible {
-            targetGroups[geos[index].chain[geos[index].chain.count - 1], default: []].append(index)
-        }
-        for idxs in targetGroups.values where idxs.count > 1 {
+        let fans = jogFanGroups(chart, chains: chains)
+        for idxs in fans.into.values.map({ $0.filter { geos[$0].valid } }) where idxs.count > 1 {
             let ordered = idxs.sorted {
                 (horizontal ? geos[$0].lastPrev.y : geos[$0].lastPrev.x)
                     < (horizontal ? geos[$1].lastPrev.y : geos[$1].lastPrev.x)
             }
-            let n = ordered.count
             for (rank, idx) in ordered.enumerated() {
-                jogBias[idx] += (CGFloat(rank) - CGFloat(n - 1) / 2) * flowchartJogTrack
+                jogBias[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
             }
         }
 
@@ -908,31 +1118,71 @@ extension DiagramLayoutEngine {
         // two runs overlap and render as a single doubled wire (`edges-doubled`).
         // Ordered by the direction each edge heads (its `firstNext` cross), so
         // the corners stack in approach order rather than nesting.
-        var sourceGroups: [String: [Int]] = [:]
-        for index in chart.edges.indices where geos[index].valid && !chart.edges[index].invisible {
-            sourceGroups[geos[index].chain[0], default: []].append(index)
-        }
-        for idxs in sourceGroups.values where idxs.count > 1 {
+        for idxs in fans.outOf.values.map({ $0.filter { geos[$0].valid } }) where idxs.count > 1 {
             let ordered = idxs.sorted {
                 (horizontal ? geos[$0].firstNext.y : geos[$0].firstNext.x)
                     < (horizontal ? geos[$1].firstNext.y : geos[$1].firstNext.x)
             }
-            let n = ordered.count
             for (rank, idx) in ordered.enumerated() {
-                jogBias[idx] += (CGFloat(rank) - CGFloat(n - 1) / 2) * flowchartJogTrack
+                jogBias[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
             }
+        }
+
+        // A self-loop's polyline: out of the exit face, round the node's
+        // cross-far side at `reach`, back into the entry face. A decision has
+        // no face ports, so its loop leaves and re-enters on its two cross-far
+        // sides: the innermost loop at their middles, each loop round it
+        // nearer the main-axis vertices, so nested loops never share a bar.
+        func selfLoopRoute(_ index: Int, _ g: EdgeGeo, _ loop: SelfLoopPath) -> [CGPoint] {
+            let f = g.fromFrame
+            func point(cross: CGFloat, main: CGFloat) -> CGPoint {
+                horizontal ? CGPoint(x: main, y: cross) : CGPoint(x: cross, y: main)
+            }
+            func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
+            let (mainLo, mainHi) = horizontal ? (f.minX, f.maxX) : (f.minY, f.maxY)
+            let (crossMid, crossHi) = horizontal ? (f.midY, f.maxY) : (f.midX, f.maxX)
+            let mainMid = (mainLo + mainHi) / 2
+            let exit: CGPoint, entry: CGPoint
+            if g.srcDiamond {
+                let t = 0.5 / CGFloat(1 + loop.nest)
+                let c = crossMid + t * (crossHi - crossMid)
+                exit = point(cross: c, main: mainHi - t * (mainHi - mainMid))
+                entry = point(cross: c, main: mainLo + t * (mainMid - mainLo))
+            } else {
+                let fallback = horizontal
+                    ? f.maxY - min(f.height * 0.22, f.height / 2)
+                    : f.maxX - min(f.width * 0.22, f.width / 2)
+                exit = attach(g.chain[0], cross: portCross[portKey(index, true)] ?? fallback,
+                              rightOrBottom: true, isSource: true)
+                entry = attach(g.chain[0], cross: portCross[portKey(index, false)] ?? fallback,
+                               rightOrBottom: false, isSource: false)
+            }
+            let far = crossHi + loop.reach
+            let past = mainHi + loop.excursion, before = mainLo - loop.excursion
+            // Segment `SelfLoopPath.farRunSegment` is the far run.
+            return [
+                exit,
+                point(cross: cross(exit), main: past),
+                point(cross: far, main: past),
+                point(cross: far, main: before),
+                point(cross: cross(entry), main: before),
+                entry,
+            ]
         }
 
         var routes = [[CGPoint]](repeating: [], count: chart.edges.count)
         for index in chart.edges.indices {
             let g = geos[index]
-            guard g.valid else { continue }
+            // A self-loop routes after every pass below.
+            guard g.valid, g.selfLoop == nil else { continue }
 
             // Head (leaves the source) and tail (enters the target). A decision
             // uses vertex ports; every other shape uses its distributed face port.
             let head: [CGPoint]
             if g.srcDiamond {
-                let (v, stub) = diamondPort(g.fromFrame, toward: g.firstNext, isSource: true)
+                let (v, stub) = diamondPort(g.fromFrame, toward: g.firstNext, isSource: true,
+                                            farLoops: loopCount[g.chain[0], default: 0],
+                                            farSlot: farSlot[index] ?? (0, 1))
                 head = stub.map { [v, $0] } ?? [v]
             } else {
                 let cross = portCross[portKey(index, true)] ?? (horizontal ? g.firstNext.y : g.firstNext.x)
@@ -967,18 +1217,21 @@ extension DiagramLayoutEngine {
                   let text = e.label, !text.isEmpty else { continue }
             var pts = routes[index]
             guard pts.count == 4 else { continue }        // exactly one corner
-            let headEat = flowchartArrowheadLen
+            // A looped target's bars stand off its entry face, so there the
+            // bend stops a jog track short of them instead.
+            let stop = max(flowchartArrowheadLen,
+                           loopExcursion[g.chain[g.chain.count - 1]].map { $0 + flowchartJogTrack } ?? 0)
             if horizontal {
                 let x0 = pts[0].x, x3 = pts[3].x
                 guard abs(pts[1].y - pts[2].y) > 0.5,     // it really jogs
-                      abs(x3 - x0) > headEat + 1 else { continue }
-                let jx = x3 > x0 ? x3 - headEat : x3 + headEat
+                      abs(x3 - x0) > stop + 1 else { continue }
+                let jx = x3 > x0 ? x3 - stop : x3 + stop
                 pts[1].x = jx; pts[2].x = jx
             } else {
                 let y0 = pts[0].y, y3 = pts[3].y
                 guard abs(pts[1].x - pts[2].x) > 0.5,
-                      abs(y3 - y0) > headEat + 1 else { continue }
-                let jy = y3 > y0 ? y3 - headEat : y3 + headEat
+                      abs(y3 - y0) > stop + 1 else { continue }
+                let jy = y3 > y0 ? y3 - stop : y3 + stop
                 pts[1].y = jy; pts[2].y = jy
             }
             routes[index] = pts
@@ -1011,10 +1264,27 @@ extension DiagramLayoutEngine {
         // same face. Applied only when the gutter route is node-clear AND has
         // strictly fewer bends AND no more crossings — so a back edge that
         // already routes cleanly on the boundary (few bends) is left alone and
-        // no fixture regresses.
+        // no fixture regresses. The gutter also stays clear of every loop and
+        // the caption beside it.
+        let loops = chart.edges.indices.filter { geos[$0].selfLoop != nil }
+        let loopAreas = loops.compactMap { index -> CGRect? in
+            guard let loop = geos[index].selfLoop, loop.isOutermost else { return nil }
+            let f = geos[index].fromFrame
+            let depth = loop.clearance - flowchartLabelGap
+            return horizontal
+                ? CGRect(x: f.minX - loop.excursion, y: f.maxY, width: f.width + 2 * loop.excursion, height: depth)
+                : CGRect(x: f.maxX, y: f.minY - loop.excursion, width: depth, height: f.height + 2 * loop.excursion)
+        }
         rerouteBackEdgesThroughGutter(
             &routes, backEdges: backEdges, chart: chart, frames: frames,
-            horizontal: horizontal)
+            horizontal: horizontal, obstacles: loopAreas)
+
+        // Self-loops route last: their geometry is fixed by the space reserved
+        // for them, and nudging, straightening or gutter-routing a loop would
+        // pull it back onto its node.
+        for index in loops {
+            if let loop = geos[index].selfLoop { routes[index] = selfLoopRoute(index, geos[index], loop) }
+        }
 
         var placedEdges: [FlowchartLayout.PlacedEdge] = []
         var crossLimit = flowchartMargin + crossExtent
@@ -1148,7 +1418,8 @@ extension DiagramLayoutEngine {
         backEdges: Set<Int>,
         chart: Flowchart,
         frames: [String: CGRect],
-        horizontal: Bool
+        horizontal: Bool,
+        obstacles: [CGRect] = []
     ) {
         guard !backEdges.isEmpty else { return }
         func crossHi(_ f: CGRect) -> CGFloat { horizontal ? f.maxY : f.maxX }
@@ -1160,10 +1431,12 @@ extension DiagramLayoutEngine {
         // Gutters and node-clearance use only REAL nodes: dummy channels are
         // invisible reserved space, not obstacles, so the gutter hugs the node
         // stack instead of the widest dummy.
+        // `obstacles` (a self-loop and its caption) bound the gutters and must
+        // be cleared like nodes.
         let realFrames = chart.nodes.compactMap { frames[$0.id] }
         let realIDs = Set(chart.nodes.map(\.id))
-        guard let gutterEast = realFrames.map(crossHi).max().map({ $0 + flowchartPortSep }),
-              let gutterWest = realFrames.map(crossLo).min().map({ $0 - flowchartPortSep }) else { return }
+        guard let gutterEast = (realFrames + obstacles).map(crossHi).max().map({ $0 + flowchartPortSep }),
+              let gutterWest = (realFrames + obstacles).map(crossLo).min().map({ $0 - flowchartPortSep }) else { return }
 
         // Straight (orthogonal) segment (a,b) travels >6pt inside rect r's
         // interior? On the axis the segment TRAVELS along, the clipped overlap
@@ -1185,6 +1458,11 @@ extension DiagramLayoutEngine {
         }
         func nodeClear(_ route: [CGPoint], skip: Set<String>) -> Bool {
             for (id, f) in frames where realIDs.contains(id) && !skip.contains(id) {
+                for k in 0..<(route.count - 1) where passesThrough(route[k], route[k + 1], f) {
+                    return false
+                }
+            }
+            for f in obstacles {
                 for k in 0..<(route.count - 1) where passesThrough(route[k], route[k + 1], f) {
                     return false
                 }
