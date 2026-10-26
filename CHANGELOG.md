@@ -1,69 +1,83 @@
 # Changelog
 
-## Unreleased
+## 2.8.0 — Flowcharts read like mermaid, down to the label
+
+Flowchart text now reads the way mermaid's does, character by character. Of
+the 1,588 charts the mermaid.js oracle compares, 1,330 read the same as in
+mermaid 12.2.0, and none that mermaid draws is rejected. The recorded
+divergences went from 256 to 19, and what remains is documented. Output for
+every chart in the fixture set is byte-identical to 2.7.1.
+
+### Changed
+
+- **A flowchart with nothing to draw draws empty**, as in mermaid: a header
+  alone (`graph LR;`), or only comments and `classDef`, `class`, `linkStyle`
+  or `click` lines. `diagnose` notes "nothing to draw" at the header, so a
+  host can still tell, and alt text reads "Empty flowchart." A chart with
+  nothing drawn and a statement MermaidKit couldn't read, or a header mermaid
+  doesn't accept (`graphical`, `flowchart LR junk`), still doesn't parse; a
+  subgraph's box counts as drawn. **Behavior change:** `parse` used to return
+  nil for these, so hosts that treat nil as "show the source" now get a blank
+  diagram. (#91)
+
+### Fixed
+
+- **Entities read as a browser reads them.** Labels decode every named
+  character reference HTML defines (2,231 names from the WHATWG table, up
+  from 66), the way mermaid's labels reach the reader. The longest name that
+  matches wins, legacy names need no `;` (`&amp more` reads "& more",
+  `&copy 2024` "© 2024"), numeric references need none either (`&#169`), and
+  mermaid's own `#name;` uses the same table (`#notin;` reads "∉"). Unknown
+  names and control characters stay as written. One deliberate difference
+  from mermaid: `&#169;` reads "©", where mermaid shows "&©". (#90)
+- **Reading a label never spells a line break the author didn't write.**
+  Labels are read in one linear scan of the text as written, tags and
+  references alike. Every character a break is made of must be written, side
+  by side: a `<br…>` tag's `<`, `b`, `r` and closing `>`, and both halves of
+  `\n`. Otherwise the reference that supplied one, or the tag dropped between
+  two, stays as written. This fixes breaks spelled by a reference supplying a
+  letter (`<b&#114;>`), by a `<` far from its `>`, and by a dropped tag
+  (`\<i>n`, since 2.6). A dropped tag no longer joins a reference either
+  (`&am<b></b>p;` shows as written). A seeded property test checks the rule
+  over 40,000 labels. Long runs of `&lt;` read about 15× faster. (#90)
+- **A label is text to every step of reading a line.** The statement scanner
+  now also gives each statement's syntax, with its labels masked, and links,
+  `|labels|` and `&` fans are found only there. So an asymmetric node's text
+  can hold `&` and `]` (`B --- S>"a & b"]` was dropped whole, and
+  `x>a & b] -..-> Y` read as one node labeled `a & b] -..-> Y`), and inline
+  link text can hold `-` or `&` (`-- a-b -->`). A node's shape must close
+  where its token ends, so a line that doesn't parse as links is never read
+  as one node with the rest of the line as its label. (#93)
+- **`B&C` is one node**, as in mermaid: `&` joins a fan only between
+  whitespace. (#93)
+- **A start head that doesn't match the end counts toward the link**, as in
+  mermaid: `<---` is two ranks long, like `----`, and `o==>` is solid. (#93)
+- **`style X …` draws node `X`** even if nothing else names it, as in
+  mermaid; the styling itself is still ignored. (#93)
+- **A `linkStyle` that names no link is noted.** Its targets must be indexes
+  of links read before it (`linkStyle 1` after one link names none, nor does
+  `linkStyle nope`). Mermaid rejects such a chart; MermaidKit draws the rest,
+  as before, and `diagnose` now notes the statement. A chart with nothing else
+  in it doesn't parse. (#91)
+- **A header is split on any whitespace**, so `flowchart\tLR` reads
+  left-to-right, as in mermaid. A header with words after its direction, or
+  an unknown keyword, is noted. (#91)
 
 ### Tooling
 
 - **The mermaid.js oracle counts tag-like text as agreeing.** MermaidKit
   shows `List<String>` where a browser hides `<String>` as an element it
   doesn't know, and mermaid shows "List". That's deliberate, so nothing the
-  author wrote disappears, and the oracle now treats it as agreeing instead of
-  as a divergence. The rule only excuses unknown elements: a real tag (`<b>`,
-  `<i>`, `<br>`) and any other difference still count, and the rule checks
-  itself on every run. Its summary line counts the charts it excuses. A tag
-  left unclosed at the end (`-- List<String -->`) counts too.
-
-### Fixed
-
-- **A label is text to every step of reading a line.** The statement
-  scanner now also gives each statement's syntax, its labels masked, and
-  links, `|labels|` and `&` fans are found only there. So an asymmetric
-  node's text can hold `&` and `]` (`B --- S>"a & b"]` was dropped whole;
-  `x>a & b] -..-> Y` read as one node labeled `a & b] -..-> Y`), and inline
-  link text can hold `-` or `&` (`-- a-b -->`). A node's shape must close
-  where its token ends, so a line that doesn't parse as links is never read
-  as one node with the rest of the line as its label.
-- **`B&C` is one node**, as in mermaid: `&` joins a fan only between
-  whitespace.
-- **A start head that doesn't match the end counts toward the link**, as in
-  mermaid: `<---` is two ranks long, like `----`, and `o==>` is solid.
-- **`style X …` draws node `X`** even if nothing else names it, as in
-  mermaid; the styling itself is still ignored.
-
-- **A flowchart with nothing to draw draws empty**, as in mermaid: a header
-  alone (`graph LR;`), or only comments and `classDef`, `class`, `linkStyle`
-  or `click` lines.
-  `diagnose` notes "nothing to draw" at the header, so a host can still tell,
-  and alt text reads "Empty flowchart." A flowchart with nothing drawn and a
-  statement MermaidKit couldn't read still doesn't parse (a subgraph's box
-  counts as drawn). **Behavior change:** `parse`
-  used to return nil for these; hosts that treat nil as "show the source"
-  now get a blank diagram.
-- **A `linkStyle` that names no link is noted.** Its index must name a link
-  read before it (`linkStyle 1` after one link names none); mermaid rejects
-  such a chart. MermaidKit draws the rest, as before, and `diagnose` now
-  notes the statement; a chart with nothing else in it doesn't parse.
-
-- **Entities read as a browser reads them.** Labels decode every named
-  character reference HTML defines (2,231 names, from the WHATWG table, up
-  from 66), the way mermaid's labels reach the reader: the longest name that
-  matches wins, legacy names need no `;` (`&amp more` reads "& more",
-  `&copy 2024` "© 2024"), numeric references need none either (`&#169`), and
-  mermaid's own `#name;` uses the same table (`#notin;` reads "∉"). Unknown
-  names and control characters still stay as written. One deliberate
-  difference from mermaid: `&#169;` reads "©", where mermaid 12.2.0 shows
-  "&©". The mermaid oracle's known divergences drop from 256 to 224. Output
-  for every chart in the fixture set is byte-identical to 2.7.1.
-- **Reading a label never spells a line break the author didn't write.**
-  Labels are now read in one linear scan of the text as written, tags and
-  references alike. Every character a break is made of must be written, side
-  by side: a `<br…>` tag's `<`, `b`, `r` and closing `>`, and both halves of
-  `\n`. Otherwise the reference that supplied one, or the tag dropped between
-  two, stays as written. This fixes breaks spelled by a reference supplying a
-  letter (`<b&#114;>`), by a `<` far from its `>`, and by a dropped tag
-  (`\<i>n`, since 2.6). A dropped tag also no longer joins a reference:
-  `&am<b></b>p;` shows as written. A seeded property test checks the rule
-  over 40,000 labels. Long runs of `&lt;` read about 15× faster.
+  author wrote disappears. The rule excuses only elements the HTML parser
+  doesn't know, including one left unclosed at the end (`-- List<String -->`):
+  a real tag (`<b>`, `<svg>`, `<br>`) and any other difference still count.
+  The rule checks itself on every run, and the summary counts the charts it
+  excuses. (#92)
+- **What the oracle still records is documented.** 18 of the 19 remaining
+  divergences come from one mermaid quirk MermaidKit doesn't copy: before it
+  parses, mermaid deletes the last `;` of any line matching
+  `style.*:\S*#.*;`, so a line that mentions a node named `styleguide` loses
+  a label's `;`. (#93)
 
 ## 2.7.1 — Every word, every line, every box
 
