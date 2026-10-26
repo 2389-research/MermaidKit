@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **MermaidRender builds for Mac Catalyst.** Catalyst can `import AppKit`,
+  so every `#if canImport(AppKit)` took the AppKit branch there and hit
+  `NSFont.Weight`, `NSColor.withAlphaComponent` and other APIs Catalyst
+  doesn't have. Those checks now test `os(macOS)`, so Catalyst draws with
+  UIKit like iOS; macOS is unchanged. CI runs the tests on Catalyst too.
+
 ## 2.8.0 — Flowcharts read like mermaid, down to the label
 
 Flowchart text now reads the way mermaid's does, character by character. Of

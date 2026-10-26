@@ -98,7 +98,18 @@ final class FormatAwareEntryTests: XCTestCase {
         }
     }
 
-    #if canImport(AppKit)
+    /// The narration an attachment's image carries: NSImage's
+    /// `accessibilityDescription` on macOS, UIImage's main-actor
+    /// `accessibilityLabel` on UIKit (XCTest runs test methods on the main
+    /// thread, where the renderer sets it).
+    private func narration(of image: PlatformImage) -> String? {
+        #if os(macOS)
+        return image.accessibilityDescription
+        #else
+        return MainActor.assumeIsolated { image.accessibilityLabel }
+        #endif
+    }
+
     /// A caption passed to the diagram-based attachment is rendered visually AND
     /// folded into the narration, so assistive-tech users get the same context.
     func testCaptionIsNarrated() throws {
@@ -107,16 +118,17 @@ final class FormatAwareEntryTests: XCTestCase {
 
         let titled = try XCTUnwrap(MermaidRenderer.attachmentString(diagram: diagram, title: "Q3 pipeline", theme: theme))
         let tImage = try XCTUnwrap((titled.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment)?.image)
-        let desc = try XCTUnwrap(tImage.accessibilityDescription)
+        let desc = try XCTUnwrap(narration(of: tImage))
         XCTAssertTrue(desc.hasPrefix("Q3 pipeline. "), "caption must lead the narration: \(desc)")
         XCTAssertTrue(desc.contains(base), "diagram narration must remain after the caption")
 
         // No caption → narration is exactly the diagram description (no stray prefix).
         let plain = try XCTUnwrap(MermaidRenderer.attachmentString(diagram: diagram, title: nil, theme: theme))
         let pImage = try XCTUnwrap((plain.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment)?.image)
-        XCTAssertEqual(pImage.accessibilityDescription, base)
+        XCTAssertEqual(narration(of: pImage), base)
     }
 
+    #if os(macOS)
     /// The core of #46: the attachment's image carries the SAME narration as
     /// `altText(source:format:)` — accessibility parity with Mermaid, for every
     /// front-end. (AppKit sets `accessibilityDescription` off the main thread;

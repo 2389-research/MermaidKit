@@ -1,7 +1,7 @@
 #if canImport(AppKit) || canImport(UIKit) || canImport(SilicaCairo)
 import Foundation
 import MermaidLayout
-#if canImport(AppKit)
+#if os(macOS)
 import CoreGraphics
 import CoreText
 import AppKit
@@ -86,7 +86,7 @@ public struct DiagramTheme: Sendable {
     ) -> (resolved: [DiagramColor], fingerprint: String) {
         func convert(_ c: PlatformColor) -> (DiagramColor, digest: String) {
             var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            #if canImport(AppKit)
+            #if os(macOS)
             guard let converted = c.usingColorSpace(.sRGB) else {
                 // Pattern/catalog colors that refuse sRGB conversion: digest
                 // by description rather than as zeros (which would collide
@@ -103,7 +103,7 @@ public struct DiagramTheme: Sendable {
             return (color, color.hexString)
         }
         var pairs: [(DiagramColor, digest: String)] = []
-        #if canImport(AppKit)
+        #if os(macOS)
         let appearance = NSAppearance(named: prefersDark ? .darkAqua : .aqua)
         if let appearance {
             appearance.performAsCurrentDrawingAppearance {
@@ -158,7 +158,7 @@ public struct DiagramTheme: Sendable {
     /// accent color, 12% hairlines, and the default palette.
     public init(prefersDark: Bool, fontFamily: String? = nil) {
         let fg: UInt32 = prefersDark ? 0xF2F2F4 : 0x1D1D1F
-        #if canImport(AppKit)
+        #if os(macOS)
         let sys = PlatformColor.controlAccentColor
         #else
         let sys = PlatformColor.tintColor

@@ -64,6 +64,33 @@ jobs:
           fi
           tail -5 ios-build.log
 
+  # Mac Catalyst can `import AppKit` but lacks most of it, so a bare
+  # `canImport(AppKit)` check sends Catalyst down the AppKit branch and breaks
+  # the build. This job builds the whole package for Catalyst and runs its
+  # tests there, which also gives the UIKit render branch a real test host.
+  # It runs alongside the macOS job rather than adding to its timeout.
+  catalyst:
+    name: xcodebuild test (Mac Catalyst)
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select newest Xcode 26
+        run: sudo xcode-select -s "$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' -print | sort -V | tail -n 1)"
+      - name: Test on Mac Catalyst
+        run: |
+          set -o pipefail
+          if ! xcodebuild test -scheme MermaidKit-Package \
+            -destination 'platform=macOS,variant=Mac Catalyst' > catalyst-test.log 2>&1; then
+            grep -E "error:|failed" catalyst-test.log | sort -u | head -40
+            tail -20 catalyst-test.log
+            exit 1
+          fi
+          # One total per test bundle (layout, render, C ABI), not just the last.
+          grep -A1 -E "Test Suite '[A-Za-z]+\.xctest' (passed|failed)" catalyst-test.log | grep -E "xctest|Executed"
+
   linux:
     name: swift test (Linux)
     runs-on: ubuntu-latest

@@ -105,7 +105,7 @@ JSON; each platform paints it.
 
 | Platform | Renderer | Bridge | Get it |
 |---|---|---|---|
-| macOS / iOS / visionOS | CoreGraphics / CoreText | in-process | `import MermaidRender` |
+| macOS / iOS / Mac Catalyst / visionOS | CoreGraphics / CoreText | in-process | `import MermaidRender` |
 | Linux | Silica (Cairo/FontConfig) | in-process | `LinuxRaster` trait |
 | **Android** | Kotlin `Canvas` (Skia) | JNI → `.so` | `implementation("ai.2389:mermaidkit-android:…")` via `mavenLocal()` until it's on Maven Central — [`android/`](android/) |
 | **Windows / .NET** | SkiaSharp | P/Invoke → `.dll` | `MermaidKit` .NET library (NuGet package planned) — [`windows/`](windows/) |
@@ -403,7 +403,7 @@ CLI:
   (frames, polylines). Text measurement is injected (`DiagramTextMeasurer`),
   so layout is fully testable without a display server.
 - **MermaidRender** — CoreGraphics/CoreText drawing on macOS 14+, iOS 17+,
-  and visionOS 1+, and optional Silica (Cairo/FontConfig) drawing on Linux.
+  Mac Catalyst 17+ and visionOS 1+, and optional Silica (Cairo/FontConfig) drawing on Linux.
   The Linux raster backend is behind the `LinuxRaster` **package trait** (default
   OFF): a `from:`-pinned consumer resolves a Silica-free graph on every platform
   — no unstable branch dependency, and Apple hosts never fetch the Cairo/PureSwift

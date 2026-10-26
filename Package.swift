@@ -32,7 +32,7 @@ import PackageDescription
 // or build/test with `--traits LinuxRaster`.
 let package = Package(
     name: "MermaidKit",
-    platforms: [.macOS(.v14), .iOS(.v17), .visionOS(.v1)],
+    platforms: [.macOS(.v14), .iOS(.v17), .macCatalyst(.v17), .visionOS(.v1)],
     products: [
         .library(name: "MermaidLayout", targets: ["MermaidLayout"]),
         .library(name: "MermaidRender", targets: ["MermaidRender"]),

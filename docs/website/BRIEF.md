@@ -114,8 +114,8 @@ Install:
 - **Honest support matrix.** The README states plainly what parses, what
   is ignored, and what's a known gap worth filing. The site should keep
   that plainness — it's part of the identity.
-- Platforms: renders natively on Apple (macOS 14+, iOS 17+, visionOS 1+),
-  Linux, Android, Windows/.NET, WebAssembly, and Flutter, from one Swift
+- Platforms: renders natively on Apple (macOS 14+, iOS 17+, Mac Catalyst 17+,
+  visionOS 1+), Linux, Android, Windows/.NET, WebAssembly, and Flutter, from one Swift
   layout core (Swift 6 language mode; Xcode 26 / Swift 6.2 to build). Lower Apple OS
   floors are the top of the public roadmap.
 

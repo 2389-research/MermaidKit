@@ -2,7 +2,7 @@
 import Foundation
 import MermaidLayout
 
-#if canImport(AppKit)
+#if os(macOS)
 import CoreGraphics
 import CoreText
 import AppKit
