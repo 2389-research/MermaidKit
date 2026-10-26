@@ -215,6 +215,11 @@ final class FlowchartSelfLoopTests: XCTestCase {
             "flowchart TD\n A --> B & C\n B --> D\n C -->|go| D\n D -->|again| D",
             "flowchart TD\n subgraph G\n A --> B\n end\n B -->|retry| B",
             "flowchart LR\n subgraph G\n A --> B\n end\n B -->|retry| B",
+            "flowchart BT\n A --> T[Work] --> B\n T -->|again| T",
+            "flowchart RL\n A --> T[Work] --> B\n T -->|again| T",
+            "flowchart TD\n R --> A & B & C\n A -->|a| A\n B -->|b| B\n C -->|c| C\n A & B & C --> Z",
+            "flowchart TD\n A --> B --> C\n C --> A\n B -->|retry| B\n C -->|again| C",
+            "flowchart TD\n subgraph G [Group]\n A --> T --> B\n T -->|again| T\n end\n X --> G\n G -->|regroup| G",
         ]
         for src in sources {
             let errors = lintErrors(src)
