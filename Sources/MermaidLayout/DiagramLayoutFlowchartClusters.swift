@@ -119,7 +119,10 @@ extension DiagramLayoutEngine {
             guard lca(ctx, edge.from, edge.to) == scope else { continue }
             let from = rep(ctx, edge.from, scope: scope)
             let to = rep(ctx, edge.to, scope: scope)
-            guard from != to else { continue }
+            // Two ends folded into one group's box link nothing at this scope,
+            // but a real self-loop (`A --> A`, or a group's own `G --> G`) is
+            // kept, so `layoutFlat` draws it as a loop.
+            guard from != to || edge.from == edge.to else { continue }
             let reduced = Flowchart.Edge(from: from, to: to, label: edge.label,
                                          dashed: edge.dashed, hasArrow: edge.hasArrow,
                                          backArrow: edge.backArrow, head: edge.head,

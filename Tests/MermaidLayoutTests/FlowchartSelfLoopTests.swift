@@ -79,36 +79,51 @@ final class FlowchartSelfLoopTests: XCTestCase {
         try assertCaptionsBesideFarRun(retrySource)
     }
 
-    /// Every labelled self-loop's caption in a top-down chart, boxed the way
-    /// `placeRunLabels` boxes it, sits beside its loop's far run: right of the
-    /// node and level with it, never on the node or on a bar in a layer gap.
+    /// Every labelled self-loop's caption, boxed the way `placeRunLabels`
+    /// boxes it, sits beside its loop's far run: past the node's cross-far
+    /// face (right in TD, bottom in LR) and level with the node, never on the
+    /// node or on a bar in a layer gap. A loop is found by its ends, both on
+    /// its node, since a chart with subgraphs places edges scope by scope.
     private func assertCaptionsBesideFarRun(
         _ src: String, file: StaticString = #filePath, line: UInt = #line
     ) throws {
         let chart = try flowchart(src)
+        let horizontal = chart.direction == .leftRight || chart.direction == .rightLeft
         let layout = DiagramLayoutEngine.layout(chart, measure: measure)
-        for (index, edge) in chart.edges.enumerated() where edge.from == edge.to {
+        for edge in chart.edges where edge.from == edge.to && !edge.invisible {
             guard let label = edge.label, !label.isEmpty else { continue }
             let node = try XCTUnwrap(layout.nodes.first { $0.id == edge.from }?.frame, file: file, line: line)
-            let anchor = try XCTUnwrap(layout.edges[index].labelPoint, file: file, line: line)
+            let touching = node.insetBy(dx: -1, dy: -1)
+            let loop = try XCTUnwrap(layout.edges.first {
+                $0.label == label && touching.contains($0.start) && touching.contains($0.end)
+            }, "\(src): no loop \"\(label)\" on \(edge.from)", file: file, line: line)
+            let anchor = try XCTUnwrap(loop.labelPoint, file: file, line: line)
             let size = measure(label, DiagramLayoutEngine.labelFontSize)
             let rect = CGRect(x: anchor.x - (size.width + 6) / 2, y: anchor.y - (size.height + 2) / 2,
                               width: size.width + 6, height: size.height + 2)
-            XCTAssertGreaterThanOrEqual(rect.minX, node.maxX - 0.5,
-                "\(src): caption \"\(label)\" \(rect) is not right of its node \(node)", file: file, line: line)
-            XCTAssertTrue(anchor.y > node.minY && anchor.y < node.maxY,
+            let (beyond, farFace) = horizontal ? (rect.minY, node.maxY) : (rect.minX, node.maxX)
+            let (along, lo, hi) = horizontal ? (anchor.x, node.minX, node.maxX) : (anchor.y, node.minY, node.maxY)
+            let (outer, canvas) = horizontal ? (rect.maxY, layout.size.height) : (rect.maxX, layout.size.width)
+            XCTAssertGreaterThanOrEqual(beyond, farFace - 0.5,
+                "\(src): caption \"\(label)\" \(rect) is not past the far face of \(node)", file: file, line: line)
+            XCTAssertTrue(along > lo && along < hi,
                 "\(src): caption \"\(label)\" at \(anchor) is not beside the far run of \(node)", file: file, line: line)
-            XCTAssertLessThanOrEqual(rect.maxX, layout.size.width,
+            XCTAssertLessThanOrEqual(outer, canvas,
                 "\(src): caption \"\(label)\" runs off the canvas", file: file, line: line)
         }
     }
 
     /// The far run carries the caption even where a bar is longer: the outer
-    /// of two nested loops, a loop on a wide node, a loop on a decision.
+    /// of two nested loops, a loop on a wide node, a loop on a decision, in
+    /// either direction and inside a subgraph.
     func testCaptionsRideTheFarRun() throws {
         try assertCaptionsBesideFarRun("flowchart TD\n A --> B --> C\n B -->|one| B\n B -->|two| B")
+        try assertCaptionsBesideFarRun("flowchart LR\n A --> B --> C\n B -->|one| B\n B -->|two| B")
         try assertCaptionsBesideFarRun("flowchart TD\n A[a node label wide enough to stretch the box] -->|x| A\n A --> B")
+        try assertCaptionsBesideFarRun("flowchart LR\n A[a node label wide enough to stretch the box] -->|x| A\n A --> B")
         try assertCaptionsBesideFarRun("flowchart TD\n D{x} -->|a| D\n D -->|b| D")
+        try assertCaptionsBesideFarRun("flowchart TD\n subgraph G\n A --> B\n end\n B -->|retry| B")
+        try assertCaptionsBesideFarRun("flowchart LR\n subgraph G\n A --> B\n end\n B -->|retry| B")
     }
 
     /// Where a self-loop and another drawn edge properly cross.
@@ -136,21 +151,38 @@ final class FlowchartSelfLoopTests: XCTestCase {
         return found
     }
 
-    /// No drawn edge crosses a loop. A decision's branch toward the loop's
-    /// side leaves the face inside the loop, since the loop wraps the side
-    /// vertex, and a jog biased off a gap's middle by fan-in still clears the
-    /// bars.
+    /// No drawn edge crosses a loop. A decision's branches toward the loop's
+    /// side, forward or back, leave the face inside the loop at a slot each,
+    /// since the loop wraps the side vertex; a jog biased off a gap's middle
+    /// by fan-in, or slid toward a looped target, still clears the bars.
     func testNoEdgeCrossesALoop() throws {
         let sources = [
             "flowchart TD\n D{ok?} -->|retry| D\n D -->|yes| E\n D -->|no| F",
             "flowchart LR\n D{ok?} -->|retry| D\n D -->|yes| E\n D -->|no| F",
             "flowchart TD\n D{x} -->|a| D\n D -->|b| D\n D --> E & F & G",
+            "flowchart TD\n D{x} -->|r| D\n D --> E & F & G & H",
             "flowchart TD\n S --> L & P & Q & R\n L -->|again| L\n L & P & Q & R --> T",
+            "flowchart TD\n A --> B & C\n B --> D\n C -->|go| D\n D -->|again| D",
         ]
         for src in sources {
             let crossings = try loopCrossings(src)
             XCTAssertTrue(crossings.isEmpty, "\(src):\n" + crossings.joined(separator: "\n"))
         }
+    }
+
+    /// Branches leaving a looped decision toward its loops' side each leave
+    /// from their own point, so no two run down one line.
+    func testDecisionBranchesTowardTheLoopsLeaveApart() throws {
+        let chart = try flowchart("flowchart TD\n D{x} -->|r| D\n D --> E & F & G & H")
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+        let decision = try XCTUnwrap(layout.nodes.first { $0.id == "D" }?.frame)
+        let starts = chart.edges.indices
+            .filter { chart.edges[$0].from == "D" && chart.edges[$0].to != "D" }
+            .map { layout.edges[$0].start }
+            .filter { $0.x > decision.midX + 0.5 }
+        XCTAssertEqual(starts.count, 2, "expected two branches toward the loop's side, got \(starts)")
+        XCTAssertGreaterThan(abs((starts.first?.x ?? 0) - (starts.last?.x ?? 0)), 1,
+                             "branches toward the loop's side share a start: \(starts)")
     }
 
     /// The loop takes no slot on the node's bottom face, so the only real edge
@@ -180,6 +212,9 @@ final class FlowchartSelfLoopTests: XCTestCase {
             "flowchart TD\n D{x} -->|r| D\n D --> E & F & G",
             "flowchart LR\n D{x} -->|r| D\n D --> E & F & G",
             "flowchart TD\n A[a node label wide enough to stretch the box] -->|x| A\n A --> B",
+            "flowchart TD\n A --> B & C\n B --> D\n C -->|go| D\n D -->|again| D",
+            "flowchart TD\n subgraph G\n A --> B\n end\n B -->|retry| B",
+            "flowchart LR\n subgraph G\n A --> B\n end\n B -->|retry| B",
         ]
         for src in sources {
             let errors = lintErrors(src)

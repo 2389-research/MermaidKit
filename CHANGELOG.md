@@ -14,7 +14,9 @@
   a face port from the node's real edges, pushing them into jogs. The loop
   now wraps round the node's cross-far side (the right in `TD`, the bottom
   in `LR`) with its caption beside the far run, and the row and layer gaps
-  make room for both. Several loops on one node nest outward.
+  make room for both. Several loops on one node nest outward. A chart with
+  subgraphs used to drop its self-loops altogether; they now draw the same
+  way, inside a subgraph or round one.
 
 ## 2.8.0 — Flowcharts read like mermaid, down to the label
 
