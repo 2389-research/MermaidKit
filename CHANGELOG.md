@@ -1,14 +1,25 @@
 # Changelog
 
-## Unreleased
+## 2.9.0 — Mac Catalyst, and self-loops that loop
+
+MermaidRender now builds and runs on Mac Catalyst, and a flowchart edge from
+a node to itself draws as a loop round the node. Additive: no existing call
+changes, and output for every chart in the fixture set is byte-identical to
+2.8.0.
+
+### Added
+
+- **Mac Catalyst.** Catalyst can `import AppKit`, so every
+  `#if canImport(AppKit)` took the AppKit branch there and hit
+  `NSFont.Weight`, `NSColor.withAlphaComponent` and other APIs Catalyst
+  doesn't have. Those checks now test `os(macOS)`, so Catalyst draws with
+  UIKit like iOS; macOS is unchanged. `Package.swift` declares Mac Catalyst
+  17, the floor it already inherited from iOS 17. CI runs the tests on
+  Catalyst too, which also gives the UIKit render path, iOS's, a test host.
+  (#94)
 
 ### Fixed
 
-- **MermaidRender builds for Mac Catalyst.** Catalyst can `import AppKit`,
-  so every `#if canImport(AppKit)` took the AppKit branch there and hit
-  `NSFont.Weight`, `NSColor.withAlphaComponent` and other APIs Catalyst
-  doesn't have. Those checks now test `os(macOS)`, so Catalyst draws with
-  UIKit like iOS; macOS is unchanged. CI runs the tests on Catalyst too.
 - **A flowchart self-loop draws as a loop.** `A --> A` used to route
   straight through its own node, with its caption on the box, and it took
   a face port from the node's real edges, pushing them into jogs. The loop
@@ -16,7 +27,9 @@
   in `LR`) with its caption beside the far run, and the row and layer gaps
   make room for both. Several loops on one node nest outward. A chart with
   subgraphs used to drop its self-loops altogether; they now draw the same
-  way, inside a subgraph or round one.
+  way, inside a subgraph or round one. (#96)
+
+Thanks to @randomor for both.
 
 ## 2.8.0 — Flowcharts read like mermaid, down to the label
 
