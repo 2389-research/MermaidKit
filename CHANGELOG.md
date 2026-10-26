@@ -9,20 +9,6 @@
   `NSFont.Weight`, `NSColor.withAlphaComponent` and other APIs Catalyst
   doesn't have. Those checks now test `os(macOS)`, so Catalyst draws with
   UIKit like iOS; macOS is unchanged. CI runs the tests on Catalyst too.
-- **A label is text to every step of reading a line.** The statement
-  scanner now also gives each statement's syntax, its labels masked, and
-  links, `|labels|` and `&` fans are found only there. So an asymmetric
-  node's text can hold `&` and `]` (`B --- S>"a & b"]` was dropped whole;
-  `x>a & b] -..-> Y` read as one node labeled `a & b] -..-> Y`), and inline
-  link text can hold `-` or `&` (`-- a-b -->`). A node's shape must close
-  where its token ends, so a line that doesn't parse as links is never read
-  as one node with the rest of the line as its label.
-- **`B&C` is one node**, as in mermaid: `&` joins a fan only between
-  whitespace.
-- **A start head that doesn't match the end counts toward the link**, as in
-  mermaid: `<---` is two ranks long, like `----`, and `o==>` is solid.
-- **`style X …` draws node `X`** even if nothing else names it, as in
-  mermaid; the styling itself is still ignored.
 
 ## 2.8.0 — Flowcharts read like mermaid, down to the label
 

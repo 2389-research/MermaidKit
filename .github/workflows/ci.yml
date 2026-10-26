@@ -88,7 +88,8 @@ jobs:
             tail -20 catalyst-test.log
             exit 1
           fi
-          grep -E "Executed [0-9]+ tests" catalyst-test.log | tail -1
+          # One total per test bundle (layout, render, C ABI), not just the last.
+          grep -A1 -E "Test Suite '[A-Za-z]+\.xctest' (passed|failed)" catalyst-test.log | grep -E "xctest|Executed"
 
   linux:
     name: swift test (Linux)
