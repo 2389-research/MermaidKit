@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 2.9.1 — Captions placed in near-linear time
+
+Charts with many edge captions lay out far faster, with every caption where
+it was. Output for every chart is byte-identical to 2.9.0.
 
 ### Fixed
 
