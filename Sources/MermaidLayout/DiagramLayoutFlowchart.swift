@@ -10,7 +10,7 @@ extension DiagramLayoutEngine {
 
     // MARK: Flowchart (layered / Sugiyama-style)
 
-    private static let flowchartMargin: CGFloat = 12
+    static let flowchartMargin: CGFloat = 12
     private static let flowchartLayerGap: CGFloat = 56
     private static let flowchartNodeGap: CGFloat = 26
     /// Cross-axis breadth a dummy node reserves — a narrow channel a long edge
@@ -400,12 +400,24 @@ extension DiagramLayoutEngine {
         tailInsets: [CGFloat] = [],
         labelRuns: [Int?] = []
     ) -> [CGPoint?] {
+        // Nothing to place: no obstacle needs reading.
+        guard routes.indices.contains(where: { $0 < labelSizes.count && labelSizes[$0] != nil && routes[$0].count >= 2 }) else {
+            return [CGPoint?](repeating: nil, count: routes.count)
+        }
         let obstacles = nodeFrames.map { $0.insetBy(dx: -3, dy: -3) }
         // Fixtures every caption must avoid: the interior bends of every route
         // (a corner) and the points where two routes cross (a junction).
         var bends: [CGPoint] = []
         for pts in routes where pts.count > 2 { bends.append(contentsOf: pts[1..<(pts.count - 1)]) }
         let crossings = routeCrossingPoints(routes)
+        // Every term of a candidate's score is zero for an obstacle that isn't
+        // near it, and adding zero leaves a sum exactly as it was, so each
+        // candidate reads only what a grid finds near it, in the same order as
+        // before: the placement is bit for bit the all-pairs one, in near-linear
+        // time.
+        let obstacleGrid = PlacementGrid(obstacles)
+        let bendGrid = PlacementGrid(bends.map { CGRect(origin: $0, size: .zero) })
+        let crossingGrid = PlacementGrid(crossings.map { CGRect(origin: $0, size: .zero) })
         // Arrowhead tips: the head end of every route (last point). Treated as a
         // small obstacle REGION, not just a point, so a label keeps clear of the
         // arrowhead rather than hugging it. A route's own tips are excluded when
@@ -413,6 +425,7 @@ extension DiagramLayoutEngine {
         let arrowTips: [(route: Int, p: CGPoint)] = routes.indices.compactMap {
             routes[$0].count >= 2 ? ($0, routes[$0].last!) : nil
         }
+        let tipGrid = PlacementGrid(arrowTips.map { CGRect(origin: $0.p, size: .zero) })
         let gap = flowchartLabelGap
 
         // Distance from a point to the nearest edge of a rect (0 inside/on it).
@@ -424,6 +437,11 @@ extension DiagramLayoutEngine {
 
         var anchors = [CGPoint?](repeating: nil, count: routes.count)
         var labelRects: [CGRect] = []
+        var labelGrid = PlacementGrid([])
+        func placeLabel(_ rect: CGRect) {
+            labelGrid.insert(labelRects.count, rect)
+            labelRects.append(rect)
+        }
 
         for i in routes.indices {
             guard let sz = labelSizes[i], routes[i].count >= 2 else { continue }
@@ -461,7 +479,7 @@ extension DiagramLayoutEngine {
             guard !runs.isEmpty else {
                 let a = pts[0], b = pts[pts.count - 1]
                 let p = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
-                labelRects.append(CGRect(x: p.x - w / 2, y: p.y - h / 2, width: w, height: h))
+                placeLabel(CGRect(x: p.x - w / 2, y: p.y - h / 2, width: w, height: h))
                 anchors[i] = p; continue
             }
             // Longest run first; segment index breaks ties (deterministic).
@@ -506,6 +524,10 @@ extension DiagramLayoutEngine {
                         for s in [down, up] where abs(s) <= slack { alongShifts.append(s) }
                     }
                 }
+                // A shift offered twice scores the same twice, and only a
+                // strictly lower score wins, so a repeat can't change the pick.
+                var offered: Set<CGFloat> = []
+                alongShifts = alongShifts.filter { offered.insert($0).inserted }
                 let perpNudges: [CGFloat] = [0, perp / 2 + gap / 2, -(perp / 2 + gap / 2)]
                 for da in alongShifts {
                     for dp in perpNudges {
@@ -513,9 +535,30 @@ extension DiagramLayoutEngine {
                         let cx = run.horizontal ? cAlong : run.fixed + dp
                         let cy = run.horizontal ? run.fixed + dp : cAlong
                         let rect = CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h)
+                        // The score's tail: what this candidate pays however
+                        // clear it is. Every term before it is at least 0, and
+                        // adding the same terms in the same order is monotone,
+                        // so the tail summed from 0 bounds the score from
+                        // below. A candidate whose bound already reaches the
+                        // best can't win (only a strictly lower score does),
+                        // so it isn't scored: the pick is the same.
+                        let stub = min((cAlong - along / 2) - run.lo, run.hi - (cAlong + along / 2))
+                        let offMargin = rect.minX < flowchartMargin || rect.minY < flowchartMargin
+                        func tail(_ score: CGFloat) -> CGFloat {
+                            var score = score
+                            if stub < edgeLabelStub { score += (edgeLabelStub - stub) * 6 }
+                            score += abs(da) * 1.4           // stay at the MIDPOINT
+                            score += abs(dp) * 1.5           // prefer sitting ON the line
+                            score += CGFloat(rank) * 2       // prefer the longer run
+                            if offMargin { score += 1_000 }
+                            return score
+                        }
+                        if haveBest, tail(0) >= bestScore { continue }
                         var score: CGFloat = 0
-                        for o in obstacles { score += overlapArea(rect, o) * 4 }
-                        for l in labelRects {
+                        for k in obstacleGrid.near(rect) { score += overlapArea(rect, obstacles[k]) * 4 }
+                        // A caption adds nothing past `gap` on either axis.
+                        for k in labelGrid.near(rect.insetBy(dx: -gap, dy: -gap)) {
+                            let l = labelRects[k]
                             score += overlapArea(rect, l) * 3
                             // Comfort gap: two captions that don't overlap but sit
                             // within `gap` of each other on BOTH axes still read as
@@ -536,8 +579,8 @@ extension DiagramLayoutEngine {
                             if sep < gap { score += (gap - sep) * 8 }
                         }
                         let probe = rect.insetBy(dx: -1, dy: -1)
-                        for v in bends where probe.contains(v) { score += 120 }
-                        for x in crossings where probe.contains(x) { score += 120 }
+                        for k in bendGrid.near(probe) where probe.contains(bends[k]) { score += 120 }
+                        for k in crossingGrid.near(probe) where probe.contains(crossings[k]) { score += 120 }
                         // Arrowhead clearance: a foreign arrowhead tip within the
                         // comfortable gap of the caption frame is an obstacle.
                         // Every foreign tip counts (only this route's own head is
@@ -546,41 +589,70 @@ extension DiagramLayoutEngine {
                         // to be skipped, but the linter's `label-on-fixture` rule
                         // does NOT exempt it — so skipping it here let the placer
                         // pick an anchor that then failed lint. Score all of them.
-                        for tip in arrowTips where tip.route != i {
+                        for k in tipGrid.near(rect.insetBy(dx: -gap, dy: -gap)) where arrowTips[k].route != i {
+                            let tip = arrowTips[k]
                             let d = pointRectDistance(tip.p, rect)
                             if d < gap { score += (gap - d) * 6 }
                         }
-                        // Stub on each side of the caption on this run.
-                        let stub = min((cAlong - along / 2) - run.lo, run.hi - (cAlong + along / 2))
-                        if stub < edgeLabelStub { score += (edgeLabelStub - stub) * 6 }
-                        score += abs(da) * 1.4           // stay at the MIDPOINT
-                        score += abs(dp) * 1.5           // prefer sitting ON the line
-                        score += CGFloat(rank) * 2       // prefer the longer run
-                        if rect.minX < flowchartMargin || rect.minY < flowchartMargin { score += 1_000 }
+                        // Stub on each side of the caption on this run, then
+                        // the rest of the tail.
+                        score = tail(score)
                         if !haveBest || score < bestScore {
                             bestScore = score; best = CGPoint(x: cx, y: cy); haveBest = true
                         }
                     }
                 }
             }
-            labelRects.append(CGRect(x: best.x - w / 2, y: best.y - h / 2, width: w, height: h))
+            placeLabel(CGRect(x: best.x - w / 2, y: best.y - h / 2, width: w, height: h))
             anchors[i] = best
         }
         return anchors
     }
 
     /// The points where two DIFFERENT routes' segments properly cross — the
-    /// junctions a label must not sit on.
-    private static func routeCrossingPoints(_ routes: [[CGPoint]]) -> [CGPoint] {
-        var pts: [CGPoint] = []
+    /// junctions a label must not sit on. A proper crossing lies inside both
+    /// segments' bounding boxes, so only segments whose boxes share a grid
+    /// cell are tested; and two exactly horizontal (or two exactly vertical)
+    /// segments are parallel, which `segmentCrossPoint` never counts, so
+    /// those pairs aren't tested either. The same points, each pair once,
+    /// without testing every pair: routes fanning out of one node share a
+    /// horizontal run, which every pair of them overlaps.
+    static func routeCrossingPoints(_ routes: [[CGPoint]]) -> [CGPoint] {
+        enum Kind { case horizontal, vertical, slanted }
+        var segments: [(route: Int, a: CGPoint, b: CGPoint, kind: Kind)] = []
         for i in routes.indices where routes[i].count >= 2 {
-            for j in routes.indices where j > i && routes[j].count >= 2 {
-                let pi = routes[i], pj = routes[j]
-                for a in 0..<(pi.count - 1) {
-                    for b in 0..<(pj.count - 1) {
-                        if let p = segmentCrossPoint(pi[a], pi[a + 1], pj[b], pj[b + 1]) { pts.append(p) }
-                    }
-                }
+            for k in 0..<(routes[i].count - 1) {
+                let a = routes[i][k], b = routes[i][k + 1]
+                // A point has no direction, so it crosses nothing.
+                guard a != b else { continue }
+                segments.append((i, a, b, a.y == b.y ? .horizontal : a.x == b.x ? .vertical : .slanted))
+            }
+        }
+        func box(_ s: (route: Int, a: CGPoint, b: CGPoint, kind: Kind)) -> CGRect {
+            CGRect(x: min(s.a.x, s.b.x), y: min(s.a.y, s.b.y), width: abs(s.a.x - s.b.x), height: abs(s.a.y - s.b.y))
+        }
+        func grid(_ kind: Kind) -> (grid: PlacementGrid, members: [Int]) {
+            let members = segments.indices.filter { segments[$0].kind == kind }
+            return (PlacementGrid(members.map { box(segments[$0]) }), members)
+        }
+        let vertical = grid(.vertical), slanted = grid(.slanted)
+        var pts: [CGPoint] = []
+        /// Tests `s` against the segments of `others` near it (the lower
+        /// index first, as each pair was always tested; `onlyLater` keeps a
+        /// pair within one kind from being tested twice).
+        func test(_ s: Int, against others: (grid: PlacementGrid, members: [Int]), onlyLater: Bool = false) {
+            for m in others.grid.near(box(segments[s])) {
+                let t = others.members[m]
+                guard segments[t].route != segments[s].route, !onlyLater || t > s else { continue }
+                let (lo, hi) = s < t ? (segments[s], segments[t]) : (segments[t], segments[s])
+                if let p = segmentCrossPoint(lo.a, lo.b, hi.a, hi.b) { pts.append(p) }
+            }
+        }
+        for s in segments.indices {
+            switch segments[s].kind {
+            case .horizontal: test(s, against: vertical); test(s, against: slanted)
+            case .vertical: test(s, against: slanted)
+            case .slanted: test(s, against: slanted, onlyLater: true)
             }
         }
         return pts
@@ -2118,5 +2190,58 @@ extension DiagramLayoutEngine {
                 }
             }
         }
+    }
+}
+
+/// Boxes (or points, as empty boxes) by index on a uniform grid, for the
+/// caption placer: `near` gives every item whose box shares a cell with a
+/// query box, in index order. That's a superset of the items the box
+/// touches, so a caller that still tests each one exactly loses nothing. A
+/// box too large or not finite to grid goes on every query's list instead.
+struct PlacementGrid {
+    private struct Cell: Hashable { let x: Int; let y: Int }
+    private static let size: CGFloat = 64
+    /// The most cells a box may cover before it's treated as everywhere.
+    private static let maxCells = 4096
+    private var cells: [Cell: [Int]] = [:]
+    private var everywhere: [Int] = []
+
+    init(_ boxes: [CGRect]) {
+        for (index, box) in boxes.enumerated() { insert(index, box) }
+    }
+
+    /// The cells `box` covers, or nil if it's too large or not finite.
+    private static func span(_ box: CGRect) -> (x: ClosedRange<Int>, y: ClosedRange<Int>)? {
+        let bounds = [box.minX, box.maxX, box.minY, box.maxY].map { $0 / size }
+        guard bounds.allSatisfy({ $0.isFinite && abs($0) < 1e9 }) else { return nil }
+        let x = Int(bounds[0].rounded(.down))...Int(bounds[1].rounded(.down))
+        let y = Int(bounds[2].rounded(.down))...Int(bounds[3].rounded(.down))
+        return x.count * y.count <= maxCells ? (x, y) : nil
+    }
+
+    mutating func insert(_ index: Int, _ box: CGRect) {
+        guard let span = Self.span(box) else { everywhere.append(index); return }
+        for x in span.x { for y in span.y { cells[Cell(x: x, y: y), default: []].append(index) } }
+    }
+
+    /// Every item whose box shares a cell with `box` (all of them, if `box`
+    /// can't be gridded), ascending, each once.
+    func near(_ box: CGRect) -> [Int] {
+        guard let span = Self.span(box) else {
+            return (cells.values.flatMap { $0 } + everywhere).sorted().uniqued()
+        }
+        var found = everywhere
+        for x in span.x { for y in span.y { found += cells[Cell(x: x, y: y)] ?? [] } }
+        return found.sorted().uniqued()
+    }
+}
+
+private extension Array where Element == Int {
+    /// A sorted array without its repeats.
+    func uniqued() -> [Int] {
+        var out: [Int] = []
+        out.reserveCapacity(count)
+        for v in self where out.last != v { out.append(v) }
+        return out
     }
 }
