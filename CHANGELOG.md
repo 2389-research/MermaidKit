@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Charts with many edge captions lay out far faster.** The caption placer
+  scored every candidate position against every node, caption, bend,
+  crossing and arrowhead in the chart, so its cost grew about n^2.5 with the
+  number of labeled edges: a fan of 320 labeled edges took 18 s (debug
+  build). It now reads only what a spatial grid finds near each candidate,
+  skips a candidate whose unavoidable penalties already lose to the best one
+  so far, and tests only route segments that could cross: the same fan
+  takes 1.1 s, and 160 labeled self-loops take 0.07 s instead of 4.2 s. The
+  placement is bit for bit what it was: every skipped term was exactly zero
+  and every skipped candidate could not have won, and a test holds the new
+  placer to the old one over real layouts and 300 seeded random ones.
+  Output for every chart is byte-identical to 2.9.0. (#97)
+
 ## 2.9.0 — Mac Catalyst, and self-loops that loop
 
 MermaidRender now builds and runs on Mac Catalyst, and a flowchart edge from
