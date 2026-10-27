@@ -416,8 +416,8 @@ extension DiagramLayoutEngine {
         // before: the placement is bit for bit the all-pairs one, in near-linear
         // time.
         let obstacleGrid = PlacementGrid(obstacles)
-        let bendGrid = PlacementGrid(bends.map { CGRect(origin: $0, size: .zero) })
-        let crossingGrid = PlacementGrid(crossings.map { CGRect(origin: $0, size: .zero) })
+        let bendGrid = PlacementGrid(points: bends)
+        let crossingGrid = PlacementGrid(points: crossings)
         // Arrowhead tips: the head end of every route (last point). Treated as a
         // small obstacle REGION, not just a point, so a label keeps clear of the
         // arrowhead rather than hugging it. A route's own tips are excluded when
@@ -579,8 +579,10 @@ extension DiagramLayoutEngine {
                             if sep < gap { score += (gap - sep) * 8 }
                         }
                         let probe = rect.insetBy(dx: -1, dy: -1)
-                        for k in bendGrid.near(probe) where probe.contains(bends[k]) { score += 120 }
-                        for k in crossingGrid.near(probe) where probe.contains(crossings[k]) { score += 120 }
+                        // Each adds the same 120, so only how many lie in the probe
+                        // matters (added one at a time, as before).
+                        for _ in 0..<bendGrid.count(in: probe, where: { probe.contains(bends[$0]) }) { score += 120 }
+                        for _ in 0..<crossingGrid.count(in: probe, where: { probe.contains(crossings[$0]) }) { score += 120 }
                         // Arrowhead clearance: a foreign arrowhead tip within the
                         // comfortable gap of the caption frame is an obstacle.
                         // Every foreign tip counts (only this route's own head is
@@ -2200,34 +2202,62 @@ extension DiagramLayoutEngine {
 /// box too large or not finite to grid goes on every query's list instead.
 struct PlacementGrid {
     private struct Cell: Hashable { let x: Int; let y: Int }
-    private static let size: CGFloat = 64
+    /// The cell size for boxes; points, which cluster along routes, use a
+    /// finer one (`init(points:)`).
+    private static let boxCell: CGFloat = 64
+    private static let pointCell: CGFloat = 8
+    private let size: CGFloat
+    /// Whether every item is a point, so each lies in exactly one cell.
+    private let pointsOnly: Bool
     /// The most cells a box may cover before it's treated as everywhere.
     private static let maxCells = 4096
     private var cells: [Cell: [Int]] = [:]
     private var everywhere: [Int] = []
 
     init(_ boxes: [CGRect]) {
+        size = Self.boxCell
+        pointsOnly = false
         for (index, box) in boxes.enumerated() { insert(index, box) }
     }
 
+    /// Points, each in exactly one cell, so `count(in:where:)` can count
+    /// them without collecting or sorting.
+    init(points: [CGPoint]) {
+        size = Self.pointCell
+        pointsOnly = true
+        for (index, point) in points.enumerated() { insert(index, CGRect(origin: point, size: .zero)) }
+    }
+
+    /// How many items in the cells `box` covers satisfy `match` (every item,
+    /// if `box` can't be gridded). Points only: each is counted once.
+    func count(in box: CGRect, where match: (Int) -> Bool) -> Int {
+        precondition(pointsOnly, "count(in:where:) counts points, which lie in one cell each")
+        guard let span = span(box) else {
+            return cells.values.reduce(0) { $0 + $1.filter(match).count } + everywhere.filter(match).count
+        }
+        var n = everywhere.filter(match).count
+        for x in span.x { for y in span.y { for k in cells[Cell(x: x, y: y)] ?? [] where match(k) { n += 1 } } }
+        return n
+    }
+
     /// The cells `box` covers, or nil if it's too large or not finite.
-    private static func span(_ box: CGRect) -> (x: ClosedRange<Int>, y: ClosedRange<Int>)? {
+    private func span(_ box: CGRect) -> (x: ClosedRange<Int>, y: ClosedRange<Int>)? {
         let bounds = [box.minX, box.maxX, box.minY, box.maxY].map { $0 / size }
         guard bounds.allSatisfy({ $0.isFinite && abs($0) < 1e9 }) else { return nil }
         let x = Int(bounds[0].rounded(.down))...Int(bounds[1].rounded(.down))
         let y = Int(bounds[2].rounded(.down))...Int(bounds[3].rounded(.down))
-        return x.count * y.count <= maxCells ? (x, y) : nil
+        return x.count * y.count <= Self.maxCells ? (x, y) : nil
     }
 
     mutating func insert(_ index: Int, _ box: CGRect) {
-        guard let span = Self.span(box) else { everywhere.append(index); return }
+        guard let span = span(box) else { everywhere.append(index); return }
         for x in span.x { for y in span.y { cells[Cell(x: x, y: y), default: []].append(index) } }
     }
 
     /// Every item whose box shares a cell with `box` (all of them, if `box`
     /// can't be gridded), ascending, each once.
     func near(_ box: CGRect) -> [Int] {
-        guard let span = Self.span(box) else {
+        guard let span = span(box) else {
             return (cells.values.flatMap { $0 } + everywhere).sorted().uniqued()
         }
         var found = everywhere
