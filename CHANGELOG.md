@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 2.9.1 — Captions placed in near-linear time
+
+Charts with many edge captions lay out far faster, with every caption where
+it was. Output for every chart is byte-identical to 2.9.0.
 
 ### Fixed
 
@@ -13,11 +16,10 @@
   so far, counts the bends and crossings in a caption's way without sorting
   them, and tests only route segments that could cross: the same fan takes
   0.3 s, 480 labeled edges 0.5 s, and 160 labeled self-loops 0.07 s instead
-  of 4.2 s. The
-  placement is bit for bit what it was: every skipped term was exactly zero
-  and every skipped candidate could not have won, and a test holds the new
-  placer to the old one over real layouts and 300 seeded random ones.
-  Output for every chart is byte-identical to 2.9.0. (#97)
+  of 4.2 s. The placement is bit for bit what it was: every skipped term was
+  exactly zero and every skipped candidate could not have won, and a test
+  holds the new placer to the old one over real layouts and 300 seeded random
+  ones. (#97, #99, #101)
 
 ## 2.9.0 — Mac Catalyst, and self-loops that loop
 
