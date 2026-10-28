@@ -44,7 +44,8 @@ extension DiagramLayoutEngine {
         let scope = layoutScope(ctx, scope: nil, inherited: chart.direction, depth: 0,
                                 measure: measure, spacing: spacing)
         return FlowchartLayout(size: scope.size, nodes: scope.nodes,
-                               edges: scope.edges, containers: scope.containers)
+                               edges: separatedAcrossScopes(scope.edges, nodes: scope.nodes),
+                               containers: scope.containers)
     }
 
     /// The subgraphs laid out with their parent's nodes rather than as one
@@ -434,6 +435,45 @@ extension DiagramLayoutEngine {
             }
         }
         return result
+    }
+
+    /// Each scope keeps its own edges off each other's lines, but an edge
+    /// laid out in a group's interior and one laid out round it never met:
+    /// one more pass over them all, nodes standing fast, self-loops fixed. A
+    /// caption on a segment that moves moves with it.
+    private static func separatedAcrossScopes(
+        _ edges: [FlowchartLayout.PlacedEdge], nodes: [FlowchartLayout.PlacedNode]
+    ) -> [FlowchartLayout.PlacedEdge] {
+        let frames = nodes.map(\.frame)
+        func onFrame(_ p: CGPoint) -> Int? {
+            frames.firstIndex { f in
+                p.x >= f.minX - 0.5 && p.x <= f.maxX + 0.5 && p.y >= f.minY - 0.5 && p.y <= f.maxY + 0.5
+            }
+        }
+        let loops = Set(edges.indices.filter { i in
+            guard let a = onFrame(edges[i].start) else { return false }
+            return onFrame(edges[i].end) == a
+        })
+        let before = edges.map(\.points)
+        var routes = before
+        separateDoubledRuns(&routes, fixed: loops, ignored: Set(edges.indices.filter { edges[$0].invisible }),
+                            obstacles: frames, track: flowchartJogTrack)
+        return edges.indices.map { i in
+            let e = edges[i]
+            guard routes[i] != before[i] else { return e }
+            var label = e.labelPoint
+            if let p = label, let k = before[i].indices.dropLast().first(where: { k in
+                let a = before[i][k], b = before[i][k + 1]
+                return p.x >= min(a.x, b.x) - 0.5 && p.x <= max(a.x, b.x) + 0.5
+                    && p.y >= min(a.y, b.y) - 0.5 && p.y <= max(a.y, b.y) + 0.5
+            }) {
+                label = CGPoint(x: p.x + routes[i][k].x - before[i][k].x, y: p.y + routes[i][k].y - before[i][k].y)
+            }
+            return FlowchartLayout.PlacedEdge(
+                start: routes[i].first!, end: routes[i].last!, points: routes[i],
+                label: e.label, dashed: e.dashed, hasArrow: e.hasArrow, backArrow: e.backArrow,
+                head: e.head, thick: e.thick, invisible: e.invisible, labelPoint: label)
+        }
     }
 
     // MARK: - Scope resolution helpers

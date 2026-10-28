@@ -1,0 +1,210 @@
+import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
+
+/// Keeping two edges from drawing as one.
+///
+/// Jogs are spread over tracks within a fan (the edges into one node, or out
+/// of one), and `separateRuns` spreads main-axis runs that share a track. But
+/// two unrelated edges can still land on one line: two fans jogging in the
+/// same gap, or the two edges of a two-cycle whose ports don't line up. Read
+/// as one doubled connector, they are the `edges-doubled` the linter rejects.
+///
+/// This pass finds exactly what that rule finds, two segments of different
+/// edges on one line (within 1pt) overlapping by more than 8pt, and moves one
+/// of them aside, a jog track at a time, until it is clear. Only an interior
+/// segment moves, so no edge comes off its node, and a move is taken only if
+/// its two neighbours keep their direction, nothing moved runs through a
+/// node, and no new pair is doubled. A chart with no doubled pair is left
+/// exactly as it was.
+extension DiagramLayoutEngine {
+
+    /// Overlap along one line beyond which two runs read as one (the
+    /// linter's `edges-doubled` tolerance).
+    static let doubledRunTolerance: CGFloat = 8
+
+    static func separateDoubledRuns(
+        _ routes: inout [[CGPoint]], fixed: Set<Int>, ignored: Set<Int>,
+        obstacles: [CGRect], track: CGFloat
+    ) {
+        struct Segment { let edge: Int, index: Int }
+        struct Line: Hashable { let horizontal: Bool, at: Int }
+        func horizontalRun(_ a: CGPoint, _ b: CGPoint) -> Bool? {
+            if abs(a.y - b.y) < 0.5, abs(a.x - b.x) >= 0.5 { return true }
+            if abs(a.x - b.x) < 0.5, abs(a.y - b.y) >= 0.5 { return false }
+            return nil
+        }
+        func overlap(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) -> CGFloat {
+            if abs(a.y - b.y) < 0.5, abs(c.y - d.y) < 0.5, abs(a.y - c.y) < 1 {
+                return min(max(a.x, b.x), max(c.x, d.x)) - max(min(a.x, b.x), min(c.x, d.x))
+            }
+            if abs(a.x - b.x) < 0.5, abs(c.x - d.x) < 0.5, abs(a.x - c.x) < 1 {
+                return min(max(a.y, b.y), max(c.y, d.y)) - max(min(a.y, b.y), min(c.y, d.y))
+            }
+            return 0
+        }
+        // Segments by orientation and the whole point of their fixed
+        // coordinate: a doubled partner lies in the same bucket or the next.
+        // Built once, and kept current as segments move.
+        func bucket(_ a: CGPoint, _ b: CGPoint) -> Line? {
+            guard let h = horizontalRun(a, b) else { return nil }
+            return Line(horizontal: h, at: Int((h ? a.y : a.x).rounded(.down)))
+        }
+        var table: [Line: [Segment]] = [:]
+        var filed: [Int: [Int: Line]] = [:]
+        func file(_ e: Int, _ k: Int) {
+            if let old = filed[e]?[k] { table[old]?.removeAll { $0.edge == e && $0.index == k } }
+            filed[e]?[k] = nil
+            guard let key = bucket(routes[e][k], routes[e][k + 1]) else { return }
+            table[key, default: []].append(Segment(edge: e, index: k))
+            filed[e, default: [:]][k] = key
+        }
+        for (e, pts) in routes.enumerated() where !ignored.contains(e) && pts.count >= 2 {
+            for k in 0..<(pts.count - 1) { file(e, k) }
+        }
+        // The other edges' segments doubled with segment `s` from `a` to `b`.
+        func partners(of s: Segment, at a: CGPoint, _ b: CGPoint) -> [Segment] {
+            guard let h = horizontalRun(a, b) else { return [] }
+            let c = Int((h ? a.y : a.x).rounded(.down))
+            var out: [Segment] = []
+            for line in (c - 1)...(c + 1) {
+                for t in table[Line(horizontal: h, at: line)] ?? [] where t.edge != s.edge
+                    && overlap(a, b, routes[t.edge][t.index], routes[t.edge][t.index + 1]) > doubledRunTolerance {
+                    out.append(t)
+                }
+            }
+            return out
+        }
+        let insetObstacles = obstacles.map { $0.insetBy(dx: 1, dy: 1) }
+        func crossesObstacle(_ a: CGPoint, _ b: CGPoint) -> Bool {
+            let seg = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+            return insetObstacles.contains { $0.intersects(seg) }
+        }
+        // The overlaps (beyond half a point) the segments around `k` of `route`
+        // would have with other edges.
+        func overlaps(_ e: Int, _ k: Int, _ route: [CGPoint]) -> [CGFloat] {
+            var out: [CGFloat] = []
+            for j in (k - 1)...(k + 1) {
+                let a = route[j], b = route[j + 1]
+                guard let h = horizontalRun(a, b) else { continue }
+                let c = Int((h ? a.y : a.x).rounded(.down))
+                for line in (c - 1)...(c + 1) {
+                    for t in table[Line(horizontal: h, at: line)] ?? [] where t.edge != e {
+                        let o = overlap(a, b, routes[t.edge][t.index], routes[t.edge][t.index + 1])
+                        if o > 0.5 { out.append(o) }
+                    }
+                }
+            }
+            return out
+        }
+        enum Move { case grade(Int, [CGPoint]), refused, tooFar, immovable }
+        // How segment `s` moved by `delta` across its line would do, without
+        // moving it: grade 0 if nothing it changes shares a line with another
+        // edge at all, 1 if only within the tolerance, 2 if fewer pairs are
+        // doubled than the `doubledNow` before (where three runs share a line,
+        // one move can't clear them all, but each such move leaves fewer, so
+        // it ends). Only a grade below `than` is worth testing against nodes.
+        func evaluate(_ s: Segment, by delta: CGFloat, better than: Int, doubledNow: Int) -> Move {
+            var pts = routes[s.edge]
+            let k = s.index
+            guard !fixed.contains(s.edge), k > 0, k + 2 < pts.count,
+                  let h = horizontalRun(pts[k], pts[k + 1]),
+                  horizontalRun(pts[k - 1], pts[k]) == !h,
+                  horizontalRun(pts[k + 1], pts[k + 2]) == !h else { return .immovable }
+            func shifted(_ p: CGPoint) -> CGPoint { h ? CGPoint(x: p.x, y: p.y + delta) : CGPoint(x: p.x + delta, y: p.y) }
+            func along(_ p: CGPoint) -> CGFloat { h ? p.y : p.x }
+            let a = shifted(pts[k]), b = shifted(pts[k + 1])
+            // Each neighbour keeps its direction and some length (a move
+            // further the same way only shortens it more).
+            for (end, moved, old) in [(pts[k - 1], a, pts[k]), (pts[k + 2], b, pts[k + 1])] {
+                let before = along(old) - along(end), after = along(moved) - along(end)
+                guard abs(after) >= 2, (before > 0) == (after > 0) else { return .tooFar }
+            }
+            pts[k] = a; pts[k + 1] = b
+            let found = overlaps(s.edge, k, pts)
+            let doubled = found.filter { $0 > doubledRunTolerance }.count
+            let grade: Int
+            if found.isEmpty { grade = 0 }
+            else if doubled == 0 { grade = 1 }
+            else if doubled < doubledNow { grade = 2 }
+            else { return .refused }
+            // Nodes last: the costliest test, and only for a move worth taking.
+            guard grade < than else { return .refused }
+            for j in (k - 1)...(k + 1) where crossesObstacle(pts[j], pts[j + 1]) { return .refused }
+            return .grade(grade, pts)
+        }
+
+        let offsets = (1...16).flatMap { [CGFloat($0) * track, -CGFloat($0) * track] }
+        // The best move for any of `candidates`, in order: the first of the
+        // lowest grade; nil if none helps.
+        func bestMove(_ candidates: [Segment]) -> (Segment, [CGPoint])? {
+            var best: (grade: Int, segment: Segment, route: [CGPoint])?
+            for c in candidates {
+                let route = routes[c.edge]
+                guard c.index > 0, c.index + 2 < route.count else { continue }
+                let doubledNow = overlaps(c.edge, c.index, route).filter { $0 > doubledRunTolerance }.count
+                var blocked: Set<Bool> = []          // signs gone too far
+                for delta in offsets where !blocked.contains(delta > 0) {
+                    switch evaluate(c, by: delta, better: best?.grade ?? 3, doubledNow: doubledNow) {
+                    case .grade(let g, let route):
+                        best = (g, c, route)
+                        if g == 0 { return (c, route) }
+                    case .immovable: blocked = [true, false]
+                    case .tooFar: blocked.insert(delta > 0)
+                    case .refused: break
+                    }
+                }
+            }
+            return best.map { ($0.segment, $0.route) }
+        }
+        func doubled(_ s: Segment) -> [Segment] {
+            let pts = routes[s.edge]
+            return partners(of: s, at: pts[s.index], pts[s.index + 1])
+                .sorted { ($0.edge, $0.index) < ($1.edge, $1.index) }
+        }
+        // Every doubled pair, in route order; each is checked again when its
+        // turn comes, since an earlier move may have cleared it.
+        var work: [(Segment, Segment)] = []
+        for (e, pts) in routes.enumerated() where !ignored.contains(e) && pts.count >= 2 {
+            for k in 0..<(pts.count - 1) {
+                let s = Segment(edge: e, index: k)
+                for t in doubled(s) where t.edge > e { work.append((s, t)) }
+            }
+        }
+        var head = 0
+        var budget = 4 * routes.reduce(0) { $0 + max($1.count - 1, 0) }
+        while head < work.count, budget > 0 {
+            let (s, t) = work[head]
+            head += 1
+            budget -= 1
+            let pts = routes[s.edge], other = routes[t.edge]
+            guard overlap(pts[s.index], pts[s.index + 1], other[t.index], other[t.index + 1])
+                    > doubledRunTolerance else { continue }
+            // The later edge's segment moves first; failing that, the earlier.
+            // A segment that can't move (it meets a node) can still be
+            // shortened clear of the other: move the jog beside it instead.
+            var candidates: [Segment] = [t, s]
+            for c in [t, s] {
+                for j in [c.index - 1, c.index + 1] where j >= 0 && j + 1 < routes[c.edge].count {
+                    candidates.append(Segment(edge: c.edge, index: j))
+                }
+            }
+            // A move that clears every line wins over one that only gets
+            // under the tolerance, and that over one that only leaves fewer.
+            var moved: Segment?
+            if let (segment, route) = bestMove(candidates) {
+                routes[segment.edge] = route
+                for j in (segment.index - 1)...(segment.index + 1) { file(segment.edge, j) }
+                moved = segment
+            }
+            // What a move that only left fewer pairs still doubles waits its turn.
+            if let m = moved {
+                for j in (m.index - 1)...(m.index + 1) {
+                    let c = Segment(edge: m.edge, index: j)
+                    for p in doubled(c) { work.append(p.edge > c.edge ? (c, p) : (p, c)) }
+                }
+            }
+        }
+    }
+}

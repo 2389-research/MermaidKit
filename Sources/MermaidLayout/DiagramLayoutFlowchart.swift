@@ -1332,6 +1332,15 @@ extension DiagramLayoutEngine {
                 for i in 1..<max(pos.count, 1) where pos[i] < pos[i - 1] + minSep {
                     pos[i] = pos[i - 1] + minSep
                 }
+                // Sliding can push the first ports below `lo`, where `attach`
+                // clamps them back up, nearer their neighbours than `minSep`, or
+                // onto them: two edges into one point. Raise just those, keeping
+                // the gap: `minSep` lets every port fit between `lo` and `hi`,
+                // so the block still ends by `hi`.
+                if let first = pos.first, first < lo {
+                    pos[0] = lo
+                    for i in 1..<pos.count where pos[i] < pos[i - 1] + minSep { pos[i] = pos[i - 1] + minSep }
+                }
             }
             for (i, p) in sorted.enumerated() { portCross[portKey(p.edge, p.isSource)] = pos[i] }
         }
@@ -1526,6 +1535,11 @@ extension DiagramLayoutEngine {
             if let loop = geos[index].selfLoop { routes[index] = selfLoopRoute(index, geos[index], loop) }
         }
 
+        // Last, no two edges on one line: whatever still draws doubled moves
+        // aside a track at a time, self-loops and nodes standing fast.
+        separateDoubledRuns(&routes, fixed: Set(loops), ignored: Set(hidden),
+                            obstacles: chart.nodes.compactMap { frames[$0.id] }, track: flowchartJogTrack)
+
         var placedEdges: [FlowchartLayout.PlacedEdge] = []
         var crossLimit = flowchartMargin + crossExtent
         for f in frames.values { crossLimit = max(crossLimit, horizontal ? f.maxY : f.maxX) }
@@ -1570,18 +1584,26 @@ extension DiagramLayoutEngine {
     /// don't nest. Collinear runs are merged so straight edges stay two-point.
     static func routePolyline(_ waypoints: [CGPoint], horizontal: Bool, jogBias: CGFloat = 0) -> [CGPoint] {
         guard waypoints.count >= 2 else { return waypoints }
+        // A jog biased past the gap stays a point short of either end, so it
+        // never runs along a node's face (where it would share the line of
+        // the port beside it).
+        func clamped(_ v: CGFloat, _ p: CGFloat, _ q: CGFloat) -> CGFloat {
+            let lo = min(p, q), hi = max(p, q)
+            let inset: CGFloat = hi - lo > 2 ? 1 : 0
+            return min(max(v, lo + inset), hi - inset)
+        }
         var pts: [CGPoint] = [waypoints[0]]
         for i in 0..<(waypoints.count - 1) {
             let a = waypoints[i], b = waypoints[i + 1]
             if horizontal {
                 if abs(a.y - b.y) > 0.5 {
-                    let jx = min(max((a.x + b.x) / 2 + jogBias, min(a.x, b.x)), max(a.x, b.x))
+                    let jx = clamped((a.x + b.x) / 2 + jogBias, a.x, b.x)
                     pts.append(CGPoint(x: jx, y: a.y))
                     pts.append(CGPoint(x: jx, y: b.y))
                 }
             } else if abs(a.x - b.x) > 0.5 {
                 let midY = (a.y + b.y) / 2
-                let jy = min(max(midY + jogBias, min(a.y, b.y)), max(a.y, b.y))
+                let jy = clamped(midY + jogBias, a.y, b.y)
                 pts.append(CGPoint(x: a.x, y: jy))
                 pts.append(CGPoint(x: b.x, y: jy))
             }
