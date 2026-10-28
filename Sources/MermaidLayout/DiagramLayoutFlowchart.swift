@@ -126,7 +126,9 @@ extension DiagramLayoutEngine {
 
     static func layoutFlat(_ chart: Flowchart, measure: DiagramTextMeasurer,
                            spacing: DiagramSpacing = .regular,
-                           sizeOverrides: [String: CGSize] = [:]) -> FlowchartLayout {
+                           sizeOverrides: [String: CGSize] = [:],
+                           blocks: [FlowBlock] = [],
+                           clips: [Int: (from: Int?, to: Int?)] = [:]) -> FlowchartLayout {
         let flowchartMargin = spacing.resolvedMargin(base: Self.flowchartMargin)
         let flowchartLayerGap = spacing.resolvedLayerGap(base: Self.flowchartLayerGap)
         let flowchartNodeGap = spacing.resolvedNodeGap(base: Self.flowchartNodeGap)
@@ -176,6 +178,7 @@ extension DiagramLayoutEngine {
         var chains: [[String]] = []
         var segmentEdges: [(String, String)] = []
         var dummies: Set<String> = []
+        var dummyEdge: [String: Int] = [:]
         for (index, edge) in chart.edges.enumerated() {
             guard let lu = layerOf[edge.from], let lv = layerOf[edge.to] else { chains.append([]); continue }
             let lo = min(lu, lv), hi = max(lu, lv)
@@ -192,6 +195,7 @@ extension DiagramLayoutEngine {
                 layers[layer].append(dummy)
                 sizes[dummy] = CGSize(width: dummyBreadth, height: 1)
                 dummies.insert(dummy)
+                dummyEdge[dummy] = index
                 midByLayer.append((layer, dummy))
             }
             let mids = (lu < lv ? midByLayer : midByLayer.reversed()).map(\.id)
@@ -203,7 +207,23 @@ extension DiagramLayoutEngine {
         // 3. Order every layer (real + dummy) by barycenter; 4. assign cross
         // coordinates with Brandes–Köpf so chains and dummy channels align into
         // straight runs (the cross axis is x for TD, y for LR).
-        var ordered = barycenterOrder(layers: layers, edges: segmentEdges)
+        // Unfolded subgraphs (#103): each spans its members' layers, with a
+        // border node either side in every one, and orders as a block.
+        var plan: BlockPlan?
+        if !blocks.isEmpty {
+            var p = planBlocks(blocks, layerOf: layerOf)
+            for (dummy, index) in dummyEdge {
+                let edge = chart.edges[index]
+                if let b = p.common(p.blockOf[edge.from], p.blockOf[edge.to]) { p.blockOf[dummy] = b }
+            }
+            for (id, side) in p.border {
+                let b = side.left && horizontal ? clusterHeader(measure) : 0
+                sizes[id] = horizontal ? CGSize(width: 1, height: b) : CGSize(width: b, height: 1)
+            }
+            plan = p
+        }
+        var ordered = plan.map { blockedBarycenterOrder(layers: layers, edges: segmentEdges, plan: $0) }
+            ?? barycenterOrder(layers: layers, edges: segmentEdges)
         let selfLoops = selfLoopPaths(chart, sizes: sizes, horizontal: horizontal, measure: measure)
         // A looped node keeps its loop and caption clear of its row
         // neighbours: a blank stand-in right after it in its layer, on the
@@ -221,9 +241,24 @@ extension DiagramLayoutEngine {
         for layer in ordered {
             for id in layer { crossBreadth[id] = horizontal ? (sizes[id]?.height ?? 0) : (sizes[id]?.width ?? 0) }
         }
+        // A block's borders are chains, layer to layer, that BK aligns like a
+        // long edge's stand-ins, so its sides come out straight.
+        var bkSegments = segmentEdges
+        var bkDummies = dummies
+        if let plan {
+            for (b, span) in plan.span.enumerated() {
+                guard let span else { continue }
+                for left in [true, false] {
+                    for l in span.lo...span.hi {
+                        bkDummies.insert(plan.borderID(b, l, left: left))
+                        if l < span.hi { bkSegments.append((plan.borderID(b, l, left: left), plan.borderID(b, l + 1, left: left))) }
+                    }
+                }
+            }
+        }
         var crossCenter = brandesKoepfX(
-            layers: ordered, segments: segmentEdges, breadth: crossBreadth,
-            dummies: dummies, minGap: flowchartNodeGap)
+            layers: ordered, segments: bkSegments, breadth: crossBreadth,
+            dummies: bkDummies, minGap: flowchartNodeGap)
         // 4b. Straighten near-aligned chains. BK's balancing step averages
         // four candidate alignments, so a node with an off-centre sibling
         // subtree lands NEAR its lone parent's centre but not ON it — a
@@ -234,6 +269,13 @@ extension DiagramLayoutEngine {
         straightenChains(layers: ordered, segments: segmentEdges,
                          breadth: crossBreadth, minGap: flowchartNodeGap,
                          center: &crossCenter)
+        // 4c. Clear each block's rows of everything outside it, wide enough
+        // for its label across the top of a top-down box.
+        if let plan {
+            let minWidth = blocks.map { horizontal ? 0 : measure($0.label, nodeFontSize).width + 16 }
+            clearBlocks(center: &crossCenter, layers: ordered, breadth: crossBreadth,
+                        minGap: flowchartNodeGap, plan: plan, minWidth: minWidth)
+        }
 
         // Reserve extra main-axis length on a layer boundary that carries a
         // labeled adjacent-layer edge, so the ARROW-FREE run (the straight run
@@ -281,16 +323,54 @@ extension DiagramLayoutEngine {
             if layer > 0 { layerGaps[layer - 1] = max(layerGaps[layer - 1], needed(layer - 1)) } else { leadPad = max(leadPad, loop.excursion) }
             if layer < layerCount - 1 { layerGaps[layer] = max(layerGaps[layer], needed(layer)) } else { tailPad = max(tailPad, loop.excursion) }
         }
+        // Each block's header and padding take room in the layer gaps
+        // before and after it, so its box clears the rows outside it.
+        var blockChrome: [(lead: CGFloat, tail: CGFloat)] = []
+        if let plan {
+            blockChrome = blockMainChrome(plan, layers: ordered, sizes: sizes, horizontal: horizontal,
+                                          layerGaps: &layerGaps, leadPad: &leadPad, tailPad: &tailPad,
+                                          margin: flowchartMargin, measure: measure)
+        }
         let placement = placeFlowchartFrames(
             layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal,
             layerGaps: layerGaps, leadPad: leadPad, tailPad: tailPad)
+        var containers: [FlowchartLayout.Container] = []
+        var blockFrames: [CGRect?] = Array(repeating: nil, count: blocks.count)
+        if let plan {
+            for (b, span) in plan.span.enumerated() {
+                guard let span,
+                      let l = placement.frames[plan.borderID(b, span.lo, left: true)],
+                      let r = placement.frames[plan.borderID(b, span.lo, left: false)] else { continue }
+                let lead = placement.bands[span.lo].start - blockChrome[b].lead
+                let tail = placement.bands[span.hi].end + blockChrome[b].tail
+                let frame = horizontal
+                    ? CGRect(x: lead, y: l.minY, width: tail - lead, height: r.maxY - l.minY)
+                    : CGRect(x: l.minX, y: lead, width: r.maxX - l.minX, height: tail - lead)
+                blockFrames[b] = frame
+                containers.append(FlowchartLayout.Container(id: blocks[b].id, label: blocks[b].label,
+                                                            frame: frame, depth: plan.depth[b]))
+            }
+        }
 
         // 5. Route each edge through its chain's waypoints.
-        let (placedEdges, crossLimit) = routeChains(
+        var (placedEdges, crossLimit) = routeChains(
             chart: chart, chains: chains, frames: placement.frames,
             horizontal: horizontal, crossExtent: placement.crossExtent,
             backEdges: backEdges, selfLoops: selfLoops
         )
+        // An edge naming an unfolded subgraph ranks with one of its nodes,
+        // and ends where it reaches the subgraph's box.
+        for (index, clip) in clips.sorted(by: { $0.key < $1.key }) where index < placedEdges.count {
+            var points = placedEdges[index].points
+            if let b = clip.to, let box = blockFrames[b], let cut = clippedEntering(points, box) { points = cut }
+            if let b = clip.from, let box = blockFrames[b],
+               let cut = clippedEntering(points.reversed(), box) { points = cut.reversed() }
+            let e = placedEdges[index]
+            placedEdges[index] = FlowchartLayout.PlacedEdge(
+                start: points.first!, end: points.last!, points: points,
+                label: e.label, dashed: e.dashed, hasArrow: e.hasArrow, backArrow: e.backArrow,
+                head: e.head, thick: e.thick, invisible: e.invisible)
+        }
 
         // 6. Place edge labels clear of node boxes and each other. A
         // self-loop's caption rides its far run, the run its space was
@@ -316,7 +396,11 @@ extension DiagramLayoutEngine {
             guard let frame = placement.frames[node.id] else { return nil }
             return FlowchartLayout.PlacedNode(id: node.id, label: node.label, shape: node.shape, frame: frame)
         }
-        return FlowchartLayout(size: size, nodes: placedNodes, edges: labeledEdges)
+        for box in containers {
+            size.width = max(size.width, box.frame.maxX + flowchartMargin)
+            size.height = max(size.height, box.frame.maxY + flowchartMargin)
+        }
+        return FlowchartLayout(size: size, nodes: placedNodes, edges: labeledEdges, containers: containers)
     }
 
     /// Places each edge label centered on the LONGEST straight (axis-aligned)
@@ -741,7 +825,8 @@ extension DiagramLayoutEngine {
         layerGaps: [CGFloat],
         leadPad: CGFloat = 0,
         tailPad: CGFloat = 0
-    ) -> (frames: [String: CGRect], mainContentEnd: CGFloat, crossExtent: CGFloat) {
+    ) -> (frames: [String: CGRect], mainContentEnd: CGFloat, crossExtent: CGFloat,
+          bands: [(start: CGFloat, end: CGFloat)]) {
         let margin = flowchartMargin
 
         // Normalize BK's relative coordinates so the min cross edge = margin.
@@ -759,9 +844,11 @@ extension DiagramLayoutEngine {
         let crossExtent = maxCross > minCross ? maxCross - minCross : 0
 
         var frames: [String: CGRect] = [:]
+        var bands: [(start: CGFloat, end: CGFloat)] = []
         var mainOffset = margin + leadPad
         for (li, layer) in layers.enumerated() {
             let mainSize = layer.map { horizontal ? sizes[$0]!.width : sizes[$0]!.height }.max() ?? 0
+            bands.append((mainOffset, mainOffset + mainSize))
             for id in layer {
                 let size = sizes[id]!
                 let center = (crossCenter[id] ?? 0) + shift
@@ -785,7 +872,7 @@ extension DiagramLayoutEngine {
             }
         }
 
-        return (frames, mainOffset + tailPad + margin, crossExtent)
+        return (frames, mainOffset + tailPad + margin, crossExtent, bands)
     }
 
     /// The edges `routeChains` spreads over jog tracks, grouped by the node
