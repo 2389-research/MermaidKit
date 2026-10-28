@@ -63,6 +63,15 @@ extension DiagramLayoutEngine {
         for (e, pts) in routes.enumerated() where !ignored.contains(e) && pts.count >= 2 {
             for k in 0..<(pts.count - 1) { file(e, k) }
         }
+        // A route that gained a point: every segment from the gain on is filed
+        // afresh, and the old last one dropped.
+        func refile(_ e: Int, from k: Int, oldCount: Int) {
+            for j in k..<(oldCount - 1) {
+                if let old = filed[e]?[j] { table[old]?.removeAll { $0.edge == e && $0.index == j } }
+                filed[e]?[j] = nil
+            }
+            for j in k..<(routes[e].count - 1) { file(e, j) }
+        }
         // The other edges' segments doubled with segment `s` from `a` to `b`.
         func partners(of s: Segment, at a: CGPoint, _ b: CGPoint) -> [Segment] {
             guard let h = horizontalRun(a, b) else { return [] }
@@ -85,7 +94,7 @@ extension DiagramLayoutEngine {
         // would have with other edges.
         func overlaps(_ e: Int, _ k: Int, _ route: [CGPoint]) -> [CGFloat] {
             var out: [CGFloat] = []
-            for j in (k - 1)...(k + 1) {
+            for j in max(k - 1, 0)...min(k + 1, route.count - 2) {
                 let a = route[j], b = route[j + 1]
                 guard let h = horizontalRun(a, b) else { continue }
                 let c = Int((h ? a.y : a.x).rounded(.down))
@@ -98,7 +107,42 @@ extension DiagramLayoutEngine {
             }
             return out
         }
-        enum Move { case grade(Int, [CGPoint]), refused, tooFar, immovable }
+        func along(_ p: CGPoint, _ horizontal: Bool) -> CGFloat { horizontal ? p.y : p.x }
+        // Whether the run from `end` to `old`, its far end moved to `moved`,
+        // keeps its direction and some length (a move further the same way
+        // only shortens it more).
+        func keeps(_ end: CGPoint, _ old: CGPoint, _ moved: CGPoint, _ horizontal: Bool) -> Bool {
+            let before = along(old, horizontal) - along(end, horizontal)
+            let after = along(moved, horizontal) - along(end, horizontal)
+            return abs(after) >= 2 && (before > 0) == (after > 0)
+        }
+        // A move's outcome: graded (the route, the moved segment's index in
+        // it), or why not.
+        enum Move { case grade(Int, [CGPoint], Int), refused, tooFar, immovable }
+        // An end segment that runs along its node's face (a jog clamped onto
+        // it) can move off the face if a stub, square to the face and away
+        // from the node, takes its place.
+        func offFace(_ s: Segment, by delta: CGFloat) -> Move? {
+            let pts = routes[s.edge], n = pts.count
+            let start = s.index == 0, end = s.index + 2 == n
+            guard !fixed.contains(s.edge), n >= 3, start || end,
+                  let h = horizontalRun(pts[s.index], pts[s.index + 1]) else { return nil }
+            let tip = start ? pts[0] : pts[n - 1]
+            func shifted(_ p: CGPoint) -> CGPoint { h ? CGPoint(x: p.x, y: p.y + delta) : CGPoint(x: p.x + delta, y: p.y) }
+            guard let face = obstacles.first(where: { f in
+                h ? (abs(tip.y - f.minY) < 0.5 || abs(tip.y - f.maxY) < 0.5) && tip.x >= f.minX - 0.5 && tip.x <= f.maxX + 0.5
+                  : (abs(tip.x - f.minX) < 0.5 || abs(tip.x - f.maxX) < 0.5) && tip.y >= f.minY - 0.5 && tip.y <= f.maxY + 0.5
+            }) else { return nil }
+            let out = shifted(tip)
+            // The stub leaves the node, and the run beyond keeps its way.
+            guard !face.insetBy(dx: 0.5, dy: 0.5).contains(out) else { return .tooFar }
+            if start {
+                guard keeps(pts[2], pts[1], shifted(pts[1]), h) else { return .tooFar }
+                return .grade(0, [pts[0], out, shifted(pts[1])] + pts[2...], 1)
+            }
+            guard keeps(pts[n - 3], pts[n - 2], shifted(pts[n - 2]), h) else { return .tooFar }
+            return .grade(0, Array(pts[..<(n - 2)]) + [shifted(pts[n - 2]), out, pts[n - 1]], n - 2)
+        }
         // How segment `s` moved by `delta` across its line would do, without
         // moving it: grade 0 if nothing it changes shares a line with another
         // edge at all, 1 if only within the tolerance, 2 if fewer pairs are
@@ -107,21 +151,20 @@ extension DiagramLayoutEngine {
         // it ends). Only a grade below `than` is worth testing against nodes.
         func evaluate(_ s: Segment, by delta: CGFloat, better than: Int, doubledNow: Int) -> Move {
             var pts = routes[s.edge]
-            let k = s.index
-            guard !fixed.contains(s.edge), k > 0, k + 2 < pts.count,
-                  let h = horizontalRun(pts[k], pts[k + 1]),
-                  horizontalRun(pts[k - 1], pts[k]) == !h,
-                  horizontalRun(pts[k + 1], pts[k + 2]) == !h else { return .immovable }
-            func shifted(_ p: CGPoint) -> CGPoint { h ? CGPoint(x: p.x, y: p.y + delta) : CGPoint(x: p.x + delta, y: p.y) }
-            func along(_ p: CGPoint) -> CGFloat { h ? p.y : p.x }
-            let a = shifted(pts[k]), b = shifted(pts[k + 1])
-            // Each neighbour keeps its direction and some length (a move
-            // further the same way only shortens it more).
-            for (end, moved, old) in [(pts[k - 1], a, pts[k]), (pts[k + 2], b, pts[k + 1])] {
-                let before = along(old) - along(end), after = along(moved) - along(end)
-                guard abs(after) >= 2, (before > 0) == (after > 0) else { return .tooFar }
+            var k = s.index
+            if let face = offFace(s, by: delta) {
+                guard case .grade(_, let route, let moved) = face else { return face }
+                pts = route; k = moved
+            } else {
+                guard !fixed.contains(s.edge), k > 0, k + 2 < pts.count,
+                      let h = horizontalRun(pts[k], pts[k + 1]),
+                      horizontalRun(pts[k - 1], pts[k]) == !h,
+                      horizontalRun(pts[k + 1], pts[k + 2]) == !h else { return .immovable }
+                func shifted(_ p: CGPoint) -> CGPoint { h ? CGPoint(x: p.x, y: p.y + delta) : CGPoint(x: p.x + delta, y: p.y) }
+                let a = shifted(pts[k]), b = shifted(pts[k + 1])
+                guard keeps(pts[k - 1], pts[k], a, h), keeps(pts[k + 2], pts[k + 1], b, h) else { return .tooFar }
+                pts[k] = a; pts[k + 1] = b
             }
-            pts[k] = a; pts[k + 1] = b
             let found = overlaps(s.edge, k, pts)
             let doubled = found.filter { $0 > doubledRunTolerance }.count
             let grade: Int
@@ -132,31 +175,30 @@ extension DiagramLayoutEngine {
             // Nodes last: the costliest test, and only for a move worth taking.
             guard grade < than else { return .refused }
             for j in (k - 1)...(k + 1) where crossesObstacle(pts[j], pts[j + 1]) { return .refused }
-            return .grade(grade, pts)
+            return .grade(grade, pts, k)
         }
 
         let offsets = (1...16).flatMap { [CGFloat($0) * track, -CGFloat($0) * track] }
         // The best move for any of `candidates`, in order: the first of the
         // lowest grade; nil if none helps.
-        func bestMove(_ candidates: [Segment]) -> (Segment, [CGPoint])? {
-            var best: (grade: Int, segment: Segment, route: [CGPoint])?
+        func bestMove(_ candidates: [Segment]) -> (edge: Int, route: [CGPoint], moved: Int)? {
+            var best: (grade: Int, edge: Int, route: [CGPoint], moved: Int)?
             for c in candidates {
                 let route = routes[c.edge]
-                guard c.index > 0, c.index + 2 < route.count else { continue }
                 let doubledNow = overlaps(c.edge, c.index, route).filter { $0 > doubledRunTolerance }.count
                 var blocked: Set<Bool> = []          // signs gone too far
                 for delta in offsets where !blocked.contains(delta > 0) {
                     switch evaluate(c, by: delta, better: best?.grade ?? 3, doubledNow: doubledNow) {
-                    case .grade(let g, let route):
-                        best = (g, c, route)
-                        if g == 0 { return (c, route) }
+                    case .grade(let g, let route, let moved):
+                        best = (g, c.edge, route, moved)
+                        if g == 0 { return (c.edge, route, moved) }
                     case .immovable: blocked = [true, false]
                     case .tooFar: blocked.insert(delta > 0)
                     case .refused: break
                     }
                 }
             }
-            return best.map { ($0.segment, $0.route) }
+            return best.map { ($0.edge, $0.route, $0.moved) }
         }
         func doubled(_ s: Segment) -> [Segment] {
             let pts = routes[s.edge]
@@ -193,10 +235,15 @@ extension DiagramLayoutEngine {
             // A move that clears every line wins over one that only gets
             // under the tolerance, and that over one that only leaves fewer.
             var moved: Segment?
-            if let (segment, route) = bestMove(candidates) {
-                routes[segment.edge] = route
-                for j in (segment.index - 1)...(segment.index + 1) { file(segment.edge, j) }
-                moved = segment
+            if let best = bestMove(candidates) {
+                let oldCount = routes[best.edge].count
+                routes[best.edge] = best.route
+                if best.route.count == oldCount {
+                    for j in (best.moved - 1)...(best.moved + 1) { file(best.edge, j) }
+                } else {
+                    refile(best.edge, from: 0, oldCount: oldCount)
+                }
+                moved = Segment(edge: best.edge, index: best.moved)
             }
             // What a move that only left fewer pairs still doubles waits its turn.
             if let m = moved {

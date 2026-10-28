@@ -474,7 +474,11 @@ extension DiagramLayoutEngine {
                 return p.x >= min(a.x, b.x) - 0.5 && p.x <= max(a.x, b.x) + 0.5
                     && p.y >= min(a.y, b.y) - 0.5 && p.y <= max(a.y, b.y) + 0.5
             }) {
-                label = CGPoint(x: p.x + routes[i][k].x - before[i][k].x, y: p.y + routes[i][k].y - before[i][k].y)
+                // A stub let in at the route's start moves every later segment
+                // one on; one let in at its end moves none.
+                let grewAtStart = routes[i].count > before[i].count && routes[i][1] != before[i][1]
+                let j = grewAtStart ? k + 1 : k
+                label = CGPoint(x: p.x + routes[i][j].x - before[i][k].x, y: p.y + routes[i][j].y - before[i][k].y)
             }
             return FlowchartLayout.PlacedEdge(
                 start: routes[i].first!, end: routes[i].last!, points: routes[i],
