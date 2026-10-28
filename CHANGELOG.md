@@ -17,9 +17,23 @@
   leave `x → y` with both ends in one layer. No chart was affected, since
   every caller already drops self-loops first. (#104)
 
-A new test checks, over seeded random graphs with cycles, self-loops and
+- **A subgraph's box spans the rows its members take when it must.** A
+  subgraph was always laid out as one box in one row of its parent. When an
+  edge left it and a path came back in (`X → A → Y`, with X and Y in the
+  subgraph and A outside), the box had to sit both above and below A, so an
+  edge on no cycle was drawn back up. Such a subgraph is now laid out with its
+  parent's nodes, as mermaid's is: its box spans the rows its members take,
+  border nodes in each of those rows keep everything else out, and it takes
+  its parent's direction. An edge naming it ends on its box, and its own loop
+  (`S --> S`) goes round its box. Only charts that
+  drew an edge the wrong way change; every other chart lays out exactly as
+  before. (#103)
+
+New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
-solver, in C4 diagrams and in flowcharts.
+solver, in C4 diagrams and in flowcharts, nested subgraphs and direction
+overrides included. They also check that no subgraph box overlaps a node
+outside it.
 
 ## 2.9.1 — Captions placed in near-linear time
 

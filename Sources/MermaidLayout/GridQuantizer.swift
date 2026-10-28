@@ -47,8 +47,10 @@ enum GridQuantizer {
         }
 
         // Re-anchor an edge endpoint onto the snapped border of the node it
-        // attached to (the nearest original frame). A point not near any node is
-        // free routing geometry and just snaps to the grid.
+        // attached to (the nearest original frame), or of the group box it
+        // ends on (an edge naming a subgraph), when that border is nearer than
+        // any node. A point near neither is free routing geometry and just
+        // snaps to the grid.
         let orig = layout.nodes.map(\.frame)
         let snapped = nodes.map(\.frame)
         func reanchor(_ p: CGPoint) -> CGPoint {
@@ -58,6 +60,13 @@ enum GridQuantizer {
                 let d = distanceToRect(p, f)
                 if d < bestDist { bestDist = d; best = i }
             }
+            var box = -1
+            var boxDist = CGFloat.greatestFiniteMagnitude
+            for (i, c) in layout.containers.enumerated() {
+                let d = distanceToPerimeter(p, c.frame)
+                if d < boxDist { boxDist = d; box = i }
+            }
+            if box >= 0, boxDist < bestDist, boxDist <= 8 { return projectToPerimeter(p, containers[box].frame) }
             guard best >= 0, bestDist <= 8 else { return snapPoint(p) }
             return projectToPerimeter(p, snapped[best])
         }
@@ -85,6 +94,13 @@ enum GridQuantizer {
         let cx = Swift.min(Swift.max(p.x, r.minX), r.maxX)
         let cy = Swift.min(Swift.max(p.y, r.minY), r.maxY)
         return hypot(p.x - cx, p.y - cy)
+    }
+
+    /// Distance from `p` to `r`'s border, from outside or inside.
+    private static func distanceToPerimeter(_ p: CGPoint, _ r: CGRect) -> CGFloat {
+        let outside = distanceToRect(p, r)
+        guard outside == 0 else { return outside }
+        return Swift.min(Swift.min(p.x - r.minX, r.maxX - p.x), Swift.min(p.y - r.minY, r.maxY - p.y))
     }
 
     /// The point on `r`'s perimeter nearest to `p` (clamp into the rect, then push
