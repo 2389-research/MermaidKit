@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A C4 relationship that leaves a cycle points down.** C4 rows came from a
+  longest-path pass capped at the element count, so on a cycle such as
+  `a ⇄ b` the nodes climbed to the cap, and a relationship out of the cycle
+  (`b → c`) could no longer push its target below: C sat above B and the
+  arrow ran up. The pass now drops the cycle's back edges first, as
+  flowcharts do, so only a relationship on a cycle points up. A C4 diagram
+  with a cycle may lay out differently; one without a cycle is unchanged.
+  (#102)
+- **Layer assignment ignores self-edges, as documented.** The longest-path
+  seed lifted a node through its own self-edge on every pass, which could
+  leave `x → y` with both ends in one layer. No chart was affected, since
+  every caller already drops self-loops first. (#104)
+
+A new test checks, over seeded random graphs with cycles, self-loops and
+parallel edges, that an edge on no cycle points strictly down: in the layer
+solver, in C4 diagrams and in flowcharts.
+
 ## 2.9.1 — Captions placed in near-linear time
 
 Charts with many edge captions lay out far faster, with every caption where

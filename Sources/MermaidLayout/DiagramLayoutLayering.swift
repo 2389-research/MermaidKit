@@ -81,13 +81,14 @@ extension DiagramLayoutEngine {
     }
 
     /// The previous strategy, kept as seed + fallback: relax until every edge
-    /// spans at least one layer.
+    /// spans at least one layer. A self-edge spans none and is skipped, or it
+    /// would lift its node once a pass (#104).
     static func longestPathLayers(ids: [String], edges: [(String, String)]) -> [String: Int] {
         var layerOf: [String: Int] = [:]
         for id in ids { layerOf[id] = 0 }
         for _ in 0..<(ids.count + 1) {
             var changed = false
-            for (from, to) in edges {
+            for (from, to) in edges where from != to {
                 guard let a = layerOf[from], let b = layerOf[to] else { continue }
                 if b < a + 1 { layerOf[to] = a + 1; changed = true }
             }
