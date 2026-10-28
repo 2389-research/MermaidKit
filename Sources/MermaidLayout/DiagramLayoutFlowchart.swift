@@ -1584,26 +1584,29 @@ extension DiagramLayoutEngine {
     /// don't nest. Collinear runs are merged so straight edges stay two-point.
     static func routePolyline(_ waypoints: [CGPoint], horizontal: Bool, jogBias: CGFloat = 0) -> [CGPoint] {
         guard waypoints.count >= 2 else { return waypoints }
-        // A jog biased past the gap stays a point short of either end, so it
-        // never runs along a node's face (where it would share the line of
-        // the port beside it).
-        func clamped(_ v: CGFloat, _ p: CGFloat, _ q: CGFloat) -> CGFloat {
+        // A jog biased past the gap clamps to its end; at the route's own end,
+        // a node's face, it stays a point short, so it never runs along the
+        // face (where it would share the line of the port beside it). An
+        // interior waypoint (a long edge's stand-in) clamps as it always did.
+        func clamped(_ v: CGFloat, _ p: CGFloat, _ q: CGFloat, first: Bool, last: Bool) -> CGFloat {
+            let room = abs(p - q) > 2
             let lo = min(p, q), hi = max(p, q)
-            let inset: CGFloat = hi - lo > 2 ? 1 : 0
-            return min(max(v, lo + inset), hi - inset)
+            let atLo = (first && p == lo) || (last && q == lo), atHi = (first && p == hi) || (last && q == hi)
+            return min(max(v, lo + (room && atLo ? 1 : 0)), hi - (room && atHi ? 1 : 0))
         }
         var pts: [CGPoint] = [waypoints[0]]
         for i in 0..<(waypoints.count - 1) {
             let a = waypoints[i], b = waypoints[i + 1]
+            let first = i == 0, last = i + 2 == waypoints.count
             if horizontal {
                 if abs(a.y - b.y) > 0.5 {
-                    let jx = clamped((a.x + b.x) / 2 + jogBias, a.x, b.x)
+                    let jx = clamped((a.x + b.x) / 2 + jogBias, a.x, b.x, first: first, last: last)
                     pts.append(CGPoint(x: jx, y: a.y))
                     pts.append(CGPoint(x: jx, y: b.y))
                 }
             } else if abs(a.x - b.x) > 0.5 {
                 let midY = (a.y + b.y) / 2
-                let jy = clamped(midY + jogBias, a.y, b.y)
+                let jy = clamped(midY + jogBias, a.y, b.y, first: first, last: last)
                 pts.append(CGPoint(x: a.x, y: jy))
                 pts.append(CGPoint(x: b.x, y: jy))
             }
