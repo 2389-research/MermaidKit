@@ -116,6 +116,9 @@ extension DiagramLayoutEngine {
         var clips: [Int: (from: Int?, to: Int?)]
         /// The stand-in an edge naming an unfolded subgraph ranks with.
         var standIns: Set<String>
+        /// An unfolded subgraph's own self-loops (`S --> S`), by block index:
+        /// drawn on its box once it is placed.
+        var loops: [(block: Int, edge: Flowchart.Edge)]
     }
 
     /// The stand-in for unfolded subgraph `id`: an invisible point in its
@@ -169,6 +172,7 @@ extension DiagramLayoutEngine {
         //    what the scope places; an end naming an unfolded subgraph ranks
         //    with the subgraph's stand-in and is cut at its box.
         var standIns: Set<String> = []
+        var loops: [(block: Int, edge: Flowchart.Edge)] = []
         var reducedEdges: [Flowchart.Edge] = []
         var origins: [[Int]] = []
         var clips: [Int: (from: Int?, to: Int?)] = [:]
@@ -177,6 +181,11 @@ extension DiagramLayoutEngine {
             var owner = ctx.edgeLCA[index]
             while let o = owner, ctx.unfolded.contains(o) { owner = ctx.containerOf[o] }
             guard owner == scope else { continue }
+            // An unfolded subgraph's own loop goes round its box.
+            if edge.from == edge.to, let b = blockIndex[edge.from] {
+                loops.append((b, edge))
+                continue
+            }
             // An unfolded subgraph and what's in it link nothing, as they
             // would folded into one box.
             if ctx.unfolded.contains(edge.to), inside(ctx, edge.from, edge.to) { continue }
@@ -218,7 +227,7 @@ extension DiagramLayoutEngine {
         return ReducedScope(
             chart: Flowchart(direction: direction, nodes: reducedNodes, edges: reducedEdges),
             boxes: boxes, blocks: blocks, nesting: nesting, origins: origins, clips: clips,
-            standIns: standIns)
+            standIns: standIns, loops: loops)
     }
 
     /// Whether `id` is `group` or lies inside it.
@@ -389,7 +398,8 @@ extension DiagramLayoutEngine {
 
         for point in reduced.standIns { sizeOverrides[point] = CGSize(width: 1, height: 1) }
         let flat = layoutFlat(reduced.chart, measure: measure, spacing: spacing,
-                              sizeOverrides: sizeOverrides, blocks: reduced.blocks, clips: reduced.clips)
+                              sizeOverrides: sizeOverrides, blocks: reduced.blocks, clips: reduced.clips,
+                              blockLoops: reduced.loops)
         let childIDSet = Set(reduced.boxes)
 
         // Fold each placeholder back into its sub-layout + a Container; keep

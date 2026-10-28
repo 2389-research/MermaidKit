@@ -24,7 +24,8 @@
   edge on no cycle was drawn back up. Such a subgraph is now laid out with its
   parent's nodes, as mermaid's is: its box spans the rows its members take,
   border nodes in each of those rows keep everything else out, and it takes
-  its parent's direction. An edge naming it ends on its box. Only charts that
+  its parent's direction. An edge naming it ends on its box, and its own loop
+  (`S --> S`) goes round its box. Only charts that
   drew an edge the wrong way change; every other chart lays out exactly as
   before. (#103)
 

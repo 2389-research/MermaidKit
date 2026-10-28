@@ -77,7 +77,7 @@ final class SubgraphLayeringTests: XCTestCase {
     func testEdgeToAnUnfoldedSubgraphEndsOnItsBox() throws {
         // S is laid out with the chart's nodes; an edge naming S still ends on
         // S's box, from outside it.
-        let (_, l) = try XCTUnwrap(layout("""
+        let (chart, l) = try XCTUnwrap(layout("""
             flowchart TD
               subgraph S
                 X
@@ -87,6 +87,7 @@ final class SubgraphLayeringTests: XCTestCase {
               A --> Y
               B --> S
             """))
+        XCTAssertEqual(DiagramLayoutEngine.unfoldedSubgraphs(chart), ["S"])
         let box = try XCTUnwrap(l.containers.first { $0.id == "S" }).frame
         let b = frames(l)["B"]!
         let edge = try XCTUnwrap(l.edges.first { b.insetBy(dx: -0.5, dy: -0.5).contains($0.start) })
@@ -118,6 +119,41 @@ final class SubgraphLayeringTests: XCTestCase {
             let crowded = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure))
                 .filter { $0.kind == "label-crowds-edge" || $0.kind == "label-on-fixture" }
             XCTAssertTrue(crowded.isEmpty, "\(direction) \(edge): \(crowded.map(\.detail))")
+        }
+    }
+
+    func testUnfoldedSubgraphKeepsItsSelfLoop() throws {
+        // `S --> S` loops on S's box, folded or not: out of it and back in,
+        // round its outside.
+        for direction in ["TD", "LR"] {
+            for loop in ["S --> S", "S -->|again| S"] {
+                let (chart, l) = try XCTUnwrap(layout("""
+                    flowchart \(direction)
+                      subgraph S
+                        X
+                        Y
+                      end
+                      X --> A
+                      A --> Y
+                      \(loop)
+                    """))
+                XCTAssertEqual(DiagramLayoutEngine.unfoldedSubgraphs(chart), ["S"])
+                XCTAssertEqual(l.edges.count, chart.edges.count, "\(direction) \(loop): every edge drawn")
+                let box = try XCTUnwrap(l.containers.first { $0.id == "S" }).frame
+                func onBorder(_ p: CGPoint) -> Bool {
+                    let inX = p.x >= box.minX - 0.5 && p.x <= box.maxX + 0.5, inY = p.y >= box.minY - 0.5 && p.y <= box.maxY + 0.5
+                    return (inY && (abs(p.x - box.minX) < 0.5 || abs(p.x - box.maxX) < 0.5))
+                        || (inX && (abs(p.y - box.minY) < 0.5 || abs(p.y - box.maxY) < 0.5))
+                }
+                let drawn = l.edges.filter { onBorder($0.start) && onBorder($0.end) }
+                XCTAssertEqual(drawn.count, 1, "\(direction) \(loop): one loop on S's box")
+                for p in drawn.first?.points ?? [] {
+                    let strictlyInside = p.x > box.minX + 0.5 && p.x < box.maxX - 0.5 && p.y > box.minY + 0.5 && p.y < box.maxY - 0.5
+                    XCTAssertFalse(strictlyInside, "\(direction) \(loop): the loop runs outside S")
+                }
+                let errors = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure)).filter { $0.severity == .error }
+                XCTAssertTrue(errors.isEmpty, "\(direction) \(loop): \(errors.map(\.detail))")
+            }
         }
     }
 

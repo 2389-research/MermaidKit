@@ -336,6 +336,23 @@ extension DiagramLayoutEngine {
         return reach
     }
 
+    /// Where a block's own loop runs, along the main axis of a box from
+    /// `lead` to `tail`: out from near its leading corner, `reach` past its
+    /// cross-far side, and back in at `far`, its far run long enough for the
+    /// caption beside it and a stub either end (and never past the box's far
+    /// end); `beside` is how far the caption stands out past the far run.
+    static func blockLoop(_ edge: Flowchart.Edge, lead: CGFloat, tail: CGFloat, horizontal: Bool,
+                          measure: DiagramTextMeasurer)
+        -> (near: CGFloat, far: CGFloat, reach: CGFloat, beside: CGFloat, caption: CGSize?) {
+        let caption = edge.label.flatMap { $0.isEmpty || edge.invisible ? nil : measure($0, labelFontSize) }
+        // The caption's extent along the far run, as the linter frames it.
+        let along = caption.map { horizontal ? $0.width : 14 } ?? 0
+        let near = lead + 4
+        let far = min(max(near + 16, near + along + 2 * edgeLabelStub), tail - 4)
+        let beside = caption.map { 4 + (horizontal ? $0.height : $0.width) } ?? 0
+        return (near, max(far, near + 1), 2 * flowchartJogTrack, beside, caption)
+    }
+
     /// The part of `points` up to where it first enters `box` from outside,
     /// or nil when it starts inside or never enters.
     static func clippedEntering(_ points: [CGPoint], _ box: CGRect) -> [CGPoint]? {

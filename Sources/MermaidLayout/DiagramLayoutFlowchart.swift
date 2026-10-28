@@ -20,7 +20,7 @@ extension DiagramLayoutEngine {
     /// 2×corner-radius (5) + arrowhead half-width (~7) + clearance.
     private static let flowchartPortSep: CGFloat = 20
     /// Track spacing for concurrent edge jogs crossing the same layer gap.
-    private static let flowchartJogTrack: CGFloat = 10
+    static let flowchartJogTrack: CGFloat = 10
     /// A cross-axis step at or below this reads as a needless zag, not a real
     /// jog — below the port/track separations (20/10) it can never be one, so
     /// `straightenJogs` collapses it onto a straight run.
@@ -128,7 +128,8 @@ extension DiagramLayoutEngine {
                            spacing: DiagramSpacing = .regular,
                            sizeOverrides: [String: CGSize] = [:],
                            blocks: [FlowBlock] = [],
-                           clips: [Int: (from: Int?, to: Int?)] = [:]) -> FlowchartLayout {
+                           clips: [Int: (from: Int?, to: Int?)] = [:],
+                           blockLoops: [(block: Int, edge: Flowchart.Edge)] = []) -> FlowchartLayout {
         let flowchartMargin = spacing.resolvedMargin(base: Self.flowchartMargin)
         let flowchartLayerGap = spacing.resolvedLayerGap(base: Self.flowchartLayerGap)
         let flowchartNodeGap = spacing.resolvedNodeGap(base: Self.flowchartNodeGap)
@@ -269,38 +270,6 @@ extension DiagramLayoutEngine {
         straightenChains(layers: ordered, segments: segmentEdges,
                          breadth: crossBreadth, minGap: flowchartNodeGap,
                          center: &crossCenter)
-        // 4c. Clear each block's rows of everything outside it, wide enough
-        // for its label across the top of a top-down box.
-        if let plan {
-            let minWidth = blocks.map { horizontal ? 0 : measure($0.label, nodeFontSize).width + 16 }
-            // A captioned edge naming a block, to a node beside the box, leaves
-            // it from the side, and is cut at the box: that node stands off by
-            // the caption and a stub either side, as a layer gap would.
-            var apart: [(String, String, CGFloat)] = []
-            for (index, clip) in clips.sorted(by: { $0.key < $1.key }) {
-                let edge = chart.edges[index]
-                guard let text = edge.label, !text.isEmpty, !edge.invisible else { continue }
-                let sz = measure(text, labelFontSize)
-                let along = (horizontal ? sz.height + 2 : sz.width + 6) + 2 * edgeLabelStub
-                    + (edge.hasArrow ? flowchartArrowheadLen : 0) + (edge.backArrow ? flowchartArrowheadLen : 0)
-                for (b, other) in [(clip.from, edge.to), (clip.to, edge.from)] {
-                    guard let b, let span = plan.span[b], let l = layerOf[other],
-                          span.lo <= l, l <= span.hi, plan.blockOf[other].map({ plan.isAncestor(b, of: $0) }) != true,
-                          let row = ordered.first(where: { $0.contains(other) }),
-                          let at = row.firstIndex(of: other),
-                          let left = row.firstIndex(of: plan.borderID(b, l, left: true)) else { continue }
-                    let half = (crossBreadth[other] ?? 0) / 2
-                    if at > left {
-                        apart.append((plan.borderID(b, l, left: false), other, half + along))
-                    } else {
-                        apart.append((other, plan.borderID(b, l, left: true), half + along))
-                    }
-                }
-            }
-            clearBlocks(center: &crossCenter, layers: ordered, breadth: crossBreadth,
-                        minGap: flowchartNodeGap, plan: plan, minWidth: minWidth, apart: apart)
-        }
-
         // Reserve extra main-axis length on a layer boundary that carries a
         // labeled adjacent-layer edge, so the ARROW-FREE run (the straight run
         // minus the arrowhead the head end eats) still fits `labelExtent +
@@ -355,6 +324,64 @@ extension DiagramLayoutEngine {
                                           layerGaps: &layerGaps, leadPad: &leadPad, tailPad: &tailPad,
                                           margin: flowchartMargin, measure: measure)
         }
+        // Clear each block's rows of everything outside it, wide enough for
+        // its label across the top of a top-down box (the layer gaps above are
+        // all known, and none depends on cross coordinates).
+        if let plan {
+            let minWidth = blocks.map { horizontal ? 0 : measure($0.label, nodeFontSize).width + 16 }
+            // A captioned edge naming a block, to a node beside the box, leaves
+            // it from the side, and is cut at the box: that node stands off by
+            // the caption and a stub either side, as a layer gap would.
+            var apart: [(String, String, CGFloat)] = []
+            for (index, clip) in clips.sorted(by: { $0.key < $1.key }) {
+                let edge = chart.edges[index]
+                guard let text = edge.label, !text.isEmpty, !edge.invisible else { continue }
+                let sz = measure(text, labelFontSize)
+                let along = (horizontal ? sz.height + 2 : sz.width + 6) + 2 * edgeLabelStub
+                    + (edge.hasArrow ? flowchartArrowheadLen : 0) + (edge.backArrow ? flowchartArrowheadLen : 0)
+                for (b, other) in [(clip.from, edge.to), (clip.to, edge.from)] {
+                    guard let b, let span = plan.span[b], let l = layerOf[other],
+                          span.lo <= l, l <= span.hi, plan.blockOf[other].map({ plan.isAncestor(b, of: $0) }) != true,
+                          let row = ordered.first(where: { $0.contains(other) }),
+                          let at = row.firstIndex(of: other),
+                          let left = row.firstIndex(of: plan.borderID(b, l, left: true)) else { continue }
+                    let half = (crossBreadth[other] ?? 0) / 2
+                    if at > left {
+                        apart.append((plan.borderID(b, l, left: false), other, half + along))
+                    } else {
+                        apart.append((other, plan.borderID(b, l, left: true), half + along))
+                    }
+                }
+            }
+            // A block's own loop runs off its cross-far side over the rows its
+            // far run spans: whatever is beyond the box there stands off by the
+            // loop's reach and the caption beside it.
+            if !blockLoops.isEmpty {
+                var bands: [(start: CGFloat, end: CGFloat)] = []
+                var offset = Self.flowchartMargin + leadPad
+                for (li, layer) in ordered.enumerated() {
+                    let size = layer.map { horizontal ? sizes[$0]!.width : sizes[$0]!.height }.max() ?? 0
+                    bands.append((offset, offset + size))
+                    offset += size + (li < layerGaps.count ? layerGaps[li] : (layerGaps.last ?? 0))
+                }
+                for (b, edge) in blockLoops {
+                    guard let span = plan.span[b], span.hi < bands.count else { continue }
+                    let lead = bands[span.lo].start - blockChrome[b].lead
+                    let tail = bands[span.hi].end + blockChrome[b].tail
+                    let loop = blockLoop(edge, lead: lead, tail: tail, horizontal: horizontal, measure: measure)
+                    for l in span.lo...span.hi where bands[l].end >= loop.near && bands[l].start <= loop.far {
+                        guard let row = ordered.first(where: { $0.contains(plan.borderID(b, l, left: false)) }),
+                              let at = row.firstIndex(of: plan.borderID(b, l, left: false)), at + 1 < row.count else { continue }
+                        let next = row[at + 1]
+                        apart.append((plan.borderID(b, l, left: false), next,
+                                      loop.reach + loop.beside + flowchartNodeGap + (crossBreadth[next] ?? 0) / 2))
+                    }
+                }
+            }
+            clearBlocks(center: &crossCenter, layers: ordered, breadth: crossBreadth,
+                        minGap: flowchartNodeGap, plan: plan, minWidth: minWidth, apart: apart)
+        }
+
         let placement = placeFlowchartFrames(
             layers: ordered, sizes: sizes, crossCenter: crossCenter, horizontal: horizontal,
             layerGaps: layerGaps, leadPad: leadPad, tailPad: tailPad)
@@ -399,10 +426,35 @@ extension DiagramLayoutEngine {
         // 6. Place edge labels clear of node boxes and each other. A
         // self-loop's caption rides its far run, the run its space was
         // reserved beside, even where a bar is longer.
-        let labeledEdges = placeEdgeLabels(
+        var labeledEdges = placeEdgeLabels(
             placedEdges, nodeFrames: chart.nodes.compactMap { placement.frames[$0.id] }, measure: measure,
             labelRuns: chart.edges.indices.map { selfLoops[$0] == nil ? nil : SelfLoopPath.farRunSegment }
         )
+
+        // An unfolded subgraph's own loop: a C off its box's cross-far side,
+        // from its leading corner, captioned beside its far run.
+        var loopEdges: [FlowchartLayout.PlacedEdge] = []
+        for (b, edge) in blockLoops {
+            guard let box = blockFrames[b] else { continue }
+            let loop = horizontal
+                ? blockLoop(edge, lead: box.minX, tail: box.maxX, horizontal: true, measure: measure)
+                : blockLoop(edge, lead: box.minY, tail: box.maxY, horizontal: false, measure: measure)
+            let side = horizontal ? box.maxY : box.maxX, out = side + loop.reach
+            func point(main: CGFloat, cross: CGFloat) -> CGPoint {
+                horizontal ? CGPoint(x: main, y: cross) : CGPoint(x: cross, y: main)
+            }
+            let points = [point(main: loop.near, cross: side), point(main: loop.near, cross: out),
+                          point(main: loop.far, cross: out), point(main: loop.far, cross: side)]
+            let labelPoint = loop.caption.map { size in
+                point(main: (loop.near + loop.far) / 2,
+                      cross: out + 4 + (horizontal ? size.height : size.width) / 2)
+            }
+            loopEdges.append(FlowchartLayout.PlacedEdge(
+                start: points[0], end: points[3], points: points, label: edge.label, dashed: edge.dashed,
+                hasArrow: edge.hasArrow, backArrow: edge.backArrow, head: edge.head, thick: edge.thick,
+                invisible: edge.invisible, labelPoint: labelPoint))
+        }
+        labeledEdges += loopEdges
 
         let contentCross = crossLimit + flowchartMargin
         var size = horizontal
@@ -423,6 +475,12 @@ extension DiagramLayoutEngine {
         for box in containers {
             size.width = max(size.width, box.frame.maxX + flowchartMargin)
             size.height = max(size.height, box.frame.maxY + flowchartMargin)
+        }
+        for edge in loopEdges {
+            for p in edge.points {
+                size.width = max(size.width, p.x + flowchartMargin)
+                size.height = max(size.height, p.y + flowchartMargin)
+            }
         }
         return FlowchartLayout(size: size, nodes: placedNodes, edges: labeledEdges, containers: containers)
     }
