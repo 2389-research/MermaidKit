@@ -63,6 +63,25 @@ final class RouteSeparationTests: XCTestCase {
         XCTAssertNotEqual(out[0].points, other.points, "the other edge moves aside")
     }
 
+    func testACarriedCaptionStaysOnItsSegment() {
+        // A three-point route whose last run lies along its target's top face
+        // and doubles another edge: it steps off the face on a stub at its
+        // end. Its caption, on the first run, stays where it was.
+        let a = CGRect(x: 0, y: -32, width: 56, height: 32), b = CGRect(x: 100, y: 100, width: 56, height: 32)
+        let other = FlowchartLayout.PlacedEdge(
+            start: CGPoint(x: 60, y: -60), end: CGPoint(x: 140, y: 200),
+            points: [CGPoint(x: 60, y: -60), CGPoint(x: 60, y: 100), CGPoint(x: 140, y: 100), CGPoint(x: 140, y: 200)],
+            label: nil, dashed: false, hasArrow: true)
+        let captioned = FlowchartLayout.PlacedEdge(
+            start: CGPoint(x: 20, y: 0), end: CGPoint(x: 110, y: 100),
+            points: [CGPoint(x: 20, y: 0), CGPoint(x: 20, y: 100), CGPoint(x: 110, y: 100)],
+            label: "go", dashed: false, hasArrow: true, labelPoint: CGPoint(x: 20, y: 50))
+        let nodes = [a, b].enumerated().map { FlowchartLayout.PlacedNode(id: "n\($0.offset)", label: "", shape: .rectangle, frame: $0.element) }
+        let out = DiagramLayoutEngine.separatedAcrossScopes([other, captioned], nodes: nodes, containers: [])
+        XCTAssertEqual(out[1].points.count, 4, "it stepped off the face: \(out[1].points)")
+        XCTAssertEqual(out[1].labelPoint, CGPoint(x: 20, y: 50))
+    }
+
     func testABoxLoopStaysOnItsBox() {
         // A subgraph's own loop (folded or unfolded) is laid out round its
         // box; no later pass may move it, whatever it crowds.

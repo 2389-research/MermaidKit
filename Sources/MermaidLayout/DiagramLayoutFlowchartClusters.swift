@@ -468,17 +468,38 @@ extension DiagramLayoutEngine {
         return edges.indices.map { i in
             let e = edges[i]
             guard routes[i] != before[i] else { return e }
+            // The caption follows its segment: onto the new segment of the
+            // same orientation whose line lies nearest the old one, at the
+            // same place along it (held within the new segment).
             var label = e.labelPoint
             if let p = label, let k = before[i].indices.dropLast().first(where: { k in
                 let a = before[i][k], b = before[i][k + 1]
                 return p.x >= min(a.x, b.x) - 0.5 && p.x <= max(a.x, b.x) + 0.5
                     && p.y >= min(a.y, b.y) - 0.5 && p.y <= max(a.y, b.y) + 0.5
             }) {
-                // A stub let in at the route's start moves every later segment
-                // one on; one let in at its end moves none.
-                let grewAtStart = routes[i].count > before[i].count && routes[i][1] != before[i][1]
-                let j = grewAtStart ? k + 1 : k
-                label = CGPoint(x: p.x + routes[i][j].x - before[i][k].x, y: p.y + routes[i][j].y - before[i][k].y)
+                let a = before[i][k], b = before[i][k + 1]
+                let horizontal = abs(a.y - b.y) < abs(a.x - b.x)
+                let line = horizontal ? a.y : a.x
+                let new = routes[i]
+                let nearest = new.indices.dropLast().filter { j in
+                    (abs(new[j].y - new[j + 1].y) < abs(new[j].x - new[j + 1].x)) == horizontal
+                }.min { j, m in
+                    // One spanning the caption's place first, then the nearest line.
+                    func rank(_ j: Int) -> (Int, CGFloat) {
+                        let c = new[j], d = new[j + 1]
+                        let at = horizontal ? p.x : p.y
+                        let spans = at >= min(horizontal ? c.x : c.y, horizontal ? d.x : d.y) - 0.5
+                            && at <= max(horizontal ? c.x : c.y, horizontal ? d.x : d.y) + 0.5
+                        return (spans ? 0 : 1, abs((horizontal ? c.y : c.x) - line))
+                    }
+                    return rank(j) < rank(m)
+                }
+                if let j = nearest {
+                    let c = new[j], d = new[j + 1]
+                    label = horizontal
+                        ? CGPoint(x: min(max(p.x, min(c.x, d.x)), max(c.x, d.x)), y: p.y + c.y - line)
+                        : CGPoint(x: p.x + c.x - line, y: min(max(p.y, min(c.y, d.y)), max(c.y, d.y)))
+                }
             }
             return FlowchartLayout.PlacedEdge(
                 start: routes[i].first!, end: routes[i].last!, points: routes[i],
