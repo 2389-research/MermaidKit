@@ -1332,6 +1332,15 @@ extension DiagramLayoutEngine {
                 for i in 1..<max(pos.count, 1) where pos[i] < pos[i - 1] + minSep {
                     pos[i] = pos[i - 1] + minSep
                 }
+                // Sliding can push the first ports below `lo`, where `attach`
+                // clamps them back up, nearer their neighbours than `minSep`, or
+                // onto them: two edges into one point. Raise just those, keeping
+                // the gap: `minSep` lets every port fit between `lo` and `hi`,
+                // so the block still ends by `hi`.
+                if let first = pos.first, first < lo {
+                    pos[0] = lo
+                    for i in 1..<pos.count where pos[i] < pos[i - 1] + minSep { pos[i] = pos[i - 1] + minSep }
+                }
             }
             for (i, p) in sorted.enumerated() { portCross[portKey(p.edge, p.isSource)] = pos[i] }
         }
@@ -1525,6 +1534,11 @@ extension DiagramLayoutEngine {
         for index in loops {
             if let loop = geos[index].selfLoop { routes[index] = selfLoopRoute(index, geos[index], loop) }
         }
+
+        // Last, no two edges on one line: whatever still draws doubled moves
+        // aside a track at a time, self-loops and nodes standing fast.
+        separateDoubledRuns(&routes, fixed: Set(loops), ignored: Set(hidden),
+                            obstacles: chart.nodes.compactMap { frames[$0.id] }, track: flowchartJogTrack)
 
         var placedEdges: [FlowchartLayout.PlacedEdge] = []
         var crossLimit = flowchartMargin + crossExtent

@@ -44,7 +44,9 @@ extension DiagramLayoutEngine {
         let scope = layoutScope(ctx, scope: nil, inherited: chart.direction, depth: 0,
                                 measure: measure, spacing: spacing)
         return FlowchartLayout(size: scope.size, nodes: scope.nodes,
-                               edges: scope.edges, containers: scope.containers)
+                               edges: separatedAcrossScopes(scope.edges, nodes: scope.nodes,
+                                                            containers: scope.containers),
+                               containers: scope.containers)
     }
 
     /// The subgraphs laid out with their parent's nodes rather than as one
@@ -434,6 +436,76 @@ extension DiagramLayoutEngine {
             }
         }
         return result
+    }
+
+    /// Each scope keeps its own edges off each other's lines, but an edge
+    /// laid out in a group's interior and one laid out round it never met:
+    /// one more pass over them all, nodes standing fast, self-loops fixed. A
+    /// caption on a segment that moves moves with it.
+    static func separatedAcrossScopes(
+        _ edges: [FlowchartLayout.PlacedEdge], nodes: [FlowchartLayout.PlacedNode],
+        containers: [FlowchartLayout.Container]
+    ) -> [FlowchartLayout.PlacedEdge] {
+        let frames = nodes.map(\.frame)
+        // A self-loop starts and ends on one node, or on one group's border
+        // (a loop on a box): it stands fast.
+        func on(_ p: CGPoint, _ f: CGRect) -> Bool {
+            p.x >= f.minX - 0.5 && p.x <= f.maxX + 0.5 && p.y >= f.minY - 0.5 && p.y <= f.maxY + 0.5
+        }
+        func onBorder(_ p: CGPoint, _ f: CGRect) -> Bool {
+            on(p, f) && (abs(p.x - f.minX) < 0.5 || abs(p.x - f.maxX) < 0.5
+                         || abs(p.y - f.minY) < 0.5 || abs(p.y - f.maxY) < 0.5)
+        }
+        let loops = Set(edges.indices.filter { i in
+            let a = edges[i].start, b = edges[i].end
+            return frames.contains { on(a, $0) && on(b, $0) }
+                || containers.contains { onBorder(a, $0.frame) && onBorder(b, $0.frame) }
+        })
+        let before = edges.map(\.points)
+        var routes = before
+        separateDoubledRuns(&routes, fixed: loops, ignored: Set(edges.indices.filter { edges[$0].invisible }),
+                            obstacles: frames, track: flowchartJogTrack)
+        return edges.indices.map { i in
+            let e = edges[i]
+            guard routes[i] != before[i] else { return e }
+            // The caption follows its segment: onto the new segment of the
+            // same orientation whose line lies nearest the old one, at the
+            // same place along it (held within the new segment).
+            var label = e.labelPoint
+            if let p = label, let k = before[i].indices.dropLast().first(where: { k in
+                let a = before[i][k], b = before[i][k + 1]
+                return p.x >= min(a.x, b.x) - 0.5 && p.x <= max(a.x, b.x) + 0.5
+                    && p.y >= min(a.y, b.y) - 0.5 && p.y <= max(a.y, b.y) + 0.5
+            }) {
+                let a = before[i][k], b = before[i][k + 1]
+                let horizontal = abs(a.y - b.y) < abs(a.x - b.x)
+                let line = horizontal ? a.y : a.x
+                let new = routes[i]
+                let nearest = new.indices.dropLast().filter { j in
+                    (abs(new[j].y - new[j + 1].y) < abs(new[j].x - new[j + 1].x)) == horizontal
+                }.min { j, m in
+                    // One spanning the caption's place first, then the nearest line.
+                    func rank(_ j: Int) -> (Int, CGFloat) {
+                        let c = new[j], d = new[j + 1]
+                        let at = horizontal ? p.x : p.y
+                        let spans = at >= min(horizontal ? c.x : c.y, horizontal ? d.x : d.y) - 0.5
+                            && at <= max(horizontal ? c.x : c.y, horizontal ? d.x : d.y) + 0.5
+                        return (spans ? 0 : 1, abs((horizontal ? c.y : c.x) - line))
+                    }
+                    return rank(j) < rank(m)
+                }
+                if let j = nearest {
+                    let c = new[j], d = new[j + 1]
+                    label = horizontal
+                        ? CGPoint(x: min(max(p.x, min(c.x, d.x)), max(c.x, d.x)), y: p.y + c.y - line)
+                        : CGPoint(x: p.x + c.x - line, y: min(max(p.y, min(c.y, d.y)), max(c.y, d.y)))
+                }
+            }
+            return FlowchartLayout.PlacedEdge(
+                start: routes[i].first!, end: routes[i].last!, points: routes[i],
+                label: e.label, dashed: e.dashed, hasArrow: e.hasArrow, backArrow: e.backArrow,
+                head: e.head, thick: e.thick, invisible: e.invisible, labelPoint: label)
+        }
     }
 
     // MARK: - Scope resolution helpers
