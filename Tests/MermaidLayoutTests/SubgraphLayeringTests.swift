@@ -161,8 +161,11 @@ final class SubgraphLayeringTests: XCTestCase {
         // Two or three loops on one box: each drawn, none sharing a line or a
         // caption's place with another.
         for direction in ["TD", "LR"] {
+            // The last: captions beside the box from another edge too, all
+            // placed clear of each other (Codex's chart).
             for loops in [["S -->|first loop caption| S", "S -->|second loop caption| S"],
-                          ["S --> S", "S -->|again| S", "S -->|and once more| S"]] {
+                          ["S --> S", "S -->|again| S", "S -->|and once more| S"],
+                          ["S -->|edgecaption2| N0", "S -->|loop one| S", "S -->|loop two| S", "S -->|loop three| S"]] {
                 let (chart, l) = try XCTUnwrap(layout("""
                     flowchart \(direction)
                       subgraph S
@@ -174,7 +177,14 @@ final class SubgraphLayeringTests: XCTestCase {
                     """ + "\n" + loops.map { "  \($0)" }.joined(separator: "\n")))
                 XCTAssertEqual(DiagramLayoutEngine.unfoldedSubgraphs(chart), ["S"])
                 XCTAssertEqual(l.edges.count, chart.edges.count)
-                let errors = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure)).filter { $0.severity == .error }
+                let lint = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure))
+                XCTAssertFalse(lint.contains { $0.kind == "labels-overlap" || $0.kind == "label-on-fixture" },
+                               "\(direction) \(loops): \(lint.map(\.detail))")
+                // With another edge leaving the box past its loops, a caption
+                // may sit off its run where that edge's caption took the room;
+                // otherwise every caption has its stubs.
+                guard !loops[0].contains("N0") else { continue }
+                let errors = lint.filter { $0.severity == .error }
                 XCTAssertTrue(errors.isEmpty, "\(direction) \(loops): \(errors.map(\.detail))")
             }
         }

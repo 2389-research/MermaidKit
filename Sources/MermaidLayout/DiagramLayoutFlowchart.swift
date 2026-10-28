@@ -424,16 +424,9 @@ extension DiagramLayoutEngine {
                 head: e.head, thick: e.thick, invisible: e.invisible)
         }
 
-        // 6. Place edge labels clear of node boxes and each other. A
-        // self-loop's caption rides its far run, the run its space was
-        // reserved beside, even where a bar is longer.
-        var labeledEdges = placeEdgeLabels(
-            placedEdges, nodeFrames: chart.nodes.compactMap { placement.frames[$0.id] }, measure: measure,
-            labelRuns: chart.edges.indices.map { selfLoops[$0] == nil ? nil : SelfLoopPath.farRunSegment }
-        )
-
         // An unfolded subgraph's own loop: a C off its box's cross-far side,
-        // from its leading corner, captioned beside its far run.
+        // from its leading corner. Its caption rides its far run, placed with
+        // every other caption.
         var loopEdges: [FlowchartLayout.PlacedEdge] = []
         for (loop, (b, edge)) in zip(loopRuns.runs, blockLoops) {
             guard let box = blockFrames[b] else { continue }
@@ -445,16 +438,20 @@ extension DiagramLayoutEngine {
             }
             let points = [point(main: near, cross: side), point(main: near, cross: out),
                           point(main: far, cross: out), point(main: far, cross: side)]
-            let labelPoint = loop.caption.map { size in
-                point(main: (near + far) / 2,
-                      cross: out + 4 + (horizontal ? size.height : size.width) / 2)
-            }
             loopEdges.append(FlowchartLayout.PlacedEdge(
                 start: points[0], end: points[3], points: points, label: edge.label, dashed: edge.dashed,
                 hasArrow: edge.hasArrow, backArrow: edge.backArrow, head: edge.head, thick: edge.thick,
-                invisible: edge.invisible, labelPoint: labelPoint))
+                invisible: edge.invisible))
         }
-        labeledEdges += loopEdges
+
+        // 6. Place edge labels clear of node boxes and each other. A
+        // self-loop's caption rides its far run, the run its space was
+        // reserved beside, even where a bar is longer; so does a box's own.
+        let labeledEdges = placeEdgeLabels(
+            placedEdges + loopEdges, nodeFrames: chart.nodes.compactMap { placement.frames[$0.id] }, measure: measure,
+            labelRuns: chart.edges.indices.map { selfLoops[$0] == nil ? nil : SelfLoopPath.farRunSegment }
+                + loopEdges.map { _ in 1 }
+        )
 
         let contentCross = crossLimit + flowchartMargin
         var size = horizontal

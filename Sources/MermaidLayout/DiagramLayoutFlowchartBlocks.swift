@@ -341,10 +341,11 @@ extension DiagramLayoutEngine {
 
     /// Where each block's own loops run, as offsets along the main axis from
     /// the box's leading end: side by side from near its leading corner, each
-    /// out `reach` past the box's cross-far side and back, its far run long
-    /// enough for the caption beside it and a stub either end, 8pt apart.
-    /// `beside` is how far a caption stands out past the far run. `length`
-    /// is the main-axis length each block needs to hold them.
+    /// out `reach` past the box's cross-far side and back, 8pt apart, its far
+    /// run long enough for the caption that rides it and a stub either end,
+    /// and far enough out that the caption clears the box. `beside` is how
+    /// far the caption stands out past the far run. `length` is the main-axis
+    /// length each block needs to hold them.
     struct BlockLoopRun {
         let block: Int
         let near: CGFloat, far: CGFloat, reach: CGFloat, beside: CGFloat
@@ -361,9 +362,10 @@ extension DiagramLayoutEngine {
             let near = next[b], far = near + max(16, along + 2 * edgeLabelStub)
             next[b] = far + 8
             length[b] = far + 4
-            return BlockLoopRun(block: b, near: near, far: far, reach: 2 * flowchartJogTrack,
-                                beside: caption.map { 4 + (horizontal ? $0.height : $0.width) } ?? 0,
-                                caption: caption)
+            // The caption's half-extent across the far run.
+            let half = caption.map { (horizontal ? $0.height : $0.width) / 2 } ?? 0
+            return BlockLoopRun(block: b, near: near, far: far, reach: max(2 * flowchartJogTrack, half + 8),
+                                beside: half, caption: caption)
         }
         return (runs, length)
     }
