@@ -290,7 +290,7 @@ extension DiagramLayoutEngine {
     static func blockMainChrome(
         _ plan: BlockPlan, layers: [[String]], sizes: [String: CGSize], horizontal: Bool,
         layerGaps: inout [CGFloat], leadPad: inout CGFloat, tailPad: inout CGFloat,
-        margin: CGFloat, measure: DiagramTextMeasurer
+        margin: CGFloat, measure: DiagramTextMeasurer, minLength: [CGFloat] = []
     ) -> [(lead: CGFloat, tail: CGFloat)] {
         let count = plan.blocks.count
         let header = clusterHeader(measure)
@@ -315,12 +315,15 @@ extension DiagramLayoutEngine {
             }
             lead += nestedLead
             tail += nestedTail
-            if horizontal {
-                // The label runs along the top: the box must be as long.
+            // A left-right box's label runs along its top, and its own loops
+            // along its far side: the box must be as long as they need.
+            let need = max(horizontal ? measure(plan.blocks[b].label, nodeFontSize).width + 16 : 0,
+                           b < minLength.count ? minLength[b] : 0)
+            if need > 0 {
                 var length = lead + tail
                 for l in span.lo...span.hi { length += band[l] }
                 for l in span.lo..<span.hi { length += gap(l) }
-                let short = measure(plan.blocks[b].label, nodeFontSize).width + 16 - length
+                let short = need - length
                 if short > 0 { lead += short / 2; tail += short / 2 }
             }
             reach[b] = (lead, tail)
@@ -336,21 +339,33 @@ extension DiagramLayoutEngine {
         return reach
     }
 
-    /// Where a block's own loop runs, along the main axis of a box from
-    /// `lead` to `tail`: out from near its leading corner, `reach` past its
-    /// cross-far side, and back in at `far`, its far run long enough for the
-    /// caption beside it and a stub either end (and never past the box's far
-    /// end); `beside` is how far the caption stands out past the far run.
-    static func blockLoop(_ edge: Flowchart.Edge, lead: CGFloat, tail: CGFloat, horizontal: Bool,
-                          measure: DiagramTextMeasurer)
-        -> (near: CGFloat, far: CGFloat, reach: CGFloat, beside: CGFloat, caption: CGSize?) {
-        let caption = edge.label.flatMap { $0.isEmpty || edge.invisible ? nil : measure($0, labelFontSize) }
-        // The caption's extent along the far run, as the linter frames it.
-        let along = caption.map { horizontal ? $0.width : 14 } ?? 0
-        let near = lead + 4
-        let far = min(max(near + 16, near + along + 2 * edgeLabelStub), tail - 4)
-        let beside = caption.map { 4 + (horizontal ? $0.height : $0.width) } ?? 0
-        return (near, max(far, near + 1), 2 * flowchartJogTrack, beside, caption)
+    /// Where each block's own loops run, as offsets along the main axis from
+    /// the box's leading end: side by side from near its leading corner, each
+    /// out `reach` past the box's cross-far side and back, its far run long
+    /// enough for the caption beside it and a stub either end, 8pt apart.
+    /// `beside` is how far a caption stands out past the far run. `length`
+    /// is the main-axis length each block needs to hold them.
+    struct BlockLoopRun {
+        let block: Int
+        let near: CGFloat, far: CGFloat, reach: CGFloat, beside: CGFloat
+        let caption: CGSize?
+    }
+    static func blockLoopRuns(_ loops: [(block: Int, edge: Flowchart.Edge)], blocks: Int, horizontal: Bool,
+                              measure: DiagramTextMeasurer) -> (runs: [BlockLoopRun], length: [CGFloat]) {
+        var next = [CGFloat](repeating: 4, count: blocks)
+        var length = [CGFloat](repeating: 0, count: blocks)
+        let runs = loops.map { b, edge -> BlockLoopRun in
+            let caption = edge.label.flatMap { $0.isEmpty || edge.invisible ? nil : measure($0, labelFontSize) }
+            // The caption's extent along the far run, as the linter frames it.
+            let along = caption.map { horizontal ? $0.width : 14 } ?? 0
+            let near = next[b], far = near + max(16, along + 2 * edgeLabelStub)
+            next[b] = far + 8
+            length[b] = far + 4
+            return BlockLoopRun(block: b, near: near, far: far, reach: 2 * flowchartJogTrack,
+                                beside: caption.map { 4 + (horizontal ? $0.height : $0.width) } ?? 0,
+                                caption: caption)
+        }
+        return (runs, length)
     }
 
     /// The part of `points` up to where it first enters `box` from outside,

@@ -319,10 +319,11 @@ extension DiagramLayoutEngine {
         // Each block's header and padding take room in the layer gaps
         // before and after it, so its box clears the rows outside it.
         var blockChrome: [(lead: CGFloat, tail: CGFloat)] = []
+        let loopRuns = blockLoopRuns(blockLoops, blocks: blocks.count, horizontal: horizontal, measure: measure)
         if let plan {
             blockChrome = blockMainChrome(plan, layers: ordered, sizes: sizes, horizontal: horizontal,
                                           layerGaps: &layerGaps, leadPad: &leadPad, tailPad: &tailPad,
-                                          margin: flowchartMargin, measure: measure)
+                                          margin: flowchartMargin, measure: measure, minLength: loopRuns.length)
         }
         // Clear each block's rows of everything outside it, wide enough for
         // its label across the top of a top-down box (the layer gaps above are
@@ -364,12 +365,12 @@ extension DiagramLayoutEngine {
                     bands.append((offset, offset + size))
                     offset += size + (li < layerGaps.count ? layerGaps[li] : (layerGaps.last ?? 0))
                 }
-                for (b, edge) in blockLoops {
+                for loop in loopRuns.runs {
+                    let b = loop.block
                     guard let span = plan.span[b], span.hi < bands.count else { continue }
                     let lead = bands[span.lo].start - blockChrome[b].lead
-                    let tail = bands[span.hi].end + blockChrome[b].tail
-                    let loop = blockLoop(edge, lead: lead, tail: tail, horizontal: horizontal, measure: measure)
-                    for l in span.lo...span.hi where bands[l].end >= loop.near && bands[l].start <= loop.far {
+                    for l in span.lo...span.hi
+                    where bands[l].end >= lead + loop.near && bands[l].start <= lead + loop.far {
                         guard let row = ordered.first(where: { $0.contains(plan.borderID(b, l, left: false)) }),
                               let at = row.firstIndex(of: plan.borderID(b, l, left: false)), at + 1 < row.count else { continue }
                         let next = row[at + 1]
@@ -434,19 +435,18 @@ extension DiagramLayoutEngine {
         // An unfolded subgraph's own loop: a C off its box's cross-far side,
         // from its leading corner, captioned beside its far run.
         var loopEdges: [FlowchartLayout.PlacedEdge] = []
-        for (b, edge) in blockLoops {
+        for (loop, (b, edge)) in zip(loopRuns.runs, blockLoops) {
             guard let box = blockFrames[b] else { continue }
-            let loop = horizontal
-                ? blockLoop(edge, lead: box.minX, tail: box.maxX, horizontal: true, measure: measure)
-                : blockLoop(edge, lead: box.minY, tail: box.maxY, horizontal: false, measure: measure)
+            let lead = horizontal ? box.minX : box.minY
+            let near = lead + loop.near, far = lead + loop.far
             let side = horizontal ? box.maxY : box.maxX, out = side + loop.reach
             func point(main: CGFloat, cross: CGFloat) -> CGPoint {
                 horizontal ? CGPoint(x: main, y: cross) : CGPoint(x: cross, y: main)
             }
-            let points = [point(main: loop.near, cross: side), point(main: loop.near, cross: out),
-                          point(main: loop.far, cross: out), point(main: loop.far, cross: side)]
+            let points = [point(main: near, cross: side), point(main: near, cross: out),
+                          point(main: far, cross: out), point(main: far, cross: side)]
             let labelPoint = loop.caption.map { size in
-                point(main: (loop.near + loop.far) / 2,
+                point(main: (near + far) / 2,
                       cross: out + 4 + (horizontal ? size.height : size.width) / 2)
             }
             loopEdges.append(FlowchartLayout.PlacedEdge(

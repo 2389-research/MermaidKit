@@ -126,7 +126,7 @@ final class SubgraphLayeringTests: XCTestCase {
         // `S --> S` loops on S's box, folded or not: out of it and back in,
         // round its outside.
         for direction in ["TD", "LR"] {
-            for loop in ["S --> S", "S -->|again| S"] {
+            for loop in ["S --> S", "S -->|again| S", "S -->|a caption far longer than the box it loops on| S"] {
                 let (chart, l) = try XCTUnwrap(layout("""
                     flowchart \(direction)
                       subgraph S
@@ -153,6 +153,29 @@ final class SubgraphLayeringTests: XCTestCase {
                 }
                 let errors = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure)).filter { $0.severity == .error }
                 XCTAssertTrue(errors.isEmpty, "\(direction) \(loop): \(errors.map(\.detail))")
+            }
+        }
+    }
+
+    func testUnfoldedSubgraphLoopsStandApart() throws {
+        // Two or three loops on one box: each drawn, none sharing a line or a
+        // caption's place with another.
+        for direction in ["TD", "LR"] {
+            for loops in [["S -->|first loop caption| S", "S -->|second loop caption| S"],
+                          ["S --> S", "S -->|again| S", "S -->|and once more| S"]] {
+                let (chart, l) = try XCTUnwrap(layout("""
+                    flowchart \(direction)
+                      subgraph S
+                        X
+                        Y
+                      end
+                      X --> A
+                      A --> Y
+                    """ + "\n" + loops.map { "  \($0)" }.joined(separator: "\n")))
+                XCTAssertEqual(DiagramLayoutEngine.unfoldedSubgraphs(chart), ["S"])
+                XCTAssertEqual(l.edges.count, chart.edges.count)
+                let errors = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure)).filter { $0.severity == .error }
+                XCTAssertTrue(errors.isEmpty, "\(direction) \(loops): \(errors.map(\.detail))")
             }
         }
     }
