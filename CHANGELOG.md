@@ -30,25 +30,25 @@
   before. (#103)
 
 - **Two edges no longer draw as one.** Where two routes shared a line, the
-  linter's `edges-doubled`, they read as one connector. Three causes, three
-  fixes:
+  linter's `edges-doubled`, they read as one connector. Two fixes:
   - A face with more ports than room slid them all along, pushing its first
     ports past the face's end, where they were clamped back onto their
-    neighbours: two edges into one point. Now only those ports move back,
-    keeping the minimum gap; every other port is where it was.
-  - A jog whose fan offsets added up past the layer gap was clamped onto the
-    node's face and ran along it, beside the next port. It now stops a point
-    short of the face.
-  - Two unrelated edges could still jog in one track, or meet end to end in
-    one column. A last pass finds exactly the pairs the linter would flag and
-    moves one segment aside, a jog track at a time, only where its neighbours
-    keep their direction, it runs through no node, and no new pair doubles.
-    It runs within each layout, and once more across a subgraph's edges and
-    the ones round it.
-  Over 3,000 seeded random charts, doubled pairs fall from 1,202 to 3. Every
-  corpus chart lays out exactly as before, and so does any chart with none
-  of these defects. A fan wider than its layer gap can still run out of
-  tracks.
+    neighbours: two edges into one point, or closer than the minimum gap.
+    Now only those ports move back, keeping the gap; every other port is
+    where it was.
+  - Two unrelated edges could still jog in one track, meet end to end in one
+    column, or share a line where a jog clamped onto a node's face ran along
+    it. A last pass finds exactly the pairs the linter would flag and moves
+    one segment aside, a jog track at a time (a run along a face steps off
+    it on a stub away from the node), only where its neighbours keep their
+    direction, it runs through no node, and no new pair doubles. It runs
+    within each layout, and once more across a subgraph's edges and the ones
+    round it.
+  Over 3,000 seeded random charts, doubled pairs fall from 1,246 to 3, and
+  over 3,000 with subgraphs from 474 to 0; no chart gains a route through a
+  node. Every corpus chart lays out exactly as before, and so does any chart
+  with neither defect. A fan wider than its layer gap can still run out of
+  tracks (#108).
 
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
