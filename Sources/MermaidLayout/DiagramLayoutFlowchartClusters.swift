@@ -44,7 +44,8 @@ extension DiagramLayoutEngine {
         let scope = layoutScope(ctx, scope: nil, inherited: chart.direction, depth: 0,
                                 measure: measure, spacing: spacing)
         return FlowchartLayout(size: scope.size, nodes: scope.nodes,
-                               edges: separatedAcrossScopes(scope.edges, nodes: scope.nodes),
+                               edges: separatedAcrossScopes(scope.edges, nodes: scope.nodes,
+                                                            containers: scope.containers),
                                containers: scope.containers)
     }
 
@@ -441,18 +442,24 @@ extension DiagramLayoutEngine {
     /// laid out in a group's interior and one laid out round it never met:
     /// one more pass over them all, nodes standing fast, self-loops fixed. A
     /// caption on a segment that moves moves with it.
-    private static func separatedAcrossScopes(
-        _ edges: [FlowchartLayout.PlacedEdge], nodes: [FlowchartLayout.PlacedNode]
+    static func separatedAcrossScopes(
+        _ edges: [FlowchartLayout.PlacedEdge], nodes: [FlowchartLayout.PlacedNode],
+        containers: [FlowchartLayout.Container]
     ) -> [FlowchartLayout.PlacedEdge] {
         let frames = nodes.map(\.frame)
-        func onFrame(_ p: CGPoint) -> Int? {
-            frames.firstIndex { f in
-                p.x >= f.minX - 0.5 && p.x <= f.maxX + 0.5 && p.y >= f.minY - 0.5 && p.y <= f.maxY + 0.5
-            }
+        // A self-loop starts and ends on one node, or on one group's border
+        // (a loop on a box): it stands fast.
+        func on(_ p: CGPoint, _ f: CGRect) -> Bool {
+            p.x >= f.minX - 0.5 && p.x <= f.maxX + 0.5 && p.y >= f.minY - 0.5 && p.y <= f.maxY + 0.5
+        }
+        func onBorder(_ p: CGPoint, _ f: CGRect) -> Bool {
+            on(p, f) && (abs(p.x - f.minX) < 0.5 || abs(p.x - f.maxX) < 0.5
+                         || abs(p.y - f.minY) < 0.5 || abs(p.y - f.maxY) < 0.5)
         }
         let loops = Set(edges.indices.filter { i in
-            guard let a = onFrame(edges[i].start) else { return false }
-            return onFrame(edges[i].end) == a
+            let a = edges[i].start, b = edges[i].end
+            return frames.contains { on(a, $0) && on(b, $0) }
+                || containers.contains { onBorder(a, $0.frame) && onBorder(b, $0.frame) }
         })
         let before = edges.map(\.points)
         var routes = before
