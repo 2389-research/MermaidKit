@@ -190,13 +190,18 @@ extension DiagramLayoutEngine {
                                     uniquingKeysWith: { a, _ in a })
         let n = diagram.elements.count
 
-        // Relationship layering: longest-path from sources, capped so cycles
-        // can't run the layer count away.
+        // Relationship layering: longest-path from sources over the
+        // relationships left once DFS back edges are dropped, as flowcharts
+        // drop them, so only a cycle sends an arrow back up (#102). The cap is
+        // a guard; with no cycle left it never binds.
         var adjacency: [(Int, Int)] = []
         for r in diagram.relations {
             guard let f = aliasIndex[r.from], let t = aliasIndex[r.to], f != t else { continue }
             adjacency.append((f, t))
         }
+        let back = backEdgeIndices(ids: (0..<n).map(String.init),
+                                   edges: adjacency.map { (String($0.0), String($0.1)) })
+        adjacency = adjacency.enumerated().filter { !back.contains($0.offset) }.map(\.element)
         var layer = [Int](repeating: 0, count: n)
         for _ in 0..<max(n, 1) {
             var changed = false
