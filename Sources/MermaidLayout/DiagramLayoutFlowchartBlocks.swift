@@ -217,11 +217,14 @@ extension DiagramLayoutEngine {
     /// order and minimum gaps: a longest-path pass over the constraint graph
     /// whose vertices are the items, with each block side one vertex, started
     /// from the current coordinates. `minWidth[b]` keeps block `b`'s two lines
-    /// at least that far apart. Ordering keeps sibling blocks in one order,
-    /// so the graph is acyclic; were it not, nothing moves.
+    /// at least that far apart, and each `apart` entry keeps its second item
+    /// at least that far past its first (centre to centre). Ordering keeps
+    /// sibling blocks in one order, so the graph is acyclic; were it not,
+    /// nothing moves.
     static func clearBlocks(
         center: inout [String: CGFloat], layers: [[String]], breadth: [String: CGFloat],
-        minGap: CGFloat, plan: BlockPlan, minWidth: [CGFloat]
+        minGap: CGFloat, plan: BlockPlan, minWidth: [CGFloat],
+        apart: [(String, String, CGFloat)] = []
     ) {
         func vertex(_ id: String) -> String {
             guard let b = plan.border[id] else { return id }
@@ -255,6 +258,9 @@ extension DiagramLayoutEngine {
         for (b, span) in plan.span.enumerated() where span != nil {
             let l = "\u{a7}sidel\(b)", r = "\u{a7}sider\(b)"
             if x[l] != nil, x[r] != nil { require(l, r, minWidth[b]) }
+        }
+        for (a, b, gap) in apart where x[vertex(a)] != nil && x[vertex(b)] != nil {
+            require(vertex(a), vertex(b), gap)
         }
         // Kahn's order, seeded and drained in first-seen order: deterministic.
         var queue = order.filter { (before[$0] ?? 0) == 0 }

@@ -21,6 +21,13 @@ final class SubgraphLayeringTests: XCTestCase {
         return (chart, DiagramLayoutEngine.layout(chart, measure: measure))
     }
 
+    /// Whether `outer` holds `inner`, edges compared directly: Foundation's
+    /// `CGRect.contains(_:)` on Linux misses exact fits by a rounding error.
+    private func holds(_ outer: CGRect, _ inner: CGRect) -> Bool {
+        inner.minX >= outer.minX - 1e-9 && inner.maxX <= outer.maxX + 1e-9
+            && inner.minY >= outer.minY - 1e-9 && inner.maxY <= outer.maxY + 1e-9
+    }
+
     private func frames(_ layout: FlowchartLayout) -> [String: CGRect] {
         Dictionary(layout.nodes.map { ($0.id, $0.frame) }, uniquingKeysWith: { a, _ in a })
     }
@@ -43,7 +50,7 @@ final class SubgraphLayeringTests: XCTestCase {
         XCTAssertLessThan(f["X"]!.midY, f["A"]!.midY)
         XCTAssertLessThan(f["A"]!.midY, f["Y"]!.midY)
         let box = try XCTUnwrap(l.containers.first { $0.id == "S" }).frame
-        XCTAssertTrue(box.contains(f["X"]!) && box.contains(f["Y"]!), "\(box) holds its members")
+        XCTAssertTrue(holds(box, f["X"]!) && holds(box, f["Y"]!), "\(box) holds its members")
         XCTAssertFalse(box.intersects(f["A"]!), "\(box) keeps A out")
     }
 
@@ -90,6 +97,28 @@ final class SubgraphLayeringTests: XCTestCase {
             && end.x >= box.minX - 0.5 && end.x <= box.maxX + 0.5
         XCTAssertTrue(onSide || onTopOrBottom, "B → S ends at \(end), on \(box)")
         XCTAssertFalse(box.contains(frames(l)["B"]!))
+    }
+
+    func testCaptionOnAnEdgeToAnUnfoldedSubgraphHasRoom() throws {
+        // The edge leaves S's box from the side, toward B beside it, and is
+        // cut at the box: B stands off far enough for the caption and a stub
+        // either side, top-down or left-right, in or out.
+        for (direction, edge) in [("TD", "S -->|a very long edge label| B"), ("LR", "S -->|a very long edge label| B"),
+                                  ("TD", "B -->|a very long edge label| S")] {
+            let (_, l) = try XCTUnwrap(layout("""
+                flowchart \(direction)
+                  subgraph S
+                    X
+                    Y
+                  end
+                  X --> A
+                  A --> Y
+                  \(edge)
+                """))
+            let crowded = DiagramLayoutLinter.lint(DiagramScene.from(l, measure: measure))
+                .filter { $0.kind == "label-crowds-edge" || $0.kind == "label-on-fixture" }
+            XCTAssertTrue(crowded.isEmpty, "\(direction) \(edge): \(crowded.map(\.detail))")
+        }
     }
 
     func testChartsThatWereRightAreUnchanged() throws {
@@ -220,7 +249,7 @@ final class SubgraphLayeringTests: XCTestCase {
                 let inside = collect(box.id)
                 for node in l.nodes {
                     if inside.contains(node.id) {
-                        XCTAssertTrue(box.frame.contains(node.frame),
+                        XCTAssertTrue(holds(box.frame, node.frame),
                                       "trial \(trial): \(box.id) \(box.frame) holds \(node.id) \(node.frame)\n\(random.source)")
                     } else {
                         XCTAssertFalse(box.frame.intersects(node.frame),
@@ -231,6 +260,29 @@ final class SubgraphLayeringTests: XCTestCase {
                 for other in l.containers where other.id != box.id && !inside.contains(other.id) && !collect(other.id).contains(box.id) {
                     XCTAssertFalse(box.frame.intersects(other.frame),
                                    "trial \(trial): \(box.id) \(box.frame) overlaps \(other.id) \(other.frame)\n\(random.source)")
+                }
+            }
+        }
+    }
+
+    func testSnappedEdgesStayOnTheirBorders() throws {
+        // On a grid, a box grows to whole cells; an edge ending on a box (one
+        // naming its subgraph) must end on the grown border, not inside it.
+        func onBorder(_ p: CGPoint, _ r: CGRect) -> Bool {
+            let inX = p.x >= r.minX - 0.5 && p.x <= r.maxX + 0.5, inY = p.y >= r.minY - 0.5 && p.y <= r.maxY + 0.5
+            return (inY && (abs(p.x - r.minX) < 0.5 || abs(p.x - r.maxX) < 0.5))
+                || (inX && (abs(p.y - r.minY) < 0.5 || abs(p.y - r.maxY) < 0.5))
+        }
+        for unit: CGFloat in [4, 8] {
+            for (trial, random) in randomCharts(seed: 0x1F83_D9AB_FB41_BD6B, count: 300).enumerated() {
+                guard case .flowchart(let chart)? = MermaidParser.parse(random.source) else { return XCTFail("parse") }
+                let l = DiagramLayoutEngine.layout(chart, measure: measure, spacing: DiagramSpacing(gridSnap: unit))
+                let borders = l.nodes.map(\.frame) + l.containers.map(\.frame)
+                for edge in l.edges where !edge.invisible && edge.start != edge.end {
+                    for p in [edge.start, edge.end] {
+                        XCTAssertTrue(borders.contains { onBorder(p, $0) },
+                                      "grid \(unit), trial \(trial): \(p) on no border\n\(random.source)")
+                    }
                 }
             }
         }

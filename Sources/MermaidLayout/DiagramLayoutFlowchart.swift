@@ -273,8 +273,32 @@ extension DiagramLayoutEngine {
         // for its label across the top of a top-down box.
         if let plan {
             let minWidth = blocks.map { horizontal ? 0 : measure($0.label, nodeFontSize).width + 16 }
+            // A captioned edge naming a block, to a node beside the box, leaves
+            // it from the side, and is cut at the box: that node stands off by
+            // the caption and a stub either side, as a layer gap would.
+            var apart: [(String, String, CGFloat)] = []
+            for (index, clip) in clips.sorted(by: { $0.key < $1.key }) {
+                let edge = chart.edges[index]
+                guard let text = edge.label, !text.isEmpty, !edge.invisible else { continue }
+                let sz = measure(text, labelFontSize)
+                let along = (horizontal ? sz.height + 2 : sz.width + 6) + 2 * edgeLabelStub
+                    + (edge.hasArrow ? flowchartArrowheadLen : 0) + (edge.backArrow ? flowchartArrowheadLen : 0)
+                for (b, other) in [(clip.from, edge.to), (clip.to, edge.from)] {
+                    guard let b, let span = plan.span[b], let l = layerOf[other],
+                          span.lo <= l, l <= span.hi, plan.blockOf[other].map({ plan.isAncestor(b, of: $0) }) != true,
+                          let row = ordered.first(where: { $0.contains(other) }),
+                          let at = row.firstIndex(of: other),
+                          let left = row.firstIndex(of: plan.borderID(b, l, left: true)) else { continue }
+                    let half = (crossBreadth[other] ?? 0) / 2
+                    if at > left {
+                        apart.append((plan.borderID(b, l, left: false), other, half + along))
+                    } else {
+                        apart.append((other, plan.borderID(b, l, left: true), half + along))
+                    }
+                }
+            }
             clearBlocks(center: &crossCenter, layers: ordered, breadth: crossBreadth,
-                        minGap: flowchartNodeGap, plan: plan, minWidth: minWidth)
+                        minGap: flowchartNodeGap, plan: plan, minWidth: minWidth, apart: apart)
         }
 
         // Reserve extra main-axis length on a layer boundary that carries a
