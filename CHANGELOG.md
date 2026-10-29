@@ -54,11 +54,18 @@
   the gap's middle. A fan wider than the gap had its outer jogs clamped onto
   the nodes' faces, where they shared a line (from a 7-edge fan in a plain
   gap). A gap now grows until every track fits an arrowhead clear of each
-  face. The issue's 20-edge fan has no doubled line; across 3,000 dense
-  random charts, routes through a node fall from 73 to 22. Those charts grow
-  taller where a fan needs it; one corpus chart, at compact spacing, is 5pt
-  taller. A fan with more edges than its node's face has room for still
-  crowds their ports nearer than a line apart. (#108)
+  face. A fan's tracks apply only where it meets its hub: an edge jogs on
+  its fan-out's track in the gap it leaves by, on its fan-in's in the gap it
+  enters by, and mid-gap in between, so a long fan widens only the gaps
+  beside its ends. A gap that carries no fan keeps the configured layer gap.
+  Where two edges cross in an X between ports that line up, no whole jog
+  track separates them, so the last separation pass also tries half a
+  track. The issue's 20-edge fan has no doubled line; across 3,000 dense
+  random charts, lint errors fall from 232 to 162 and routes through a node
+  from 73 to 20. Those charts grow taller where a fan needs it; one corpus
+  chart, which stays lint-clean, changes. A fan with more edges than its
+  node's face has room for still crowds their ports nearer than a line
+  apart. (#108)
 
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
