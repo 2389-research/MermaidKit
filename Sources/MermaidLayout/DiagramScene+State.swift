@@ -13,7 +13,8 @@ extension DiagramScene {
         // Layout already sizes point-like nodes (start/end dots, choice/fork/
         // join bars) into real rects, so no synthesis is needed here.
         var nodes: [DiagramScene.Node] = layout.nodes.map { node in
-            DiagramScene.Node(id: node.id, frame: node.frame, isContainer: false)
+            // A choice is a diamond: transitions fork at its vertices.
+            DiagramScene.Node(id: node.id, frame: node.frame, isContainer: false, isDecision: node.kind == .choice)
         }
         // A composite state's box legitimately contains its children → container.
         nodes.append(contentsOf: layout.containers.map { container in
