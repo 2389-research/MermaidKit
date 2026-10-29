@@ -47,8 +47,25 @@
   Over 3,000 seeded random charts, doubled pairs fall from 1,246 to 3, and
   over 3,000 with subgraphs from 474 to 0; no chart gains a route through a
   node. Every corpus chart lays out exactly as before, and so does any chart
-  with neither defect. A fan wider than its layer gap can still run out of
-  tracks (#108).
+  with neither defect.
+
+- **A wide fan's jogs fit in their layer gap.** The edges into one node, and
+  the edges out of one, jog on tracks 10pt apart, one per edge, centred on
+  the gap's middle. A fan wider than the gap had its outer jogs clamped onto
+  the nodes' faces, where they shared a line (from a 7-edge fan in a plain
+  gap). A gap now grows until every track fits an arrowhead clear of each
+  face. A fan's tracks apply only where it meets its hub: an edge jogs on
+  its fan-out's track in the gap it leaves by, on its fan-in's in the gap it
+  enters by, and mid-gap in between, so a long fan widens only the gaps
+  beside its ends. A gap that carries no fan keeps the configured layer gap.
+  Where two edges cross in an X between ports that line up, no whole jog
+  track separates them, so the last separation pass also tries half a
+  track. The issue's 20-edge fan has no doubled line; across 3,000 dense
+  random charts, lint errors fall from 232 to 162 and routes through a node
+  from 73 to 20. Those charts grow taller where a fan needs it; one corpus
+  chart, which stays lint-clean, changes. A fan with more edges than its
+  node's face has room for still crowds their ports nearer than a line
+  apart. (#108)
 
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer

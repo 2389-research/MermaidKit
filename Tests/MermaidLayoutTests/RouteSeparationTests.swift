@@ -129,4 +129,50 @@ final class RouteSeparationTests: XCTestCase {
             XCTAssertTrue(found.isEmpty, "trial \(trial): \(found)\n\(source)")
         }
     }
+
+    func testAWideFanJogsInsideItsGap() {
+        // #108: a fan needs a track per edge in the gap it jogs in. Every jog
+        // fits, so each edge leaves and enters its node along the main axis,
+        // and no two share a line. (A fan wider than its node's face has
+        // ports for still crowds them there, nearer than a line apart.)
+        for direction in ["TD", "LR"] {
+            for n in [7, 12, 16] {
+                for (out, label) in [(true, ""), (false, ""), (true, "|x|")] {
+                    let source = "flowchart \(direction)\n" + (0..<n).map {
+                        out ? "  R -->\(label) N\($0)" : "  N\($0) -->\(label) R"
+                    }.joined(separator: "\n")
+                    let found = doubled(source)
+                    XCTAssertTrue(found.isEmpty, "\(direction) \(n) out=\(out) \(label): \(found.count) doubled")
+                    guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+                    for edge in DiagramLayoutEngine.layout(chart, measure: measure).edges where edge.points.count > 2 {
+                        for (a, b) in [(edge.points[0], edge.points[1]),
+                                       (edge.points[edge.points.count - 2], edge.points[edge.points.count - 1])] {
+                            let along = direction == "TD" ? abs(a.y - b.y) : abs(a.x - b.x)
+                            let across = direction == "TD" ? abs(a.x - b.x) : abs(a.y - b.y)
+                            XCTAssertTrue(across < 0.5 && along >= Self.arrowhead - 0.01,
+                                          "\(direction) \(n) out=\(out) \(label): end segment \(a) → \(b)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testALongFanEdgeGrowsOnlyTheGapsBesideItsEnds() {
+        // A fan's tracks matter beside its hub: a fan of 30 out of R into a
+        // chain N0 → … → N29 widens R's gap, and no gap further down, where
+        // only the edges into one node meet.
+        let source = "flowchart TD\n" + (0..<30).map { "  R --> N\($0)" }.joined(separator: "\n")
+            + "\n" + (0..<29).map { "  N\($0) --> N\($0 + 1)" }.joined(separator: "\n")
+        guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+        let frames = Dictionary(uniqueKeysWithValues: DiagramLayoutEngine.layout(chart, measure: measure)
+            .nodes.map { ($0.id, $0.frame) })
+        for i in 0..<28 {
+            let gap = frames["N\(i + 1)"]!.minY - frames["N\(i)"]!.maxY
+            XCTAssertEqual(gap, 56, accuracy: 0.5, "gap below N\(i)")
+        }
+        XCTAssertEqual(doubled(source), [])
+    }
+
+    private static let arrowhead = DiagramLayoutEngine.flowchartArrowheadLen
 }

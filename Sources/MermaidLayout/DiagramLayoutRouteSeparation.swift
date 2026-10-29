@@ -13,7 +13,10 @@ import CoreGraphics
 ///
 /// This pass finds exactly what that rule finds, two segments of different
 /// edges on one line (within 1pt) overlapping by more than 8pt, and moves one
-/// of them aside, a jog track at a time, until it is clear. Only an interior
+/// of them aside, a jog track at a time, until it is clear (or, where no
+/// whole track clears it, half a track: two edges that cross in an X between
+/// aligned ports overlap by their jogs' distance on both columns, so only
+/// jogs nearer than the tolerance clear them). Only an interior
 /// segment moves, so no edge comes off its node, and a move is taken only if
 /// its two neighbours keep their direction, nothing moved runs through a
 /// node, and no new pair is doubled. A chart with no doubled pair is left
@@ -179,22 +182,25 @@ extension DiagramLayoutEngine {
         }
 
         let offsets = (1...16).flatMap { [CGFloat($0) * track, -CGFloat($0) * track] }
+        let halves = (0..<16).flatMap { [(CGFloat($0) + 0.5) * track, -(CGFloat($0) + 0.5) * track] }
         // The best move for any of `candidates`, in order: the first of the
-        // lowest grade; nil if none helps.
+        // lowest grade, by whole tracks before half ones; nil if none helps.
         func bestMove(_ candidates: [Segment]) -> (edge: Int, route: [CGPoint], moved: Int)? {
             var best: (grade: Int, edge: Int, route: [CGPoint], moved: Int)?
-            for c in candidates {
-                let route = routes[c.edge]
-                let doubledNow = overlaps(c.edge, c.index, route).filter { $0 > doubledRunTolerance }.count
-                var blocked: Set<Bool> = []          // signs gone too far
-                for delta in offsets where !blocked.contains(delta > 0) {
-                    switch evaluate(c, by: delta, better: best?.grade ?? 3, doubledNow: doubledNow) {
-                    case .grade(let g, let route, let moved):
-                        best = (g, c.edge, route, moved)
-                        if g == 0 { return (c.edge, route, moved) }
-                    case .immovable: blocked = [true, false]
-                    case .tooFar: blocked.insert(delta > 0)
-                    case .refused: break
+            for offsets in [offsets, halves] where best?.grade != 0 {
+                for c in candidates {
+                    let route = routes[c.edge]
+                    let doubledNow = overlaps(c.edge, c.index, route).filter { $0 > doubledRunTolerance }.count
+                    var blocked: Set<Bool> = []          // signs gone too far
+                    for delta in offsets where !blocked.contains(delta > 0) {
+                        switch evaluate(c, by: delta, better: best?.grade ?? 3, doubledNow: doubledNow) {
+                        case .grade(let g, let route, let moved):
+                            best = (g, c.edge, route, moved)
+                            if g == 0 { return (c.edge, route, moved) }
+                        case .immovable: blocked = [true, false]
+                        case .tooFar: blocked.insert(delta > 0)
+                        case .refused: break
+                        }
                     }
                 }
             }
