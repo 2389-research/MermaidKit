@@ -284,13 +284,15 @@ extension DiagramLayoutEngine {
     static func orderJogsInGaps(
         _ routes: inout [[CGPoint]], gaps: [(lo: CGFloat, hi: CGFloat)],
         horizontal: Bool, captionBends: [Int: (target: CGFloat, source: CGFloat?)] = [:],
-        captioned: Set<Int> = [], track: CGFloat, ignored: Set<Int>
+        captioned: Set<Int> = [], track: CGFloat, near: CGFloat = 8, ignored: Set<Int>
     ) {
         guard !gaps.isEmpty else { return }
         func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
         func main(_ p: CGPoint) -> CGFloat { horizontal ? p.x : p.y }
         struct Jog {
             var edge: Int, at: Int, main: CGFloat, lo: CGFloat, hi: CGFloat, top: CGFloat, bottom: CGFloat
+            /// Where its runs start above the gap and end below it.
+            var upper: CGFloat, lower: CGFloat
             /// For a captioned bend, where it stops short of the gap's upper
             /// end and of its lower end, where it may; it is at one of them.
             var ends: (upper: CGFloat?, lower: CGFloat?)?
@@ -314,7 +316,7 @@ extension DiagramLayoutEngine {
                 guard main(upper) <= gaps[g].lo + 0.5, main(lower) >= gaps[g].hi - 0.5 else { continue }
                 let (top, bottom) = down ? (cross(a), cross(b)) : (cross(b), cross(a))
                 var jog = Jog(edge: e, at: k, main: m, lo: min(cross(a), cross(b)), hi: max(cross(a), cross(b)),
-                              top: top, bottom: bottom)
+                              top: top, bottom: bottom, upper: main(upper), lower: main(lower))
                 if let bend = captionBends[e], pts.count == 4 {
                     // The source is the route's first point.
                     let (upperStop, lowerStop) = down ? (bend.source, bend.target) : (bend.target, bend.source)
@@ -439,9 +441,31 @@ extension DiagramLayoutEngine {
                 ways.append((order, upper, crossings(order), bends.filter { upper.contains($0) != atUpper($0) }.count))
             }
             ways.sort { ($0.crossings, $0.moved) < ($1.crossings, $1.moved) }
+            // Runs of other edges within `near` of a jog's two runs, along
+            // more than the doubled tolerance: they would draw as one, or be
+            // straightened onto one another. A way may not add any.
+            let current = routes
+            func beside(_ j: Int, at t: CGFloat) -> Int {
+                let jog = jogs[j]
+                var count = 0
+                for (c, from, to) in [(jog.top, jog.upper, t), (jog.bottom, t, jog.lower)] {
+                    let (lo, hi) = (min(from, to), max(from, to))
+                    for (e, pts) in current.enumerated() where e != jog.edge && !ignored.contains(e) && pts.count >= 2 {
+                        for (a, b) in zip(pts, pts.dropFirst()) where abs(cross(a) - cross(b)) < 0.5
+                            && abs(cross(a) - c) < near
+                            && min(hi, max(main(a), main(b))) - max(lo, min(main(a), main(b))) > doubledRunTolerance {
+                            count += 1
+                        }
+                    }
+                }
+                return count
+            }
+            func crowds(_ assigned: [Int: CGFloat]) -> Bool {
+                assigned.contains { j, t in abs(t - jogs[j].main) > 0.01 && beside(j, at: t) > beside(j, at: jogs[j].main) }
+            }
             guard let (_, assigned) = ways.lazy.filter({ $0.crossings < before }).compactMap({ way in
-                (assign(way.order, upper: way.upper, keeping: true) ?? assign(way.order, upper: way.upper, keeping: false))
-                    .map { (way, $0) }
+                [true, false].lazy.compactMap { assign(way.order, upper: way.upper, keeping: $0) }
+                    .first { !crowds($0) }.map { (way, $0) }
             }).first else { continue }
             for (j, t) in assigned where abs(t - jogs[j].main) > 0.01 {
                 let jog = jogs[j]

@@ -279,15 +279,15 @@ extension DiagramLayoutEngine {
         // `labelExtent + 2*stub` — we grow the gap up front rather than
         // place-and-hope. Only the boundary the edge actually spans grows.
         var layerGaps = [CGFloat](repeating: flowchartLayerGap, count: max(layerCount, 1))
-        // Captioned edges between the same two nodes run side by side across
-        // their gap, and one may bend near its source to keep them uncrossed
+        // A captioned two-cycle's edges run side by side across their gap,
+        // and one may bend near its source to keep them uncrossed
         // (`orderJogsInGaps`): its gap holds the caption past a bend a jog
         // track from either end.
-        var captionedPairs: [Set<String>: Int] = [:]
+        var captionedLinks: Set<[String]> = []
         let decisions = Set(chart.nodes.filter { $0.shape == .diamond }.map(\.id))
         for edge in chart.edges where !edge.invisible && !(edge.label ?? "").isEmpty && edge.from != edge.to
             && edge.hasArrow && !edge.backArrow && !decisions.contains(edge.from) && !decisions.contains(edge.to) {
-            captionedPairs[[edge.from, edge.to], default: 0] += 1
+            captionedLinks.insert([edge.from, edge.to])
         }
         for edge in chart.edges where !edge.invisible {
             guard let text = edge.label, !text.isEmpty,
@@ -298,7 +298,8 @@ extension DiagramLayoutEngine {
             let boundary = min(lu, lv)
             let headEat = edge.hasArrow ? flowchartArrowheadLen : 0
             let tailEat = edge.backArrow ? flowchartArrowheadLen : 0
-            let either = (captionedPairs[[edge.from, edge.to]] ?? 0) > 1 && !edge.backArrow ? flowchartJogTrack : 0
+            let either = captionedLinks.contains([edge.from, edge.to]) && captionedLinks.contains([edge.to, edge.from])
+                ? flowchartJogTrack : 0
             layerGaps[boundary] = max(
                 layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub + either)
         }
@@ -1583,7 +1584,7 @@ extension DiagramLayoutEngine {
         // The jogs in each layer gap keep their tracks, but take them in the
         // order that crosses least (#112).
         orderJogsInGaps(&routes, gaps: gaps, horizontal: horizontal, captionBends: captionBends,
-                        captioned: Set(captionRuns.keys), track: flowchartJogTrack,
+                        captioned: Set(captionRuns.keys), track: flowchartJogTrack, near: flowchartMinJog,
                         ignored: Set(chart.edges.indices.filter { chart.edges[$0].invisible || geos[$0].selfLoop != nil }))
 
         // Separate coincident main-axis runs: two different edges whose runs
