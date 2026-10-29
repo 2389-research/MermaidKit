@@ -332,7 +332,7 @@ final class RouteSeparationTests: XCTestCase {
 
     private static let hookedEnds = 28
 
-    private static let twoRowCrossings = 129
+    private static let twoRowCrossings = 125
 
     /// Whether two orthogonal routes cross: a run of one passes strictly
     /// through a run of the other.

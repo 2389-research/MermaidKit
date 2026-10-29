@@ -311,6 +311,32 @@ extension DiagramLayoutEngine {
             layerGaps[boundary] = max(
                 layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub + either + bends)
         }
+        // Captioned edges meeting one node across one gap run side by side
+        // off that face. Where their captions, stacked across the flow, are
+        // more than the face can hold, they sit one after another along their
+        // runs instead (the placer staggers them), and the gap holds them all,
+        // with a stub between and beyond, and the bend and arrowhead past them.
+        var faceCaptions: [String: [CGFloat]] = [:], faceBreadth: [String: CGFloat] = [:]
+        var faceGap: [String: Int] = [:]
+        for edge in chart.edges where !edge.invisible && edge.from != edge.to {
+            guard let text = edge.label, !text.isEmpty,
+                  let lu = layerOf[edge.from], let lv = layerOf[edge.to], abs(lu - lv) == 1 else { continue }
+            let sz = measure(text, labelFontSize)
+            let (along, across) = horizontal ? (sz.width + 6, sz.height + 2) : (sz.height + 2, sz.width + 6)
+            for node in [edge.from, edge.to] {
+                let key = "\(node)|\(min(lu, lv))"
+                faceCaptions[key, default: []].append(along)
+                faceBreadth[key, default: 0] += across + 2
+                faceGap[key] = min(lu, lv)
+            }
+        }
+        for (key, alongs) in faceCaptions where alongs.count > 1 {
+            let node = String(key[..<key.lastIndex(of: "|")!])
+            guard let gap = faceGap[key], let breadth = crossBreadth[node], faceBreadth[key]! > breadth else { continue }
+            let stub = DiagramLayoutLinter.minCaptionStub
+            layerGaps[gap] = max(layerGaps[gap], alongs.reduce(0, +) + CGFloat(alongs.count + 1) * stub
+                                 + flowchartEndRun + flowchartArrowheadLen)
+        }
         // A self-loop's bars stand off the node's main-axis faces into the
         // neighbouring layer gaps; keep the gap's middle, where other edges
         // jog, clear of them, and every track a jog takes off that middle for
