@@ -174,5 +174,108 @@ final class RouteSeparationTests: XCTestCase {
         XCTAssertEqual(doubled(source), [])
     }
 
+    func testTwoEdgesCrossingInAnXDontDouble() {
+        // n4 → n0 and n1 → n2 cross in an X between ports that line up, so
+        // their columns overlap by as much as their jogs are apart: no whole
+        // track clears them, half of one does.
+        let found = doubled("""
+            flowchart BT
+              subgraph G0
+                n0
+                n1
+              end
+              subgraph G1
+                subgraph G2
+                  direction RL
+                end
+                n2
+                n3
+                n4
+                n5
+              end
+              n0 --> n3
+              n4 -->|lbl| n3
+              n5 --> n3
+              n3 --> n0
+              n1 --> G1
+              n4 --> n0
+              n1 --> n2
+              n3 --> n5
+              n4 --> n2
+              n3 --> n3
+              n3 --> G2
+            """)
+        XCTAssertTrue(found.isEmpty, "\(found)")
+    }
+
+    func testNudgingARunApartNeverTakesItIntoANode() {
+        // n6 → n2's run between its dummies shared a line with another edge;
+        // pushing it the 20pt apart put it through n0 and n1, and the jog
+        // left before it was straightened away. The other run moves instead.
+        let source = """
+            flowchart LR
+              n0 --> n1
+              n1 --> n4
+              n6 -->|go| n0
+              n7 --> n2
+              n3 --> n0
+              n1 --> n3
+              n7 -->|go| n4
+              n1 --> n5
+              n0 --> n2
+              n3 --> n5
+              n5 -->|go| n3
+              n5 --> n7
+              n7 --> n0
+              n7 --> n2
+              n7 --> n7
+              n6 --> n2
+            """
+        guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+        let through = DiagramLayoutLinter.lint(DiagramScene.from(layout, measure: measure))
+            .filter { $0.kind == "edge-occludes-node" }.map(\.detail)
+        XCTAssertEqual(through, [])
+    }
+
+    func testAFansEdgesNeverCross() {
+        // #110: the edges a node fans out to (or in from) one row jog
+        // farthest-out nearest the node, on each side of it, so none crosses
+        // another.
+        for direction in ["TD", "LR"] {
+            for n in 2...12 {
+                for out in [true, false] {
+                    let source = "flowchart \(direction)\n" + (0..<n).map {
+                        out ? "  R --> N\($0)" : "  N\($0) --> R"
+                    }.joined(separator: "\n")
+                    guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+                    let edges = DiagramLayoutEngine.layout(chart, measure: measure).edges
+                    for i in edges.indices {
+                        for j in edges.indices where i < j {
+                            XCTAssertFalse(Self.cross(edges[i].points, edges[j].points),
+                                           "\(direction) \(n) out=\(out): edges \(i) and \(j) cross")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether two orthogonal routes cross: a run of one passes strictly
+    /// through a run of the other.
+    private static func cross(_ a: [CGPoint], _ b: [CGPoint]) -> Bool {
+        func runs(_ p: [CGPoint]) -> [(CGPoint, CGPoint)] { Array(zip(p, p.dropFirst())) }
+        for s in runs(a) {
+            for t in runs(b) {
+                let (h, v) = abs(s.0.y - s.1.y) < 0.5 ? (s, t) : (t, s)
+                guard abs(h.0.y - h.1.y) < 0.5, abs(v.0.x - v.1.x) < 0.5,
+                      abs(h.0.x - h.1.x) > 0.5, abs(v.0.y - v.1.y) > 0.5 else { continue }
+                if min(h.0.x, h.1.x) < v.0.x, v.0.x < max(h.0.x, h.1.x),
+                   min(v.0.y, v.1.y) < h.0.y, h.0.y < max(v.0.y, v.1.y) { return true }
+            }
+        }
+        return false
+    }
+
     private static let arrowhead = DiagramLayoutEngine.flowchartArrowheadLen
 }

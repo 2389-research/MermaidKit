@@ -56,15 +56,22 @@ final class BackEdgeReproTests: XCTestCase {
         guard let back = layout.edges.first(where: { $0.label == "who" }) else {
             return XCTFail("back-edge lost")
         }
-        // A real path, not a collapsed stub, and the label sits on it.
+        // A real path, not a collapsed stub, and the label sits on it, or
+        // beside it where another edge crosses its run: its box comes within
+        // a label gap of the path.
         XCTAssertGreaterThanOrEqual(back.points.count, 2)
         let extent = back.points.dropFirst().reduce(CGFloat(0)) {
             max($0, hypot($1.x - back.points[0].x, $1.y - back.points[0].y))
         }
         XCTAssertGreaterThan(extent, 20, "back-edge collapsed")
         let lp = try XCTUnwrap(back.labelPoint, "back-edge label has no anchor")
+        let size = measure("who", DiagramLayoutEngine.labelFontSize)
+        let box = CGRect(x: lp.x - (size.width + 6) / 2, y: lp.y - (size.height + 2) / 2,
+                         width: size.width + 6, height: size.height + 2)
         let onPath = zip(back.points, back.points.dropFirst()).contains { a, b in
-            distanceToSegment(lp, a, b) <= 14
+            let dx = max(min(a.x, b.x) - box.maxX, box.minX - max(a.x, b.x), 0)
+            let dy = max(min(a.y, b.y) - box.maxY, box.minY - max(a.y, b.y), 0)
+            return hypot(dx, dy) <= DiagramLayoutEngine.flowchartLabelGap
         }
         XCTAssertTrue(onPath, "label \(lp) does not sit on the back-edge path")
     }

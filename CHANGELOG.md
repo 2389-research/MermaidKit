@@ -67,6 +67,24 @@
   node's face has room for still crowds their ports nearer than a line
   apart. (#108)
 
+- **A fan's edges cross one another far less.** A fan's jogs were stacked
+  in cross order across the whole fan, which suits only one side of its hub:
+  on the other, every two edges that jogged crossed, a plain 4-edge fan
+  included. Each side of a hub now takes its fan's tracks from the one
+  nearest the hub, the edge reaching farthest out first, so a lone fan's
+  edges never cross, and edges through the hub's other face spread over
+  their own tracks. Parallel edges go in the order of their ports, so their
+  places in the fan they leave and the one they enter agree instead of
+  cancelling onto the gap's middle. An edge between adjacent layers still
+  jogs on the sum of its places in two fans, which can reverse one of them
+  (#112). A captioned back edge with one bend now slides the bend toward its
+  arrowhead, as a forward one does, leaving its caption one long run. A run
+  pushed apart from another edge's is no longer pushed into a node. With
+  #108, over 3,000 dense random charts, lint errors fall from 232 on 2.9.1
+  to 79, crossings from 419 to 358, and no two edges share a line; over
+  3,000 with subgraphs, errors fall from 168 to 91. Three corpus charts
+  change, each still lint-clean. (#110)
+
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
 solver, in C4 diagrams and in flowcharts, nested subgraphs and direction
