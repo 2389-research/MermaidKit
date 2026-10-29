@@ -985,7 +985,7 @@ extension DiagramLayoutEngine {
 
     /// How far each edge's jogs move off its layer gaps' middle, so the
     /// edges of one fan (those leaving one node, or entering one) take
-    /// distinct tracks `flowchartJogTrack` apart and never cross (#110). A
+    /// distinct tracks `flowchartJogTrack` apart and don't cross (#110). A
     /// fan of n has n tracks centred on the gap's middle. Its edges on one
     /// side of its hub take them from the one nearest the hub, in order of
     /// how far out they reach, the farthest first, so each one's run along
@@ -996,7 +996,9 @@ extension DiagramLayoutEngine {
     /// long run. Edges that reach as far, such as parallel edges, go in the
     /// order of their ports on the hub, farthest out first, so an edge's
     /// places in the fan it leaves (`out`) and the one it enters (`into`)
-    /// agree. `cross` and `main` give a chain node's centre on each axis, and
+    /// agree. An edge between adjacent layers jogs on the sum of the two in
+    /// one gap, which can reverse a fan's order there (#112). `cross` and
+    /// `main` give a chain node's centre on each axis, and
     /// `port` where an edge's end meets its node's face, if known.
     static func fanJogBias(
         _ chart: Flowchart, chains: [[String]],
