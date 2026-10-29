@@ -315,6 +315,23 @@ final class RouteSeparationTests: XCTestCase {
         if total < Self.twoRowCrossings { print("RATCHET twoRowCrossings can fall to \(total)") }
     }
 
+    func testHookedEndsOnlyFall() {
+        // A ratchet over the dense random charts: ends that bend within an
+        // arrowhead and a step of their node (`edge-end-hooked`).
+        var total = 0
+        for source in randomCharts(seed: 0x510E_527F_ADE6_82D1, count: 1000, subgraphs: false)
+            + randomCharts(seed: 0x9B05_688C_2B3E_6C1F, count: 1000, subgraphs: true) {
+            guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+            let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+            total += DiagramLayoutLinter.lint(DiagramScene.from(layout, measure: measure))
+                .filter { $0.kind == "edge-end-hooked" }.count
+        }
+        XCTAssertLessThanOrEqual(total, Self.hookedEnds, "hooked ends rose")
+        if total < Self.hookedEnds { print("RATCHET hookedEnds can fall to \(total)") }
+    }
+
+    private static let hookedEnds = 28
+
     private static let twoRowCrossings = 129
 
     /// Whether two orthogonal routes cross: a run of one passes strictly
