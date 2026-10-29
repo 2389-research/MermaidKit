@@ -294,9 +294,9 @@ extension DiagramLayoutEngine {
         // A self-loop's bars stand off the node's main-axis faces into the
         // neighbouring layer gaps; keep the gap's middle, where other edges
         // jog, clear of them, and every track a jog takes off that middle for
-        // its fan-in and fan-out (`routeChains`' jog bias, from the same
-        // `jogFanGroups`). A loop in the first or last layer stands off into
-        // the margin instead, which then grows to fit it.
+        // its fan-in and fan-out (`routeChains`' jog bias, `fanJogBias`, from
+        // the same `jogFanGroups`). A loop in the first or last layer stands
+        // off into the margin instead, which then grows to fit it.
         let fans = jogFanGroups(chart, chains: chains)
         var gapJogBias = [CGFloat](repeating: 0, count: max(layerCount, 1))
         for (target, idxs) in fans.into {
@@ -983,6 +983,70 @@ extension DiagramLayoutEngine {
         return (into, outOf)
     }
 
+    /// How far each edge's jogs move off its layer gaps' middle, so the
+    /// edges of one fan (those leaving one node, or entering one) take
+    /// distinct tracks `flowchartJogTrack` apart and never cross (#110). A
+    /// fan of n has n tracks centred on the gap's middle. Its edges on one
+    /// side of its hub take them from the one nearest the hub, in order of
+    /// how far out they reach, the farthest first, so each one's run along
+    /// the main axis stays clear of the others' jogs. The two sides share
+    /// the tracks, as their jogs span cross ranges either side of the hub,
+    /// and so do edges leaving the hub's two faces, which jog in different
+    /// gaps. Jogs stay off the gap's middle, leaving a captioned edge one
+    /// long run. Edges that reach as far, such as parallel edges, go in the
+    /// order of their ports on the hub, farthest out first, so an edge's
+    /// places in the fan it leaves (`out`) and the one it enters (`into`)
+    /// agree. `cross` and `main` give a chain node's centre on each axis, and
+    /// `port` where an edge's end meets its node's face, if known.
+    static func fanJogBias(
+        _ chart: Flowchart, chains: [[String]],
+        cross: (String) -> CGFloat?, main: (String) -> CGFloat?,
+        port: (_ edge: Int, _ isSource: Bool) -> CGFloat? = { _, _ in nil }
+    ) -> (out: [CGFloat], into: [CGFloat]) {
+        struct Side: Hashable { var hub: String; var into: Bool; var forward: Bool; var side: Int }
+        var sides: [Side: [(index: Int, reach: CGFloat, outward: CGFloat)]] = [:]
+        let fans = jogFanGroups(chart, chains: chains)
+        for (into, groups) in [(false, fans.outOf), (true, fans.into)] {
+            for (hub, idxs) in groups {
+                for index in idxs {
+                    let chain = chains[index]
+                    let far = into ? chain[chain.count - 2] : chain[1]
+                    guard let hc = cross(hub), let fc = cross(far), let hm = main(hub), let fm = main(far),
+                          cross(chain[0]) != nil, cross(chain[chain.count - 1]) != nil else { continue }
+                    let reach = fc - hc
+                    let side = reach > 0.5 ? 1 : (reach < -0.5 ? -1 : 0)
+                    let outward = CGFloat(side == 0 ? 1 : side) * ((port(index, !into) ?? hc) - hc)
+                    sides[Side(hub: hub, into: into, forward: into ? hm > fm : fm > hm, side: side),
+                          default: []].append((index, abs(reach), outward))
+                }
+            }
+        }
+        // Edges through one face of the hub jog in one gap, and spread over
+        // as many tracks as there are of them.
+        var faceCount: [Side: Int] = [:]
+        for (key, members) in sides {
+            var face = key; face.side = 0
+            faceCount[face, default: 0] += members.count
+        }
+        var out = [CGFloat](repeating: 0, count: chart.edges.count), into = out
+        for (key, members) in sides {
+            var face = key; face.side = 0
+            let spread = jogSpread(faceCount[face] ?? 1)
+            let ordered = members.sorted {
+                $0.reach != $1.reach ? $0.reach > $1.reach
+                    : $0.outward != $1.outward ? $0.outward > $1.outward : $0.index < $1.index
+            }
+            // Toward the hub is up the main axis for a forward edge leaving
+            // it, down for one entering it, and the reverse for a back edge.
+            let toward: CGFloat = key.into == key.forward ? 1 : -1
+            for (rank, member) in ordered.enumerated() {
+                let track = toward * (spread - CGFloat(rank) * flowchartJogTrack)
+                if key.into { into[member.index] = track } else { out[member.index] = track }
+            }
+        }
+        return (out, into)
+    }
+
     /// How far a fan of `n` edges moves its outermost jog off a gap's middle.
     static func jogSpread(_ n: Int) -> CGFloat { CGFloat(max(n, 1) - 1) / 2 * flowchartJogTrack }
 
@@ -1357,38 +1421,14 @@ extension DiagramLayoutEngine {
             for (i, p) in sorted.enumerated() { portCross[portKey(p.edge, p.isSource)] = pos[i] }
         }
 
-        // Give each edge entering the same target a distinct jog track, ordered
-        // by its approach position, so their bend corners don't nest into one
-        // another (the "double corner" where two edges turn into one box).
-        var jogIn = [CGFloat](repeating: 0, count: chart.edges.count)
-        var jogOut = [CGFloat](repeating: 0, count: chart.edges.count)
-        let fans = jogFanGroups(chart, chains: chains)
-        for idxs in fans.into.values.map({ $0.filter { geos[$0].valid } }) where idxs.count > 1 {
-            let ordered = idxs.sorted {
-                (horizontal ? geos[$0].lastPrev.y : geos[$0].lastPrev.x)
-                    < (horizontal ? geos[$1].lastPrev.y : geos[$1].lastPrev.x)
-            }
-            for (rank, idx) in ordered.enumerated() {
-                jogIn[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
-            }
-        }
-
-        // Symmetric fan-OUT separation: edges LEAVING the same source spread
-        // their jog corners over distinct tracks the same way fan-IN edges do.
-        // Without this, two edges from one node to different next-layer targets
-        // put their cross-axis connector on the SAME midpoint channel, so the
-        // two runs overlap and render as a single doubled wire (`edges-doubled`).
-        // Ordered by the direction each edge heads (its `firstNext` cross), so
-        // the corners stack in approach order rather than nesting.
-        for idxs in fans.outOf.values.map({ $0.filter { geos[$0].valid } }) where idxs.count > 1 {
-            let ordered = idxs.sorted {
-                (horizontal ? geos[$0].firstNext.y : geos[$0].firstNext.x)
-                    < (horizontal ? geos[$1].firstNext.y : geos[$1].firstNext.x)
-            }
-            for (rank, idx) in ordered.enumerated() {
-                jogOut[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
-            }
-        }
+        // Give the edges of each fan distinct jog tracks, so their bend
+        // corners neither nest into one another nor share a line
+        // (`edges-doubled`), and no two of them cross (`fanJogBias`).
+        let (jogOut, jogIn) = fanJogBias(
+            chart, chains: chains,
+            cross: { id in frames[id].map { horizontal ? $0.midY : $0.midX } },
+            main: { id in frames[id].map { horizontal ? $0.midX : $0.midY } },
+            port: { portCross[portKey($0, $1)] })
 
         // A self-loop's polyline: out of the exit face, round the node's
         // cross-far side at `reach`, back into the entry face. A decision has
@@ -1483,7 +1523,7 @@ extension DiagramLayoutEngine {
             let e = chart.edges[index]
             let g = geos[index]
             guard g.valid, g.dummyCenters.isEmpty, !g.srcDiamond, !g.dstDiamond,
-                  e.hasArrow, !e.backArrow, !backEdges.contains(index),
+                  e.hasArrow, !e.backArrow,
                   let text = e.label, !text.isEmpty else { continue }
             var pts = routes[index]
             guard pts.count == 4 else { continue }        // exactly one corner
