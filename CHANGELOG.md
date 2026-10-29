@@ -93,11 +93,13 @@
   single bend may now stop as short of its source as of its target, where
   its caption still fits, and a gap that carries a captioned two-cycle
   (`A -->|go| B`, `B -->|back| A`) holds the caption past a bend at either
-  end. Over 300 seeded random two-row charts, crossings between edges that
-  share a node fall from 186 to 116; over 3,000 dense random charts all
-  crossings fall from 358 to 255, and over 3,000 with subgraphs from 225 to
-  137, with lint errors about level (79 to 81, 91 to 88). Every corpus chart
-  lays out as before. (#112)
+  end. A jog that shares a port with another, as at a decision's vertex,
+  or carries a caption it isn't such a bend for, keeps its track. Over 300
+  seeded random two-row charts, crossings between edges that share a node
+  fall from 186 to 118; over 3,000 dense random charts all crossings fall
+  from 358 to 277, and over 3,000 with subgraphs from 225 to 155, with lint
+  errors about level (79 to 82, 91 to 87). Every corpus chart lays out as
+  before. (#112)
 
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer

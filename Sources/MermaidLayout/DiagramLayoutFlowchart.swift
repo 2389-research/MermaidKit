@@ -284,7 +284,9 @@ extension DiagramLayoutEngine {
         // (`orderJogsInGaps`): its gap holds the caption past a bend a jog
         // track from either end.
         var captionedPairs: [Set<String>: Int] = [:]
-        for edge in chart.edges where !edge.invisible && !(edge.label ?? "").isEmpty && edge.from != edge.to {
+        let decisions = Set(chart.nodes.filter { $0.shape == .diamond }.map(\.id))
+        for edge in chart.edges where !edge.invisible && !(edge.label ?? "").isEmpty && edge.from != edge.to
+            && edge.hasArrow && !edge.backArrow && !decisions.contains(edge.from) && !decisions.contains(edge.to) {
             captionedPairs[[edge.from, edge.to], default: 0] += 1
         }
         for edge in chart.edges where !edge.invisible {
@@ -1580,7 +1582,8 @@ extension DiagramLayoutEngine {
 
         // The jogs in each layer gap keep their tracks, but take them in the
         // order that crosses least (#112).
-        orderJogsInGaps(&routes, gaps: gaps, horizontal: horizontal, captionBends: captionBends, track: flowchartJogTrack,
+        orderJogsInGaps(&routes, gaps: gaps, horizontal: horizontal, captionBends: captionBends,
+                        captioned: Set(captionRuns.keys), track: flowchartJogTrack,
                         ignored: Set(chart.edges.indices.filter { chart.edges[$0].invisible || geos[$0].selfLoop != nil }))
 
         // Separate coincident main-axis runs: two different edges whose runs

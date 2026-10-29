@@ -315,7 +315,7 @@ final class RouteSeparationTests: XCTestCase {
         if total < Self.twoRowCrossings { print("RATCHET twoRowCrossings can fall to \(total)") }
     }
 
-    private static let twoRowCrossings = 116
+    private static let twoRowCrossings = 118
 
     /// Whether two orthogonal routes cross: a run of one passes strictly
     /// through a run of the other.

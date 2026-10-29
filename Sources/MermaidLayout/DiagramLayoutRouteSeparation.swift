@@ -284,7 +284,7 @@ extension DiagramLayoutEngine {
     static func orderJogsInGaps(
         _ routes: inout [[CGPoint]], gaps: [(lo: CGFloat, hi: CGFloat)],
         horizontal: Bool, captionBends: [Int: (target: CGFloat, source: CGFloat?)] = [:],
-        track: CGFloat, ignored: Set<Int>
+        captioned: Set<Int> = [], track: CGFloat, ignored: Set<Int>
     ) {
         guard !gaps.isEmpty else { return }
         func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
@@ -294,6 +294,10 @@ extension DiagramLayoutEngine {
             /// For a captioned bend, where it stops short of the gap's upper
             /// end and of its lower end, where it may; it is at one of them.
             var ends: (upper: CGFloat?, lower: CGFloat?)?
+            /// Stays on its track: a captioned jog that isn't such a bend,
+            /// whose caption was placed for it, or one sharing an end with
+            /// another, whose runs into that end would draw as one.
+            var pinned = false
         }
         var byGap: [Int: [Jog]] = [:]
         for (e, pts) in routes.enumerated() where !ignored.contains(e) && pts.count >= 4 {
@@ -314,17 +318,29 @@ extension DiagramLayoutEngine {
                 if let bend = captionBends[e], pts.count == 4 {
                     // The source is the route's first point.
                     let (upperStop, lowerStop) = down ? (bend.source, bend.target) : (bend.target, bend.source)
-                    jog.ends = (upperStop.map { main(upper) + $0 }, lowerStop.map { main(lower) - $0 })
+                    // Only an end within the gap: a short node's face is short
+                    // of its band's, and a bend off it would run along the band.
+                    func inGap(_ m: CGFloat) -> CGFloat? { gaps[g].lo - 0.5 <= m && m <= gaps[g].hi + 0.5 ? m : nil }
+                    jog.ends = (upperStop.flatMap { inGap(main(upper) + $0) }, lowerStop.flatMap { inGap(main(lower) - $0) })
+                } else if captioned.contains(e) {
+                    jog.pinned = true
                 }
                 byGap[g, default: []].append(jog)
             }
         }
         for g in byGap.keys.sorted() {
-            let jogs = byGap[g]!
+            var jogs = byGap[g]!
             let n = jogs.count
             guard n > 1 else { continue }
             func within(_ c: CGFloat, _ j: Jog) -> Bool { j.lo + 0.5 < c && c < j.hi - 0.5 }
-            func overlaps(_ p: Jog, _ q: Jog) -> Bool { min(p.hi, q.hi) - max(p.lo, q.lo) > 0.5 }
+            // Touching counts: two jogs that meet end to end can't share a track.
+            func overlaps(_ p: Jog, _ q: Jog) -> Bool { min(p.hi, q.hi) - max(p.lo, q.lo) > -0.5 }
+            for p in 0..<n {
+                for q in 0..<n where p != q && jogs[p].edge != jogs[q].edge
+                    && (abs(jogs[p].top - jogs[q].top) < 0.5 || abs(jogs[p].bottom - jogs[q].bottom) < 0.5) {
+                    jogs[p].pinned = true; jogs[p].ends = nil
+                }
+            }
             // cost[p][q]: crossings between p and q with p above q.
             var cost = [[Int]](repeating: [Int](repeating: 0, count: n), count: n)
             var any = false
@@ -351,7 +367,7 @@ extension DiagramLayoutEngine {
                 var improved = true, rounds = 0
                 while improved && rounds < 4 {
                     improved = false; rounds += 1
-                    for x in middle {
+                    for x in middle where !jogs[x].pinned {
                         let rest = middle.filter { $0 != x }
                         // Crossings with x at each place among the rest:
                         // those before it are above it.
@@ -394,8 +410,10 @@ extension DiagramLayoutEngine {
                               floor.map({ at > $0 + 0.5 }) ?? true,
                               earlier.allSatisfy({ jogs[$0].ends == nil || at - assigned[$0]! >= track / 2 }) else { return nil }
                         assigned[j] = at
-                    } else if keeping, floor.map({ jogs[j].main > $0 + 0.5 }) ?? true {
+                    } else if jogs[j].pinned || keeping, floor.map({ jogs[j].main > $0 + 0.5 }) ?? true {
                         assigned[j] = jogs[j].main
+                    } else if jogs[j].pinned {
+                        return nil
                     } else {
                         guard let t = tracks.first(where: { t in floor.map { t > $0 + 0.5 } ?? true }) else { return nil }
                         assigned[j] = t
