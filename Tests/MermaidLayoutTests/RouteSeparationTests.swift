@@ -261,6 +261,62 @@ final class RouteSeparationTests: XCTestCase {
         }
     }
 
+    func testJogsInAGapTakeTheirTracksInTheOrderThatCrossesLeast() {
+        // #112. A captioned two-cycle: each bend stops short of its target,
+        // and the two cross; one bending near its source instead keeps them
+        // apart, its caption still fitting. Then two hubs' fans meeting in
+        // one gap: the sum of an edge's places in both reversed one of them.
+        for source in ["""
+            flowchart LR
+                A[Start] --> B{Decision}
+                B -->|yes| C[Ship it]
+                B -->|nah| D[Bite It]
+                D -->|who| B[Figga]
+            """, """
+            flowchart TD
+              S3 --> T1
+              S0 --> T1
+              S1 --> T0
+              S2 --> T0
+              S0 --> T0
+              S2 --> T1
+            """] {
+            guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+            let edges = DiagramLayoutEngine.layout(chart, measure: measure).edges
+            for i in edges.indices {
+                for j in edges.indices where i < j
+                    && Set([chart.edges[i].from, chart.edges[i].to]).intersection([chart.edges[j].from, chart.edges[j].to]).count > 0 {
+                    XCTAssertFalse(Self.cross(edges[i].points, edges[j].points), "edges \(i) and \(j) cross\n\(source)")
+                }
+            }
+        }
+    }
+
+    func testCrossingsBetweenTwoRowsOnlyFall() {
+        // A ratchet over seeded random two-row charts: the crossings between
+        // edges that share a node, which ordering each gap's jogs removes.
+        var state: UInt64 = 0x6A09_E667_F3BC_C908
+        func next(_ n: Int) -> Int {
+            state ^= state << 13; state ^= state >> 7; state ^= state << 17
+            return Int(state % UInt64(n))
+        }
+        var total = 0
+        for _ in 0..<300 {
+            let (m, n) = (2 + next(4), 2 + next(4))
+            let source = "flowchart TD\n" + (0..<(m + n + next(4))).map { _ in "  S\(next(m)) --> T\(next(n))" }.joined(separator: "\n")
+            guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+            let edges = DiagramLayoutEngine.layout(chart, measure: measure).edges
+            for i in edges.indices {
+                for j in edges.indices where i < j && (chart.edges[i].from == chart.edges[j].from || chart.edges[i].to == chart.edges[j].to)
+                    && Self.cross(edges[i].points, edges[j].points) { total += 1 }
+            }
+        }
+        XCTAssertLessThanOrEqual(total, Self.twoRowCrossings, "crossings between edges that share a node rose")
+        if total < Self.twoRowCrossings { print("RATCHET twoRowCrossings can fall to \(total)") }
+    }
+
+    private static let twoRowCrossings = 129
+
     /// Whether two orthogonal routes cross: a run of one passes strictly
     /// through a run of the other.
     private static func cross(_ a: [CGPoint], _ b: [CGPoint]) -> Bool {

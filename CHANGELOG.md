@@ -75,15 +75,32 @@
   edges never cross, and edges through the hub's other face spread over
   their own tracks. Parallel edges go in the order of their ports, so their
   places in the fan they leave and the one they enter agree instead of
-  cancelling onto the gap's middle. An edge between adjacent layers still
-  jogs on the sum of its places in two fans, which can reverse one of them
-  (#112). A captioned back edge with one bend now slides the bend toward its
+  cancelling onto the gap's middle. A captioned back edge with one bend now slides the bend toward its
   arrowhead, as a forward one does, leaving its caption one long run. A run
   pushed apart from another edge's is no longer pushed into a node. With
   #108, over 3,000 dense random charts, lint errors fall from 232 on 2.9.1
   to 79, crossings from 419 to 358, and no two edges share a line; over
   3,000 with subgraphs, errors fall from 168 to 91. Three corpus charts
   change, each still lint-clean. (#110)
+
+- **Jogs in a gap take their tracks in the order that crosses least.** Two
+  jogs in one layer gap cross only where one's run passes through the
+  other's step, so which is higher decides it. A last ordering pass keeps
+  each gap's tracks, so its room still holds, and moves one jog at a time to
+  wherever in the order it crosses least. That repairs what ranking each fan
+  alone missed: an edge between adjacent layers jogged on the sum of its
+  places in two fans, which could reverse one of them. A captioned edge's
+  single bend may now stop as short of its source as of its target, where
+  its caption still fits, and a gap that carries a captioned two-cycle
+  (`A -->|go| B`, `B -->|back| A`) holds the caption past a bend at either
+  end. A jog that shares a port with another, as at a decision's vertex,
+  or carries a caption it isn't such a bend for, keeps its track, and no
+  move brings a run within a minimum jog of another edge's. Over 300 seeded
+  random two-row charts, crossings between edges that share a node fall
+  from 186 to 129; over 3,000 dense random charts all crossings fall from
+  358 to 281, and over 3,000 with subgraphs from 225 to 160, with lint
+  errors about level (79 to 81, 91 to 89). Every corpus chart lays out as
+  before. (#112)
 
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
