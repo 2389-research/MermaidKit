@@ -14,7 +14,7 @@ set -euo pipefail
 
 # The reference: the byte-identical SceneWire+SVG signature across all platforms.
 # Re-baseline deliberately (and note why) if a toolchain upgrade changes it.
-REFERENCE="${1:-3f94e22042aa59eb}"
+REFERENCE="${1:-b26cce4b4a877478}"
 SDK_ARG="${2:-}"
 
 cd "$(dirname "$0")/../tools/conformance"

@@ -20,12 +20,23 @@ public struct DiagramScene: Sendable, Codable {
         /// A group / subgraph / composite container legitimately *contains*
         /// other nodes, so it is exempt from overlap and occlusion checks.
         public let isContainer: Bool
+        /// A decision: its outline meets its frame only at the middle of
+        /// each side, so an edge leaves from a vertex and may turn at once,
+        /// the diamond's sides falling away from it (exempt from
+        /// `edge-end-hooked`). Not part of the encoded scene.
+        public var isDecision = false
         /// Creates a node; `isContainer` defaults to false (a plain checked box).
         public init(id: String, frame: CGRect, isContainer: Bool = false) {
             self.id = id
             self.frame = frame
             self.isContainer = isContainer
         }
+        /// Creates a node that may be a decision.
+        public init(id: String, frame: CGRect, isContainer: Bool = false, isDecision: Bool) {
+            self.init(id: id, frame: frame, isContainer: isContainer)
+            self.isDecision = isDecision
+        }
+        private enum CodingKeys: String, CodingKey { case id, frame, isContainer }
     }
 
     /// One routed connector between nodes.
@@ -157,6 +168,12 @@ public enum DiagramLayoutLinter {
     /// - `edges-doubled` (flowchart/state): two distinct edges share a collinear
     ///   orthogonal run overlapping by more than a stub, so they draw as one
     ///   doubled connector (e.g. two back edges adopting the same gutter).
+    /// - `edge-end-hooked` (flowchart/state): a route that bends leaves or
+    ///   meets a node on a straight run shorter than an arrowhead and the
+    ///   router's shortest step (`minEndRun`): the bend sits on the node's
+    ///   face, or under the arrowhead, and the end reads as a hook. A loop,
+    ///   on a node or round a box, is exempt (its bars stand off by design),
+    ///   and so is an end at a decision's vertex.
     /// - `nodes-overlap`: two non-container boxes intersect by more than 2pt
     ///   in both axes; full containment is excluded.
     /// - `off-canvas`: a node or label extends outside the canvas (±1pt).
@@ -173,6 +190,10 @@ public enum DiagramLayoutLinter {
     ///   a foreign edge's arrowhead tip. A caption belongs on a clean straight
     ///   stretch with room around it, not a corner, an intersection, or crammed
     ///   against an arrowhead.
+    /// - `label-cut-by-own-edge` (flowchart/state only): a segment of a
+    ///   caption's own route, other than the run nearest its centre that it
+    ///   rides, passes through its frame: the caption straddles a step of its
+    ///   own line and hides where it turns.
     /// - `label-crowds-edge` (flowchart/state only): the straight run an edge
     ///   label sits on is barely longer than the text, leaving under `minStub`
     ///   (10pt) of visible connector on a side — the line all but vanishes.
@@ -185,6 +206,14 @@ public enum DiagramLayoutLinter {
     ///
     /// `isContainer` nodes are exempt from occlusion and overlap (they
     /// legitimately hold other nodes) but still bound the plot for check 5.
+    /// The least connector an edge caption leaves visible either side of it
+    /// on its run (`label-crowds-edge`).
+    public static let minCaptionStub: CGFloat = 10
+
+    /// The shortest straight run a bending route may leave or meet a node
+    /// on: an arrowhead and the router's shortest step (`edge-end-hooked`).
+    public static let minEndRun: CGFloat = DiagramLayoutEngine.flowchartArrowheadLen + DiagramLayoutEngine.flowchartMinJog
+
     public static func lint(_ scene: DiagramScene) -> [LayoutViolation] {
         var out: [LayoutViolation] = []
         let occlusionInset: CGFloat = 3
@@ -294,6 +323,36 @@ public enum DiagramLayoutLinter {
             }
         }
 
+        // 1d. Hooked ends (flowchart/state only). An arrowhead needs a
+        //     straight run to sit on, and a bend needs room off the face it
+        //     leaves: a route that turns within an arrowhead and a stub of
+        //     either end draws a hook, the arrow bent over at the node or the
+        //     line kinked against it. Measured from the polyline alone, so it
+        //     holds whichever end carries the arrowhead.
+        if scene.name == "flowchart" || scene.name == "state" {
+            // The boxes a point lies on or in: a loop starts and ends on one.
+            func boxes(_ p: CGPoint) -> Set<Int> {
+                Set(scene.nodes.indices.filter { scene.nodes[$0].frame.insetBy(dx: -2, dy: -2).contains(p) })
+            }
+            for (ei, edge) in scene.edges.enumerated() where edge.polyline.count >= 3 {
+                let pts = edge.polyline
+                let (start, end) = (boxes(pts[0]), boxes(pts[pts.count - 1]))
+                // A loop: both ends on one box, and on its border if it's a
+                // box round others (an edge between two nodes in it isn't).
+                if start.intersection(end).contains(where: { i in
+                    !scene.nodes[i].isContainer || [pts[0], pts[pts.count - 1]].allSatisfy {
+                        !scene.nodes[i].frame.insetBy(dx: 2, dy: 2).contains($0) } }) { continue }
+                for (which, a, b) in [("leaves", pts[0], pts[1]), ("meets", pts[pts.count - 1], pts[pts.count - 2])]
+                where !boxes(a).contains(where: { scene.nodes[$0].isDecision }) {
+                    let run = hypot(a.x - b.x, a.y - b.y)
+                    if run < minEndRun - 0.01 {
+                        out.append(.init(.error, "edge-end-hooked",
+                            "edge #\(ei)\(edge.label.map { " (\"\($0)\")" } ?? "") \(which) its node on a \(Int(run.rounded()))pt run before bending (min \(Int(minEndRun.rounded())))"))
+                    }
+                }
+            }
+        }
+
         // 2. Node–node overlap (excluding intentional containment).
         let boxes = scene.nodes.filter { !$0.isContainer }
         for i in boxes.indices {
@@ -380,7 +439,7 @@ public enum DiagramLayoutLinter {
         //       barely longer than the text, leaving under `minStub` of visible
         //       connector on a side — the line all but vanishes behind the word.
         if scene.name == "flowchart" || scene.name == "state" {
-            let minStub: CGFloat = 10
+            let minStub = minCaptionStub
             // A caption must also breathe around an ARROWHEAD — a foreign edge's
             // head end (its last polyline point). A label crammed against an
             // arrowhead reads as noise even when it clears the shaft, so the same
@@ -414,6 +473,23 @@ public enum DiagramLayoutLinter {
                 for bend in bends where probe.contains(bend.p) {
                     out.append(.init(.error, "label-on-fixture",
                         "label \"\(label.text)\" sits on a bend of edge #\(bend.edge) at (\(Int(bend.p.x)),\(Int(bend.p.y)))"))
+                }
+                // Across a step of its own route: the caption rides one run,
+                // and any other segment of its edge passing through it hides
+                // where the line turns (a corner it straddles without covering).
+                if let own = label.anchorEdge, own < scene.edges.count {
+                    let pts = scene.edges[own].polyline
+                    let center = CGPoint(x: label.frame.midX, y: label.frame.midY)
+                    let segs = Array(zip(pts, pts.dropFirst()))
+                    if let host = segs.indices.min(by: { distanceToSegment(center, segs[$0].0, segs[$0].1)
+                                                        < distanceToSegment(center, segs[$1].0, segs[$1].1) }) {
+                        let inner = label.frame.insetBy(dx: 1, dy: 1)
+                        for (k, seg) in segs.enumerated() where k != host && segmentInsideLength(seg.0, seg.1, inner) > 2 {
+                            out.append(.init(.error, "label-cut-by-own-edge",
+                                "label \"\(label.text)\" is cut by its own edge's segment \(k), off the run it rides"))
+                            break
+                        }
+                    }
                 }
                 // On a crossing/junction of two edges.
                 for x in crossings where probe.contains(x) {
@@ -570,6 +646,15 @@ public enum DiagramLayoutLinter {
     /// lying exactly along a border counts at full length — callers wanting
     /// interior-only penetration must inset the rect first (the linter insets
     /// by its occlusion tolerance before measuring).
+    /// Distance from `p` to the segment `a`–`b`.
+    static func distanceToSegment(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let len2 = dx * dx + dy * dy
+        guard len2 > 0 else { return hypot(p.x - a.x, p.y - a.y) }
+        let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+
     static func segmentInsideLength(_ a: CGPoint, _ b: CGPoint, _ r: CGRect) -> CGFloat {
         let dx = b.x - a.x, dy = b.y - a.y
         var t0: CGFloat = 0, t1: CGFloat = 1

@@ -102,6 +102,31 @@
   errors about level (79 to 81, 91 to 89). Every corpus chart lays out as
   before. (#112)
 
+- **No edge ends on a hook.** A route that bent within an arrowhead of a
+  node drew a hook: the arrow bent over at its target, or the line kinked
+  against the face it left. A captioned bend stopped exactly an arrowhead
+  short of its target, a fan's outer tracks sat an arrowhead from the
+  faces, and later passes nudged, straightened and grid-snapped bends
+  closer still. A new linter rule, `edge-end-hooked`, now finds every such
+  end from the geometry alone: a bending route must leave and meet its
+  nodes on a straight run of at least an arrowhead and the router's
+  shortest step (19.5pt). Loops, and a decision's vertex, where branches
+  fork at once, are exempt. The layout keeps to it: fan tracks and caption
+  bends stop that far from a face, a captioned bend's gap holds the extra
+  room, separating, straightening and snapping never shorten an end run
+  below it, and a captioned bend that would cross another may go back to
+  its fan track, or stop as short of its source where its caption still
+  fits. Over 3,000 dense random charts, hooked ends fall from 2,530 to 60,
+  and over 3,000 with subgraphs from 1,677 to 87; edge crossings fall
+  too (281 to 258, 160 to 135), and captions on a bend or crossing (30 to
+  6, 36 to 5). A second new rule, `label-cut-by-own-edge`, finds a caption
+  that straddles a step of its own route without covering either corner.
+  Captions that meet one node across one gap and can't stack across the
+  flow, more of them than its face holds, sit one after another along their
+  runs, and their gap holds them all: captions short of a full stub stay
+  about level (36 to 34, 19 to 37), and on a 1,500-chart mixed-shape probe
+  fall from 161 to 112.
+
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
 solver, in C4 diagrams and in flowcharts, nested subgraphs and direction

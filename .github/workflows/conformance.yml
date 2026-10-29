@@ -16,7 +16,7 @@ permissions:
 
 env:
   # The reference signature; every platform must match it.
-  MMK_CONFORMANCE_REF: "3f94e22042aa59eb"
+  MMK_CONFORMANCE_REF: "b26cce4b4a877478"
 
 jobs:
   macos:

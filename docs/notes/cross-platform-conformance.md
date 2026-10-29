@@ -20,7 +20,7 @@ Run it on each platform and compare the `COMBINED` line. `scripts/check-conforma
 asserts it equals the pinned reference; the `conformance.yml` workflow runs it on
 macOS, Linux, WebAssembly, and Windows as a standing gate.
 
-**Verified byte-identical — `COMBINED 3f94e22042aa59eb`:**
+**Verified byte-identical — `COMBINED 3f94e22042aa59eb`** (through 2.9.1):
 
 | Platform | libc | Foundation | how it was run |
 |----------|------|------------|----------------|
@@ -29,6 +29,12 @@ macOS, Linux, WebAssembly, and Windows as a standing gate.
 | Android | Bionic | swift-corelibs | cross-compiled, run on an android-34 emulator via `adb` |
 | WebAssembly | wasi-libc (musl) | swift-corelibs | `wasm32-unknown-wasi` SDK, run under WasmKit |
 | Windows | MSVC CRT | swift-corelibs | `windows-latest` CI runner |
+
+**Re-baselined to `COMBINED b26cce4b4a877478`** for 2.10.0: routing that
+orders each layer gap's jogs to cross least (#113) moves edges in the
+harness's charts. The new value is the same
+on macOS, Linux (glibc), WebAssembly and Windows in the `conformance.yml` runs;
+Android was not re-run.
 
 Three distinct libc implementations, two Foundation implementations — all identical.
 

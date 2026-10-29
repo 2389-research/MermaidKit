@@ -464,7 +464,8 @@ extension DiagramLayoutEngine {
         let before = edges.map(\.points)
         var routes = before
         separateDoubledRuns(&routes, fixed: loops, ignored: Set(edges.indices.filter { edges[$0].invisible }),
-                            obstacles: frames, track: flowchartJogTrack)
+                            obstacles: frames, track: flowchartJogTrack, endRun: flowchartEndRun,
+                            decisions: nodes.filter { $0.shape == .diamond }.map(\.frame))
         return edges.indices.map { i in
             let e = edges[i]
             guard routes[i] != before[i] else { return e }
