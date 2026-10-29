@@ -1,7 +1,7 @@
 # MermaidKit — design context pack
 
 You are designing a brochure site (GitHub Pages) for MermaidKit. Everything
-in this pack was verified against the code at v2.9.1 on 2026-10-27. Cite
+in this pack was verified against the code at v2.10.0 on 2026-10-29. Cite
 facts as written; do not embellish, round up, or invent. Where a claim
 feels thin, use fewer claims — the diagrams do the impressing.
 
@@ -16,7 +16,7 @@ SVG output, VoiceOver descriptions for every diagram, themed with a single
 value. MIT license.
 
 - Repo: https://github.com/2389-research/MermaidKit
-- Latest release: v2.9.1
+- Latest release: v2.10.0
 - Site target: https://2389-research.github.io/MermaidKit/ — a static
   `index.html` placed in the repo's `docs/` folder (GitHub Pages serves
   `docs/` from `main`; reference images relatively as `images/...`)
@@ -90,7 +90,7 @@ surface (all verified names):
 
 Install:
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.9.1")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.10.0")
 ```
 
 ### 3. Built to meet people where they are
@@ -165,7 +165,7 @@ draw as labelled rectangles; markdown strings; HTML styling in labels
 FontAwesome icons; click/animation interactivity; mermaid.js
 theming directives (theming is `DiagramTheme`'s job).
 
-## Numbers the site may cite (verified 2026-10-19; test and oracle counts 2026-10-27)
+## Numbers the site may cite (verified 2026-10-19; test and oracle counts 2026-10-29)
 
 - **30** diagram types. **Zero** dependencies by default (Linux's Silica
   raster is an opt-in trait). Zero JavaScript, no WebView.
@@ -177,7 +177,7 @@ theming directives (theming is `DiagramTheme`'s job).
 - Parse alone: 0.05–1.9 ms per fixture.
 - Input caps mirror mermaid.js: 50,000-character sources, 500 flowchart
   edges; oversized input returns nil fast.
-- 548 tests in CI on macOS (516 on Linux), including: the geometry linter over all 30 fixtures,
+- 578 tests in CI on macOS (546 on Linux), including: the geometry linter over all 30 fixtures,
   per-fixture edge-length budgets, scene-diff edit-stability tests,
   adversarial input suite, rasterized render benchmarks, PDF export
   validation for all 30 types, alt-text determinism for all 30 types,
@@ -196,17 +196,17 @@ Each exists in light and dark; serve both via `<picture>` with
 dark variants).
 
 **Hero** — MermaidKit's own render pipeline as a sankey (~2200px wide):
-- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.9.1/docs/images/hero-light.png
-- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.9.1/docs/images/hero-dark.png
+- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.10.0/docs/images/hero-light.png
+- https://raw.githubusercontent.com/2389-research/MermaidKit/v2.10.0/docs/images/hero-dark.png
 
 **Dynamic Type** — the same flowchart at the default text size and at 1.35×
 and 2× (`textscale-1.png`, `textscale-1.35.png`, `textscale-2.png`, each with
 a `-dark` variant), showing text growing with the boxes around it while lines
 keep their weight:
-`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.9.1/docs/images/textscale-<k>.png`
+`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.10.0/docs/images/textscale-<k>.png`
 
 **Per-type gallery** (30 × 2, max 2000px wide). Pattern:
-`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.9.1/docs/images/types/<name>.png`
+`https://raw.githubusercontent.com/2389-research/MermaidKit/v2.10.0/docs/images/types/<name>.png`
 
 | name | the self-portrait shows |
 |---|---|
@@ -274,7 +274,7 @@ let pdf = MermaidRenderer.pdfData(source: source, theme: theme)
 
 Install:
 ```swift
-.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.9.1")
+.package(url: "https://github.com/2389-research/MermaidKit.git", from: "2.10.0")
 ```
 
 ## Voice (non-negotiable)
