@@ -18,7 +18,7 @@ extension DiagramScene {
                  frame: container.frame, isContainer: true)
         }
         nodes.append(contentsOf: layout.nodes.map { node in
-            Node(id: node.id, frame: node.frame, isContainer: false)
+            Node(id: node.id, frame: node.frame, isContainer: false, isDecision: node.shape == .diamond)
         })
         // Invisible links (`~~~`) aren't drawn, so there's nothing to check.
         let edges = layout.edges.filter { !$0.invisible }

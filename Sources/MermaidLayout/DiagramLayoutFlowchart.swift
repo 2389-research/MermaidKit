@@ -25,6 +25,10 @@ extension DiagramLayoutEngine {
     /// jog — below the port/track separations (20/10) it can never be one, so
     /// `straightenJogs` collapses it onto a straight run.
     static let flowchartMinJog: CGFloat = 8
+    /// The shortest straight run a bending route leaves or meets a node on:
+    /// an arrowhead and the shortest step, so no end reads as a hook
+    /// (`edge-end-hooked`).
+    static let flowchartEndRun: CGFloat = flowchartArrowheadLen + flowchartMinJog
     /// Minimum visible connector stub on each side of an edge label: a labeled
     /// edge reserves `labelExtent + 2*stub` along its straight run so the line
     /// always reads on both sides of the caption. Shared by BOTH routers — the
@@ -281,8 +285,8 @@ extension DiagramLayoutEngine {
         var layerGaps = [CGFloat](repeating: flowchartLayerGap, count: max(layerCount, 1))
         // A captioned two-cycle's edges run side by side across their gap,
         // and one may bend near its source to keep them uncrossed
-        // (`orderJogsInGaps`): its gap holds the caption past a bend a jog
-        // track from either end.
+        // (`orderJogsInGaps`): its gap holds the caption past that bend too,
+        // an arrowhead further from the one at its end.
         var captionedLinks: Set<[String]> = []
         let decisions = Set(chart.nodes.filter { $0.shape == .diamond }.map(\.id))
         for edge in chart.edges where !edge.invisible && !(edge.label ?? "").isEmpty && edge.from != edge.to
@@ -299,9 +303,13 @@ extension DiagramLayoutEngine {
             let headEat = edge.hasArrow ? flowchartArrowheadLen : 0
             let tailEat = edge.backArrow ? flowchartArrowheadLen : 0
             let either = captionedLinks.contains([edge.from, edge.to]) && captionedLinks.contains([edge.to, edge.from])
-                ? flowchartJogTrack : 0
+                ? flowchartArrowheadLen : 0
+            // One that bends stops an end run short of its arrowhead, not just
+            // the arrowhead, so it isn't a hook: its gap holds that too.
+            let bends = edge.hasArrow && abs((crossCenter[edge.from] ?? 0) - (crossCenter[edge.to] ?? 0)) > 0.5
+                ? flowchartEndRun - flowchartArrowheadLen : 0
             layerGaps[boundary] = max(
-                layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub + either)
+                layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub + either + bends)
         }
         // A self-loop's bars stand off the node's main-axis faces into the
         // neighbouring layer gaps; keep the gap's middle, where other edges
@@ -324,12 +332,12 @@ extension DiagramLayoutEngine {
                 }
             }
         }
-        // Every one of those tracks fits in its gap, an arrowhead clear of
-        // each face (#108). A fan's tracks are spaced by its rank in cross
+        // Every one of those tracks fits in its gap, an end run clear of each
+        // face (#108): no jog bends under an arrowhead or against a node. A fan's tracks are spaced by its rank in cross
         // order, which growing a gap leaves alone, so a gap wide enough here
         // never clamps a jog onto a node's face, where fans would share it.
         for gap in gapJogBias.indices where gap < layerGaps.count && gapJogBias[gap] > 0 {
-            layerGaps[gap] = max(layerGaps[gap], 2 * (gapJogBias[gap] + flowchartArrowheadLen))
+            layerGaps[gap] = max(layerGaps[gap], 2 * (gapJogBias[gap] + flowchartEndRun))
         }
         var leadPad: CGFloat = 0, tailPad: CGFloat = 0
         for loop in selfLoops.values {
@@ -437,7 +445,7 @@ extension DiagramLayoutEngine {
             captionRuns: Dictionary(uniqueKeysWithValues: chart.edges.indices.compactMap { index in
                 guard let text = chart.edges[index].label, !text.isEmpty else { return nil }
                 let sz = measure(text, labelFontSize)
-                return (index, (horizontal ? sz.width + 6 : sz.height + 2) + 2 * edgeLabelStub)
+                return (index, (horizontal ? sz.width + 6 : sz.height + 2) + 2 * DiagramLayoutLinter.minCaptionStub)
             })
         )
         // An edge naming an unfolded subgraph ranks with one of its nodes,
@@ -1538,11 +1546,12 @@ extension DiagramLayoutEngine {
         // rides the longer half, so even though the gap was reserved to host
         // `arrowheadLen + labelExtent + 2*stub`, HALF of it can leave under the
         // minimum stub (`label-crowds-edge`). Slide the lone bend toward the
-        // arrowhead end, leaving just the arrowhead's length past it, so the
-        // arrow-FREE half spans the whole reserved run and the caption breathes.
+        // arrowhead end, leaving an end run past it (an arrowhead and the
+        // shortest step, so it isn't a hook), so the arrow-free half spans
+        // nearly the whole reserved run and the caption breathes.
         // Only unlabeled-neutral shapes with a plain one-corner route qualify;
         // diamonds (vertex ports) and multi-corner/dummy routes are left alone.
-        var captionBends: [Int: (target: CGFloat, source: CGFloat?)] = [:]
+        var captionBends: [Int: (natural: CGFloat, source: CGFloat?)] = [:]
         for index in chart.edges.indices {
             let e = chart.edges[index]
             let g = geos[index]
@@ -1553,8 +1562,10 @@ extension DiagramLayoutEngine {
             guard pts.count == 4 else { continue }        // exactly one corner
             // A looped target's bars stand off its entry face, so there the
             // bend stops a jog track short of them instead.
-            let stop = max(flowchartArrowheadLen,
+            let stop = max(flowchartEndRun,
                            loopExcursion[g.chain[g.chain.count - 1]].map { $0 + flowchartJogTrack } ?? 0)
+            // Where the bend was, on its fan's track: it may go back there.
+            let natural = horizontal ? pts[1].x : pts[1].y
             if horizontal {
                 let x0 = pts[0].x, x3 = pts[3].x
                 guard abs(pts[1].y - pts[2].y) > 0.5,     // it really jogs
@@ -1569,16 +1580,12 @@ extension DiagramLayoutEngine {
                 pts[1].y = jy; pts[2].y = jy
             }
             routes[index] = pts
-            // Its bend may as well stop as short of the source, where the
-            // caption still fits on the run past it, before the arrowhead, or
-            // where it fits neither way. With no arrowhead there, a jog track
-            // clears the face.
-            let sourceStop = max(e.backArrow ? flowchartArrowheadLen : flowchartJogTrack,
-                                 loopExcursion[g.chain[0]].map { $0 + flowchartJogTrack } ?? 0)
+            // It may as well stop as short of its source, where the caption
+            // still fits on the run past it, before the arrowhead.
+            let sourceStop = max(flowchartEndRun, loopExcursion[g.chain[0]].map { $0 + flowchartJogTrack } ?? 0)
             let span = horizontal ? abs(pts[3].x - pts[0].x) : abs(pts[3].y - pts[0].y)
-            let need = captionRuns[index] ?? .infinity
-            captionBends[index] = (stop, span - sourceStop - flowchartArrowheadLen >= need - 0.5 || span - stop < need - 0.5
-                                         ? sourceStop : nil)
+            let fits = span - sourceStop - flowchartArrowheadLen >= (captionRuns[index] ?? .infinity) - 0.5
+            captionBends[index] = (natural, fits ? sourceStop : nil)
         }
 
         // The jogs in each layer gap keep their tracks, but take them in the
@@ -1606,7 +1613,9 @@ extension DiagramLayoutEngine {
         // cell before it resumes straight. Collapse that tiny jog so the run is
         // one straight stretch, never introducing a step where the ends could be
         // joined straight.
-        straightenJogs(&routes, horizontal: horizontal, maxJog: flowchartMinJog)
+        let decisions = chart.nodes.filter { $0.shape == .diamond }.compactMap { frames[$0.id] }
+        straightenJogs(&routes, horizontal: horizontal, maxJog: flowchartMinJog, endRun: flowchartEndRun,
+                       decisions: decisions)
 
         // A back edge that still threads UP THROUGH the node stack (a multi-bend
         // zigzag re-entering the occupied column, with its label crossing the
@@ -1640,7 +1649,8 @@ extension DiagramLayoutEngine {
         // Last, no two edges on one line: whatever still draws doubled moves
         // aside a track at a time, self-loops and nodes standing fast.
         separateDoubledRuns(&routes, fixed: Set(loops), ignored: Set(hidden),
-                            obstacles: chart.nodes.compactMap { frames[$0.id] }, track: flowchartJogTrack)
+                            obstacles: chart.nodes.compactMap { frames[$0.id] }, track: flowchartJogTrack,
+                            endRun: flowchartEndRun, decisions: decisions)
 
         var placedEdges: [FlowchartLayout.PlacedEdge] = []
         var crossLimit = flowchartMargin + crossExtent
@@ -1942,7 +1952,8 @@ extension DiagramLayoutEngine {
     /// end is an interior bend is moved, so a run anchored on a node border never
     /// detaches; when both are movable the longer run's track wins (least visual
     /// change). A few passes let a collapse that exposes another tiny jog settle.
-    static func straightenJogs(_ routes: inout [[CGPoint]], horizontal: Bool, maxJog: CGFloat) {
+    static func straightenJogs(_ routes: inout [[CGPoint]], horizontal: Bool, maxJog: CGFloat, endRun: CGFloat = 0,
+                               decisions: [CGRect] = []) {
         func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
         func main(_ p: CGPoint) -> CGFloat { horizontal ? p.x : p.y }
         func setCross(_ p: CGPoint, _ c: CGFloat) -> CGPoint {
@@ -1970,6 +1981,17 @@ extension DiagramLayoutEngine {
                     else if afterMovable { moveAfter = true }
                     else if beforeMovable { moveAfter = false }
                     else { continue }                              // neither: can't straighten safely
+                    // Nor where that shortens a run off a node below an end
+                    // run: the end would read as a hook (but a decision's
+                    // branches fork at its vertex, and may at once).
+                    func hooks(_ tip: CGPoint, _ old: CGPoint, _ new: CGPoint) -> Bool {
+                        guard !decisions.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(tip) }) else { return false }
+                        let was = hypot(old.x - tip.x, old.y - tip.y), now = hypot(new.x - tip.x, new.y - tip.y)
+                        return now < was && now < endRun
+                    }
+                    if moveAfter, k + 2 == pts.count - 2,
+                       hooks(pts[pts.count - 1], d, setCross(d, cross(b))) { continue }
+                    if !moveAfter, k - 1 == 1, hooks(pts[0], a, setCross(a, cross(c))) { continue }
                     if moveAfter {                                 // after-run onto the before track
                         pts[k + 1] = setCross(c, cross(b))
                         pts[k + 2] = setCross(d, cross(b))

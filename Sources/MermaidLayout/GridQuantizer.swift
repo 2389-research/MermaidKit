@@ -71,10 +71,31 @@ enum GridQuantizer {
             return projectToPerimeter(p, snapped[best])
         }
 
+        // Snapping a bend, and growing the box it leaves, can shorten the run
+        // off a node; where that leaves it under an end run (and under what
+        // it was), the bend steps a cell further out, the jog with it, so no
+        // end turns into a hook (`edge-end-hooked`).
+        func keepEndRuns(_ pts: inout [CGPoint], was original: [CGPoint]) {
+            let n = pts.count
+            guard n >= 4, original.count == n else { return }
+            for (tip, bend, next) in [(0, 1, 2), (n - 1, n - 2, n - 3)] {
+                let along = abs(original[tip].x - original[bend].x) < 0.5 // the run is vertical
+                func run(_ p: [CGPoint]) -> CGFloat { along ? abs(p[bend].y - p[tip].y) : abs(p[bend].x - p[tip].x) }
+                let want = Swift.min(run(original), DiagramLayoutEngine.flowchartEndRun)
+                let out: CGFloat = along ? (pts[bend].y >= pts[tip].y ? u : -u) : (pts[bend].x >= pts[tip].x ? u : -u)
+                var steps = 0
+                while run(pts) < want - 0.01, steps < 4 {
+                    if along { pts[bend].y += out; pts[next].y += out } else { pts[bend].x += out; pts[next].x += out }
+                    steps += 1
+                }
+            }
+        }
+
         let edges = layout.edges.map { e -> FlowchartLayout.PlacedEdge in
             let start = reanchor(e.start), end = reanchor(e.end)
             var pts = e.points.map(snapPoint)
             if !pts.isEmpty { pts[0] = start; pts[pts.count - 1] = end }
+            keepEndRuns(&pts, was: e.points)
             return FlowchartLayout.PlacedEdge(
                 start: start, end: end, points: pts, label: e.label, dashed: e.dashed,
                 hasArrow: e.hasArrow, backArrow: e.backArrow, head: e.head, thick: e.thick,
