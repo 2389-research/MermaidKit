@@ -158,5 +158,21 @@ final class RouteSeparationTests: XCTestCase {
         }
     }
 
+    func testALongFanEdgeGrowsOnlyTheGapsBesideItsEnds() {
+        // A fan's tracks matter beside its hub: a fan of 30 out of R into a
+        // chain N0 → … → N29 widens R's gap, and no gap further down, where
+        // only the edges into one node meet.
+        let source = "flowchart TD\n" + (0..<30).map { "  R --> N\($0)" }.joined(separator: "\n")
+            + "\n" + (0..<29).map { "  N\($0) --> N\($0 + 1)" }.joined(separator: "\n")
+        guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+        let frames = Dictionary(uniqueKeysWithValues: DiagramLayoutEngine.layout(chart, measure: measure)
+            .nodes.map { ($0.id, $0.frame) })
+        for i in 0..<28 {
+            let gap = frames["N\(i + 1)"]!.minY - frames["N\(i)"]!.maxY
+            XCTAssertEqual(gap, 56, accuracy: 0.5, "gap below N\(i)")
+        }
+        XCTAssertEqual(doubled(source), [])
+    }
+
     private static let arrowhead = DiagramLayoutEngine.flowchartArrowheadLen
 }

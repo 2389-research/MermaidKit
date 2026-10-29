@@ -302,16 +302,21 @@ extension DiagramLayoutEngine {
         for (target, idxs) in fans.into {
             for index in idxs {
                 let source = chains[index][0]
-                guard let lu = layerOf[source], let lv = layerOf[target] else { continue }
-                let spread = jogSpread(idxs.count) + jogSpread(fans.outOf[source]?.count ?? 1)
-                for gap in min(lu, lv)..<max(lu, lv) { gapJogBias[gap] = max(gapJogBias[gap], spread) }
+                guard let lu = layerOf[source], let lv = layerOf[target], lu != lv else { continue }
+                // The fan-out's tracks in the gap the edge leaves by, the
+                // fan-in's in the one it enters by.
+                let into = jogSpread(idxs.count), out = jogSpread(fans.outOf[source]?.count ?? 1)
+                let (first, last) = lu < lv ? (lu, lv - 1) : (lu - 1, lv)
+                for (gap, spread) in first == last ? [(first, out + into)] : [(first, out), (last, into)] {
+                    gapJogBias[gap] = max(gapJogBias[gap], spread)
+                }
             }
         }
         // Every one of those tracks fits in its gap, an arrowhead clear of
         // each face (#108). A fan's tracks are spaced by its rank in cross
         // order, which growing a gap leaves alone, so a gap wide enough here
         // never clamps a jog onto a node's face, where fans would share it.
-        for gap in gapJogBias.indices where gap < layerGaps.count {
+        for gap in gapJogBias.indices where gap < layerGaps.count && gapJogBias[gap] > 0 {
             layerGaps[gap] = max(layerGaps[gap], 2 * (gapJogBias[gap] + flowchartArrowheadLen))
         }
         var leadPad: CGFloat = 0, tailPad: CGFloat = 0
@@ -1355,7 +1360,8 @@ extension DiagramLayoutEngine {
         // Give each edge entering the same target a distinct jog track, ordered
         // by its approach position, so their bend corners don't nest into one
         // another (the "double corner" where two edges turn into one box).
-        var jogBias = [CGFloat](repeating: 0, count: chart.edges.count)
+        var jogIn = [CGFloat](repeating: 0, count: chart.edges.count)
+        var jogOut = [CGFloat](repeating: 0, count: chart.edges.count)
         let fans = jogFanGroups(chart, chains: chains)
         for idxs in fans.into.values.map({ $0.filter { geos[$0].valid } }) where idxs.count > 1 {
             let ordered = idxs.sorted {
@@ -1363,7 +1369,7 @@ extension DiagramLayoutEngine {
                     < (horizontal ? geos[$1].lastPrev.y : geos[$1].lastPrev.x)
             }
             for (rank, idx) in ordered.enumerated() {
-                jogBias[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
+                jogIn[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
             }
         }
 
@@ -1380,7 +1386,7 @@ extension DiagramLayoutEngine {
                     < (horizontal ? geos[$1].firstNext.y : geos[$1].firstNext.x)
             }
             for (rank, idx) in ordered.enumerated() {
-                jogBias[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
+                jogOut[idx] += CGFloat(rank) * flowchartJogTrack - jogSpread(ordered.count)
             }
         }
 
@@ -1453,7 +1459,15 @@ extension DiagramLayoutEngine {
                 tail = [attach(g.chain[g.chain.count - 1], cross: cross, rightOrBottom: g.enterBottom, isSource: false)]
             }
 
-            routes[index] = routePolyline(head + g.dummyCenters + tail, horizontal: horizontal, jogBias: jogBias[index])
+            // A fan's tracks matter where it meets its hub: an edge jogs on
+            // its fan-out's track in the gap it leaves by, on its fan-in's in
+            // the gap it enters by, and mid-gap between its long-edge dummies.
+            let first = head.count - 1, last = first + g.dummyCenters.count
+            let (out, into) = (jogOut[index], jogIn[index])
+            routes[index] = routePolyline(head + g.dummyCenters + tail, horizontal: horizontal, jogBias: out + into,
+                                          stepBias: last == first ? nil : { step in
+                step == first ? out : step == last ? into : (first < step && step < last ? 0 : out + into)
+            })
         }
 
         // A labeled adjacent-layer edge whose route makes a single jog splits the
@@ -1588,12 +1602,16 @@ extension DiagramLayoutEngine {
     /// gaps between layers, never across a node's row. `jogBias` shifts each jog
     /// off the gap midpoint (clamped to stay in the gap) so concurrent edges
     /// crossing the same gap can take distinct tracks and their bend corners
-    /// don't nest. Collinear runs are merged so straight edges stay two-point.
-    static func routePolyline(_ waypoints: [CGPoint], horizontal: Bool, jogBias: CGFloat = 0) -> [CGPoint] {
+    /// don't nest; `stepBias`, when given, sets it for each step between
+    /// waypoints instead. Collinear runs are merged so straight edges stay
+    /// two-point.
+    static func routePolyline(_ waypoints: [CGPoint], horizontal: Bool, jogBias: CGFloat = 0,
+                              stepBias: ((Int) -> CGFloat)? = nil) -> [CGPoint] {
         guard waypoints.count >= 2 else { return waypoints }
         var pts: [CGPoint] = [waypoints[0]]
         for i in 0..<(waypoints.count - 1) {
             let a = waypoints[i], b = waypoints[i + 1]
+            let jogBias = stepBias?(i) ?? jogBias
             if horizontal {
                 if abs(a.y - b.y) > 0.5 {
                     let jx = min(max((a.x + b.x) / 2 + jogBias, min(a.x, b.x)), max(a.x, b.x))
