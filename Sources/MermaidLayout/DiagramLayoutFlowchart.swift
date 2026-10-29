@@ -279,6 +279,14 @@ extension DiagramLayoutEngine {
         // `labelExtent + 2*stub` — we grow the gap up front rather than
         // place-and-hope. Only the boundary the edge actually spans grows.
         var layerGaps = [CGFloat](repeating: flowchartLayerGap, count: max(layerCount, 1))
+        // Captioned edges between the same two nodes run side by side across
+        // their gap, and one may bend near its source to keep them uncrossed
+        // (`orderJogsInGaps`): its gap holds the caption past a bend a jog
+        // track from either end.
+        var captionedPairs: [Set<String>: Int] = [:]
+        for edge in chart.edges where !edge.invisible && !(edge.label ?? "").isEmpty && edge.from != edge.to {
+            captionedPairs[[edge.from, edge.to], default: 0] += 1
+        }
         for edge in chart.edges where !edge.invisible {
             guard let text = edge.label, !text.isEmpty,
                   let lu = layerOf[edge.from], let lv = layerOf[edge.to],
@@ -288,8 +296,9 @@ extension DiagramLayoutEngine {
             let boundary = min(lu, lv)
             let headEat = edge.hasArrow ? flowchartArrowheadLen : 0
             let tailEat = edge.backArrow ? flowchartArrowheadLen : 0
+            let either = (captionedPairs[[edge.from, edge.to]] ?? 0) > 1 && !edge.backArrow ? flowchartJogTrack : 0
             layerGaps[boundary] = max(
-                layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub)
+                layerGaps[boundary], headEat + tailEat + along + 2 * edgeLabelStub + either)
         }
         // A self-loop's bars stand off the node's main-axis faces into the
         // neighbouring layer gaps; keep the gap's middle, where other edges
@@ -420,7 +429,13 @@ extension DiagramLayoutEngine {
         var (placedEdges, crossLimit) = routeChains(
             chart: chart, chains: chains, frames: placement.frames,
             horizontal: horizontal, crossExtent: placement.crossExtent,
-            backEdges: backEdges, selfLoops: selfLoops
+            backEdges: backEdges, selfLoops: selfLoops,
+            gaps: zip(placement.bands, placement.bands.dropFirst()).map { ($0.end, $1.start) },
+            captionRuns: Dictionary(uniqueKeysWithValues: chart.edges.indices.compactMap { index in
+                guard let text = chart.edges[index].label, !text.isEmpty else { return nil }
+                let sz = measure(text, labelFontSize)
+                return (index, (horizontal ? sz.width + 6 : sz.height + 2) + 2 * edgeLabelStub)
+            })
         )
         // An edge naming an unfolded subgraph ranks with one of its nodes,
         // and ends where it reaches the subgraph's box.
@@ -997,8 +1012,9 @@ extension DiagramLayoutEngine {
     /// order of their ports on the hub, farthest out first, so an edge's
     /// places in the fan it leaves (`out`) and the one it enters (`into`)
     /// agree. An edge between adjacent layers jogs on the sum of the two in
-    /// one gap, which can reverse a fan's order there (#112). `cross` and
-    /// `main` give a chain node's centre on each axis, and
+    /// one gap, which can reverse a fan's order there; `orderJogsInGaps`
+    /// puts that right (#112). `cross` and `main` give a chain node's centre
+    /// on each axis, and
     /// `port` where an edge's end meets its node's face, if known.
     static func fanJogBias(
         _ chart: Flowchart, chains: [[String]],
@@ -1142,7 +1158,9 @@ extension DiagramLayoutEngine {
         horizontal: Bool,
         crossExtent: CGFloat,
         backEdges: Set<Int> = [],
-        selfLoops: [Int: SelfLoopPath] = [:]
+        selfLoops: [Int: SelfLoopPath] = [:],
+        gaps: [(lo: CGFloat, hi: CGFloat)] = [],
+        captionRuns: [Int: CGFloat] = [:]
     ) -> (edges: [FlowchartLayout.PlacedEdge], crossLimit: CGFloat) {
         let shapeOf = Dictionary(uniqueKeysWithValues: chart.nodes.map { ($0.id, $0.shape) })
         var loopCount: [String: Int] = [:]
@@ -1521,6 +1539,7 @@ extension DiagramLayoutEngine {
         // arrow-FREE half spans the whole reserved run and the caption breathes.
         // Only unlabeled-neutral shapes with a plain one-corner route qualify;
         // diamonds (vertex ports) and multi-corner/dummy routes are left alone.
+        var captionBends: [Int: (target: CGFloat, source: CGFloat?)] = [:]
         for index in chart.edges.indices {
             let e = chart.edges[index]
             let g = geos[index]
@@ -1547,7 +1566,22 @@ extension DiagramLayoutEngine {
                 pts[1].y = jy; pts[2].y = jy
             }
             routes[index] = pts
+            // Its bend may as well stop as short of the source, where the
+            // caption still fits on the run past it, before the arrowhead, or
+            // where it fits neither way. With no arrowhead there, a jog track
+            // clears the face.
+            let sourceStop = max(e.backArrow ? flowchartArrowheadLen : flowchartJogTrack,
+                                 loopExcursion[g.chain[0]].map { $0 + flowchartJogTrack } ?? 0)
+            let span = horizontal ? abs(pts[3].x - pts[0].x) : abs(pts[3].y - pts[0].y)
+            let need = captionRuns[index] ?? .infinity
+            captionBends[index] = (stop, span - sourceStop - flowchartArrowheadLen >= need - 0.5 || span - stop < need - 0.5
+                                         ? sourceStop : nil)
         }
+
+        // The jogs in each layer gap keep their tracks, but take them in the
+        // order that crosses least (#112).
+        orderJogsInGaps(&routes, gaps: gaps, horizontal: horizontal, captionBends: captionBends, track: flowchartJogTrack,
+                        ignored: Set(chart.edges.indices.filter { chart.edges[$0].invisible || geos[$0].selfLoop != nil }))
 
         // Separate coincident main-axis runs: two different edges whose runs
         // share a track (an incoming edge's descent and a back edge's channel
