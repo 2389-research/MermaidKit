@@ -208,6 +208,36 @@ final class RouteSeparationTests: XCTestCase {
         XCTAssertTrue(found.isEmpty, "\(found)")
     }
 
+    func testNudgingARunApartNeverTakesItIntoANode() {
+        // n6 → n2's run between its dummies shared a line with another edge;
+        // pushing it the 20pt apart put it through n0 and n1, and the jog
+        // left before it was straightened away. The other run moves instead.
+        let source = """
+            flowchart LR
+              n0 --> n1
+              n1 --> n4
+              n6 -->|go| n0
+              n7 --> n2
+              n3 --> n0
+              n1 --> n3
+              n7 -->|go| n4
+              n1 --> n5
+              n0 --> n2
+              n3 --> n5
+              n5 -->|go| n3
+              n5 --> n7
+              n7 --> n0
+              n7 --> n2
+              n7 --> n7
+              n6 --> n2
+            """
+        guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+        let layout = DiagramLayoutEngine.layout(chart, measure: measure)
+        let through = DiagramLayoutLinter.lint(DiagramScene.from(layout, measure: measure))
+            .filter { $0.kind == "edge-occludes-node" }.map(\.detail)
+        XCTAssertEqual(through, [])
+    }
+
     func testAFansEdgesNeverCross() {
         // #110: the edges a node fans out to (or in from) one row jog
         // farthest-out nearest the node, on each side of it, so none crosses

@@ -1556,7 +1556,8 @@ extension DiagramLayoutEngine {
         let hidden = chart.edges.indices.filter { chart.edges[$0].invisible }
         var drawnRoutes = routes
         for index in hidden { drawnRoutes[index] = [] }
-        separateRuns(&drawnRoutes, horizontal: horizontal, minSep: flowchartPortSep)
+        separateRuns(&drawnRoutes, horizontal: horizontal, minSep: flowchartPortSep,
+                     obstacles: chart.nodes.compactMap { frames[$0.id] })
         for index in hidden { drawnRoutes[index] = routes[index] }
         routes = drawnRoutes
 
@@ -1676,8 +1677,22 @@ extension DiagramLayoutEngine {
     /// interior bends, so shifting its cross coordinate is absorbed by the
     /// connecting cross-axis segments without detaching an endpoint from a box.
     /// A few relaxation passes let a nudge that creates a fresh clash settle.
-    static func separateRuns(_ routes: inout [[CGPoint]], horizontal: Bool, minSep: CGFloat) {
+    /// A nudge never takes a route into one of `obstacles` (the nodes) it was
+    /// clear of: then the other run moves, if it can, or neither does.
+    static func separateRuns(_ routes: inout [[CGPoint]], horizontal: Bool, minSep: CGFloat,
+                             obstacles: [CGRect] = []) {
         let tol: CGFloat = 4
+        let inset = obstacles.map { $0.insetBy(dx: 1, dy: 1) }
+        // The obstacles the run at `i` of `pts` and its two neighbours cross.
+        func blocked(_ pts: [CGPoint], _ i: Int) -> Int {
+            var count = 0
+            for j in max(i - 1, 0)...min(i + 1, pts.count - 2) {
+                let a = pts[j], b = pts[j + 1]
+                let seg = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+                count += inset.filter { $0.intersects(seg) }.count
+            }
+            return count
+        }
         func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
         func main(_ p: CGPoint) -> CGFloat { horizontal ? p.x : p.y }
         // Is segment (a,b) a main-axis run? (constant cross, changing main.)
@@ -1701,16 +1716,20 @@ extension DiagramLayoutEngine {
                     let ra = runs[a], rb = runs[b]
                     guard abs(ra.c - rb.c) < tol else { continue }          // same track
                     guard min(ra.hi, rb.hi) - max(ra.lo, rb.lo) > tol else { continue } // overlap
-                    let t = ra.movable ? a : (rb.movable ? b : -1)
-                    guard t >= 0 else { continue }
-                    let other = (t == a ? rb : ra)
-                    let s = runs[t]
-                    let dir: CGFloat = s.c >= other.c ? 1 : -1              // push away
-                    let shift = dir * minSep - (s.c - other.c)
-                    routes[s.e][s.i] = offsetCross(routes[s.e][s.i], by: shift, horizontal: horizontal)
-                    routes[s.e][s.i + 1] = offsetCross(routes[s.e][s.i + 1], by: shift, horizontal: horizontal)
-                    runs[t].c += shift
-                    moved = true
+                    for t in [a, b] where runs[t].movable {
+                        let other = (t == a ? rb : ra)
+                        let s = runs[t]
+                        let dir: CGFloat = s.c >= other.c ? 1 : -1          // push away
+                        let shift = dir * minSep - (s.c - other.c)
+                        var pts = routes[s.e]
+                        pts[s.i] = offsetCross(pts[s.i], by: shift, horizontal: horizontal)
+                        pts[s.i + 1] = offsetCross(pts[s.i + 1], by: shift, horizontal: horizontal)
+                        if !inset.isEmpty, blocked(pts, s.i) > blocked(routes[s.e], s.i) { continue }
+                        routes[s.e] = pts
+                        runs[t].c += shift
+                        moved = true
+                        break
+                    }
                 }
             }
             if !moved { break }
