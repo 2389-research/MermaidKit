@@ -129,4 +129,34 @@ final class RouteSeparationTests: XCTestCase {
             XCTAssertTrue(found.isEmpty, "trial \(trial): \(found)\n\(source)")
         }
     }
+
+    func testAWideFanJogsInsideItsGap() {
+        // #108: a fan needs a track per edge in the gap it jogs in. Every jog
+        // fits, so each edge leaves and enters its node along the main axis,
+        // and no two share a line. (A fan wider than its node's face has
+        // ports for still crowds them there, nearer than a line apart.)
+        for direction in ["TD", "LR"] {
+            for n in [7, 12, 16] {
+                for (out, label) in [(true, ""), (false, ""), (true, "|x|")] {
+                    let source = "flowchart \(direction)\n" + (0..<n).map {
+                        out ? "  R -->\(label) N\($0)" : "  N\($0) -->\(label) R"
+                    }.joined(separator: "\n")
+                    let found = doubled(source)
+                    XCTAssertTrue(found.isEmpty, "\(direction) \(n) out=\(out) \(label): \(found.count) doubled")
+                    guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+                    for edge in DiagramLayoutEngine.layout(chart, measure: measure).edges where edge.points.count > 2 {
+                        for (a, b) in [(edge.points[0], edge.points[1]),
+                                       (edge.points[edge.points.count - 2], edge.points[edge.points.count - 1])] {
+                            let along = direction == "TD" ? abs(a.y - b.y) : abs(a.x - b.x)
+                            let across = direction == "TD" ? abs(a.x - b.x) : abs(a.y - b.y)
+                            XCTAssertTrue(across < 0.5 && along >= Self.arrowhead - 0.01,
+                                          "\(direction) \(n) out=\(out) \(label): end segment \(a) → \(b)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static let arrowhead = DiagramLayoutEngine.flowchartArrowheadLen
 }

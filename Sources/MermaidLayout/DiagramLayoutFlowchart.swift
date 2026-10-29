@@ -307,6 +307,13 @@ extension DiagramLayoutEngine {
                 for gap in min(lu, lv)..<max(lu, lv) { gapJogBias[gap] = max(gapJogBias[gap], spread) }
             }
         }
+        // Every one of those tracks fits in its gap, an arrowhead clear of
+        // each face (#108). A fan's tracks are spaced by its rank in cross
+        // order, which growing a gap leaves alone, so a gap wide enough here
+        // never clamps a jog onto a node's face, where fans would share it.
+        for gap in gapJogBias.indices where gap < layerGaps.count {
+            layerGaps[gap] = max(layerGaps[gap], 2 * (gapJogBias[gap] + flowchartArrowheadLen))
+        }
         var leadPad: CGFloat = 0, tailPad: CGFloat = 0
         for loop in selfLoops.values {
             guard let layer = layerOf[loop.node] else { continue }
