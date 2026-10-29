@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 2.10.0 — Subgraphs that span rows, fans that don't cross, ends that don't hook
+
+Flowchart routing gets a long overdue overhaul. A subgraph's box spans the
+rows its members take when an edge would otherwise point backwards; two
+edges never draw as one; a fan's edges cross far less, and every jog in a
+layer gap takes its track in the order that crosses least; and no edge ends
+on a hook. Two new linter rules find what was wrong deterministically. Over
+3,000 dense random charts, doubled edges fall from 1,246 on 2.9.1 to 0; over
+the fan, gap and hook work alone, routes through a node fall from 73 to 15,
+crossings from 419 to 258, and hooked ends (counted by the new rule) from
+2,530 to 59. Layouts change for the charts these fixes touch: a handful of
+corpus charts, and the cross-platform conformance signature, now
+`b26cce4b4a877478`, the same on every platform.
+
+### Added
+
+- **Two linter rules.** `edge-end-hooked` flags a bending route that leaves
+  or meets a node on a straight run shorter than an arrowhead and the
+  router's shortest step (`DiagramLayoutLinter.minEndRun`, 19.5pt), except a
+  loop and a decision's vertex. `label-cut-by-own-edge` flags a caption that
+  straddles a step of its own route. `DiagramScene.Node.isDecision` marks a
+  decision (a flowchart diamond, a state chart's choice), whose branches
+  fork at its vertices; it is not part of the encoded scene.
+  `DiagramLayoutLinter.minCaptionStub` names the 10pt stub
+  `label-crowds-edge` already used.
 
 ### Fixed
 
@@ -125,7 +149,7 @@
   flow, more of them than its face holds, sit one after another along their
   runs, and their gap holds them all: captions short of a full stub stay
   about level (36 to 34, 19 to 37), and on a 1,500-chart mixed-shape probe
-  fall from 161 to 112.
+  fall from 161 to 112. (#114, #115)
 
 New tests check, over seeded random graphs with cycles, self-loops and
 parallel edges, that an edge on no cycle points strictly down: in the layer
