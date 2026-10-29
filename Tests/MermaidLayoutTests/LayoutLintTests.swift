@@ -57,6 +57,32 @@ final class LayoutLintTests: XCTestCase {
         XCTAssertTrue(errors.isEmpty, "\(type): \(errors.count) layout errors remain")
     }
 
+    func testADecisionsBranchesForkAtItsVertices() throws {
+        // A decision's branches leave its vertices and may turn at once; the
+        // same short run off a plain box is a hooked end.
+        func lint(decision: Bool) -> [String] {
+            let box = CGRect(x: 0, y: 0, width: 60, height: 40)
+            let scene = DiagramScene(name: "flowchart", size: CGSize(width: 200, height: 200),
+                nodes: [DiagramScene.Node(id: "d", frame: box, isDecision: decision),
+                        DiagramScene.Node(id: "t", frame: CGRect(x: 100, y: 100, width: 60, height: 40))],
+                edges: [DiagramScene.Edge(polyline: [CGPoint(x: 60, y: 20), CGPoint(x: 66, y: 20),
+                                                     CGPoint(x: 66, y: 120), CGPoint(x: 100, y: 120)])],
+                labels: [])
+            return DiagramLayoutLinter.lint(scene).filter { $0.kind == "edge-end-hooked" }.map(\.detail)
+        }
+        XCTAssertEqual(lint(decision: true), [])
+        XCTAssertEqual(lint(decision: false).count, 1)
+        // A state chart's choice lowers as a decision.
+        guard let diagram = MermaidParser.parse("""
+            stateDiagram-v2
+              state check <<choice>>
+              [*] --> check
+              check --> Small: n < 10
+              check --> Large: n >= 10
+            """) else { return XCTFail("parse") }
+        XCTAssertTrue(DiagramScene.lower(diagram, measure: measure).nodes.contains { $0.id == "check" && $0.isDecision })
+    }
+
     func testFixtureLayoutsAreClean() throws {
         let files = try FileManager.default.contentsOfDirectory(at: fixturesDir, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "mmd" }.sorted { $0.lastPathComponent < $1.lastPathComponent }

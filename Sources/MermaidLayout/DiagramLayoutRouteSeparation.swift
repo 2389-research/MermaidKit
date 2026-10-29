@@ -455,16 +455,19 @@ extension DiagramLayoutEngine {
             // captions cut short (a bend back on its fan track), then the
             // fewest bends moved, of the ways the gap can hold.
             let bends = byMain.filter { !jogs[$0].options.isEmpty }
+            // While the ways stay few; a bend past that stays where it is.
             var choices: [[Int]] = [[]]
+            var tried: [Int] = []
             for j in bends where choices.count * (jogs[j].options.count + 1) <= 64 {
                 choices = choices.flatMap { c in (0...jogs[j].options.count).map { c + [$0] } }
+                tried.append(j)
             }
             var ways: [(order: [Int], at: [Int: CGFloat], crossings: Int, cut: Int, moved: Int)] = []
             for choice in choices {
                 var at: [Int: CGFloat] = [:]
                 for j in byMain where jogs[j].isBend || jogs[j].pinned { at[j] = jogs[j].main }
                 var cut = 0
-                for (j, pick) in zip(bends, choice) where pick > 0 {
+                for (j, pick) in zip(tried, choice) where pick > 0 {
                     at[j] = jogs[j].options[pick - 1]
                     if abs(at[j]! - captionBends[jogs[j].edge]!.natural) < 0.5 { cut += 1 }
                 }
