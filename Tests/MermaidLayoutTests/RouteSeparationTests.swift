@@ -208,6 +208,22 @@ final class RouteSeparationTests: XCTestCase {
         XCTAssertTrue(found.isEmpty, "\(found)")
     }
 
+    func testARouteStraightenedBySlidingDropsItsQueuedPairs() {
+        // A four-point route doubles one edge on its first run and another on
+        // its jog. Sliding its first run by the jog straightens it to two
+        // points; the pair queued for its old jog must not be read again.
+        let source = CGRect(x: -56, y: -30, width: 56, height: 60), target = CGRect(x: 40, y: -6, width: 56, height: 32)
+        var routes: [[CGPoint]] = [
+            [CGPoint(x: 0, y: 0), CGPoint(x: 20, y: 0), CGPoint(x: 20, y: 10), CGPoint(x: 40, y: 10)],
+            [CGPoint(x: 5, y: -40), CGPoint(x: 5, y: 0), CGPoint(x: 15, y: 0), CGPoint(x: 15, y: -40)],
+            [CGPoint(x: 30, y: -40), CGPoint(x: 30, y: 2), CGPoint(x: 20, y: 2),
+             CGPoint(x: 20, y: 8), CGPoint(x: 30, y: 8), CGPoint(x: 30, y: 50)],
+        ]
+        DiagramLayoutEngine.separateDoubledRuns(&routes, fixed: [1, 2], ignored: [],
+                                                obstacles: [source, target], track: DiagramLayoutEngine.flowchartJogTrack)
+        XCTAssertEqual(routes[0], [CGPoint(x: 0, y: 10), CGPoint(x: 40, y: 10)])
+    }
+
     func testNudgingARunApartNeverTakesItIntoANode() {
         // n6 → n2's run between its dummies shared a line with another edge;
         // pushing it the 20pt apart put it through n0 and n1, and the jog

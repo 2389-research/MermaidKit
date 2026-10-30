@@ -287,7 +287,10 @@ extension DiagramLayoutEngine {
             head += 1
             budget -= 1
             let pts = routes[s.edge], other = routes[t.edge]
-            guard overlap(pts[s.index], pts[s.index + 1], other[t.index], other[t.index + 1])
+            // A route a slide straightened has lost the segments queued for
+            // it; what it still doubles was queued afresh from its new ones.
+            guard s.index + 1 < pts.count, t.index + 1 < other.count,
+                  overlap(pts[s.index], pts[s.index + 1], other[t.index], other[t.index + 1])
                     > doubledLimit(pts, other) else { continue }
             // The later edge's segment moves first; failing that, the earlier.
             // A segment that can't move (it meets a node) can still be
