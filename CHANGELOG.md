@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.10.2 — Every SVG label is well-formed XML
+
+A fix to SVG export, from #119. Output changes only for labels holding one
+of the characters below; the conformance signature is unchanged.
+
+### Fixed
+
+- **SVG export escapes `<` and `&` before a combining mark, and replaces
+  what XML can't hold.** `SVGRenderer` escaped a label one `Character` at a
+  time, but `<` or `&` with a combining mark after it (a `&#769;`, decoded
+  since 2.8) is one `Character`, and it isn't `<`; it was written raw. A C0
+  control other than tab, LF and CR, or U+FFFE / U+FFFF, typed or pasted
+  into a label (an ANSI escape copied from a terminal), reached `<text>` as
+  it was, and XML 1.0 can't hold one even as a reference. Either made the
+  document unparseable. Escaping now walks scalars, and writes U+FFFD for
+  those characters. Reported, with the fix, by @Joseph-Cursio.
+
 ## 2.10.1 — Two edges never meet and part on one line
 
 A follow-up to 2.10.0's routing work, from one chart: two edges whose
