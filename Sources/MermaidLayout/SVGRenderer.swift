@@ -154,18 +154,24 @@ public enum SVGRenderer {
         return s
     }
 
-    /// Escapes the five XML predefined entities so labels can't break the doc.
+    /// Escapes the five XML predefined entities so labels can't break the doc,
+    /// and writes U+FFFD for a character XML 1.0 can't hold at all, even as a
+    /// reference: a C0 control other than tab, LF and CR, or U+FFFE / U+FFFF.
+    /// Walks scalars, not Characters: "<" plus a combining mark is one
+    /// Character, and it isn't "<" (#119).
     static func escape(_ text: String) -> String {
         var out = ""
-        out.reserveCapacity(text.count)
-        for ch in text {
-            switch ch {
+        out.reserveCapacity(text.utf8.count)
+        for scalar in text.unicodeScalars {
+            switch scalar {
             case "&": out += "&amp;"
             case "<": out += "&lt;"
             case ">": out += "&gt;"
             case "\"": out += "&quot;"
             case "'": out += "&#39;"
-            default: out.append(ch)
+            case "\t", "\n", "\r": out.unicodeScalars.append(scalar)
+            case "\u{0}"..."\u{1F}", "\u{FFFE}", "\u{FFFF}": out += "\u{FFFD}"
+            default: out.unicodeScalars.append(scalar)
             }
         }
         return out
