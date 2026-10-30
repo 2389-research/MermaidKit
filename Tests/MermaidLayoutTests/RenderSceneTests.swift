@@ -218,6 +218,47 @@ final class RenderSceneTests: XCTestCase {
         #endif
     }
 
+    /// #119: `<` or `&` with a combining mark after it is one `Character`, and
+    /// not `"<"`; it must still be escaped.
+    func testSVGEscapesBeforeACombiningMark() throws {
+        let cases = [
+            ("flowchart LR\n  A[\"a <&#769; b\"] --> B[ok]", "a &lt;\u{301} b"),
+            ("flowchart LR\n  A[\"a &amp;&#769; b\"] --> B[ok]", "a &amp;\u{301} b"),
+        ]
+        for (source, written) in cases {
+            let svg = SVGRenderer.svg(try scene(source))
+            XCTAssertTrue(svg.contains(">\(written)</text>"), "for:\n\(source)\n\(svg)")
+            #if canImport(Darwin)
+            let parser = XMLParser(data: Data(svg.utf8))
+            XCTAssertTrue(parser.parse(), "for:\n\(source)\n\(parser.parserError as Any)")
+            #endif
+        }
+    }
+
+    /// #119: XML 1.0 can't hold a C0 control other than tab, LF and CR, nor
+    /// U+FFFE or U+FFFF, even as a reference; each is written as U+FFFD.
+    func testSVGReplacesWhatXMLCannotHold() throws {
+        let terminal = SVGRenderer.svg(try scene("flowchart LR\n  A[\"a \u{1B}[1mb\u{1B}[0m\"] --> B[ok]"))
+        XCTAssertTrue(terminal.contains(">a \u{FFFD}[1mb\u{FFFD}[0m</text>"), terminal)
+
+        let forbidden = (0x0...0x1F).filter { ![0x9, 0xA, 0xD].contains($0) } + [0xFFFE, 0xFFFF]
+        for value in forbidden {
+            let scalar = try XCTUnwrap(Unicode.Scalar(value))
+            let text = RenderScene.Text(
+                string: "a\(Character(scalar))b", center: CGPoint(x: 20, y: 10), fontSize: 12,
+                weight: .regular, color: DiagramColor(hex: 0x1D1D1F))
+            let svg = SVGRenderer.svg(RenderScene(
+                size: CGSize(width: 40, height: 20), background: DiagramColor(hex: 0xFFFFFF),
+                elements: [.text(text)]))
+            XCTAssertTrue(svg.contains(">a\u{FFFD}b</text>"), String(format: "U+%04X", value))
+            #if canImport(Darwin)
+            XCTAssertTrue(XMLParser(data: Data(svg.utf8)).parse(), String(format: "U+%04X", value))
+            #endif
+        }
+        // Tab, LF and CR are XML characters; they pass through.
+        XCTAssertEqual(SVGRenderer.escape("a\tb\nc\rd"), "a\tb\nc\rd")
+    }
+
     // MARK: Shape coverage
 
     func testShapeCoverage() throws {
