@@ -50,7 +50,7 @@ geometry tests.
 | `label-on-fixture` | error | An edge label sits on a bend, a crossing, another label, a box, or an arrowhead tip (flowchart/state) |
 | `label-crowds-edge` | error | An edge label's run leaves under 10pt of connector on a side (flowchart/state) |
 | `edge-endpoint-detached` | error | An edge has no polyline, is a zero-length stub, or an endpoint sits detached from every node (flowchart/state) |
-| `edges-doubled` | error | Two edges run doubled along a shared line (overlapping connectors) (flowchart/state) |
+| `edges-doubled` | error | Two edges run doubled along a shared line (overlapping connectors): any length of it, or beyond a stub where they share an end (flowchart/state) |
 | `edge-end-hooked` | error | A bending route leaves or meets a node on a straight run under an arrowhead and the router's shortest step (`minEndRun`, 19.5pt); loops and a decision's vertices are exempt (flowchart/state) |
 | `label-cut-by-own-edge` | error | A segment of a caption's own route, off the run it rides, passes through it (flowchart/state) |
 | `labels-overlap` / `label-over-node` | warning | Colliding text |
