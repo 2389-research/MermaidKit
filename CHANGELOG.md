@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 2.10.1 — Two edges never meet and part on one line
+
+A follow-up to 2.10.0's routing work, from one chart: two edges whose
+lines touched for a few points read as one edge forking. The linter now
+finds it wherever it happens, the router never draws it, and the jog
+ordering 2.10.0 added no longer hooks an end. Layouts change only for
+charts that had either defect; the conformance signature is unchanged.
 
 ### Fixed
 
