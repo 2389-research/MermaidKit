@@ -1618,7 +1618,9 @@ extension DiagramLayoutEngine {
         // order that crosses least (#112).
         orderJogsInGaps(&routes, gaps: gaps, horizontal: horizontal, captionBends: captionBends,
                         captioned: Set(captionRuns.keys), track: flowchartJogTrack, near: flowchartMinJog,
-                        ignored: Set(chart.edges.indices.filter { chart.edges[$0].invisible || geos[$0].selfLoop != nil }))
+                        ignored: Set(chart.edges.indices.filter { chart.edges[$0].invisible || geos[$0].selfLoop != nil }),
+                        endRun: flowchartEndRun,
+                        decisions: chart.nodes.filter { $0.shape == .diamond }.compactMap { frames[$0.id] })
 
         // Separate coincident main-axis runs: two different edges whose runs
         // share a track (an incoming edge's descent and a back edge's channel

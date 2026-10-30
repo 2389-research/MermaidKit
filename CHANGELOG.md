@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Two edges never meet and part on one line.** `edges-doubled` let two
+  edges share up to 8pt of line, meant for the stubs of edges leaving or
+  meeting one port; but two edges with no end in common that share even a
+  few points draw as one edge forking, and the reader can't tell which goes
+  where (a jog handing off onto another's run, two edges crossing in an X
+  between ports that line up). The rule now allows the 8pt only to edges
+  that share an end (`DiagramLayoutEngine.doubledLimit`). The router keeps
+  to it: ordering a gap's jogs counts such a handoff as worse than any
+  crossing, and where no order clears one, an end run slides along its
+  node's face by up to a track, never past another edge's end or off a
+  decision's vertex. Over the dense and subgraph random charts and the
+  two-row ratchet, such short shared lines fall from 263 to 0.
+- **Ordering jogs never hooks an end.** The jog ordering of 2.10.0 could
+  put a step within an end run of its node; it now refuses that, as every
+  other pass that moves a bend does. Hooked ends over the dense random
+  charts fall from 28 to 0, now asserted exactly, and crossings between
+  edges that share a node in the two-row ratchet from 125 to 110.
+
 ## 2.10.0 — Subgraphs that span rows, fans that don't cross, ends that don't hook
 
 Flowchart routing gets a long overdue overhaul. A subgraph's box spans the

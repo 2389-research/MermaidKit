@@ -287,15 +287,16 @@ public enum DiagramLayoutLinter {
 
         // 1c. Doubled connectors (flowchart/state only). Two DISTINCT edges
         //     whose orthogonal segments are collinear (same fixed coordinate)
-        //     and overlap along that line by more than a stub render as a single
-        //     doubled wire — the reader can't tell two edges apart. This is the
+        //     and overlap along that line render as a single doubled wire —
+        //     the reader can't tell two edges apart. Edges sharing an end may
+        //     lie together for a stub there; others not at all, or they meet
+        //     and part (`DiagramLayoutEngine.doubledLimit`). This is the
         //     degenerate geometry the back-edge gutter reroute must never emit
         //     (two back edges adopting the same gutter channel); the router
         //     rejects it, and this rule is the ratchet that fails the build if a
         //     future change lets one slip through. Scoped to flowchart/state, the
         //     only families with orthogonal routed connectors.
         if scene.name == "flowchart" || scene.name == "state" {
-            let doubleTol: CGFloat = 8      // overlap beyond this reads as doubled
             func overlapRun(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) -> CGFloat {
                 if abs(a.y - b.y) < 0.5, abs(c.y - d.y) < 0.5, abs(a.y - c.y) < 1 {   // horizontal, same y
                     return min(max(a.x, b.x), max(c.x, d.x)) - max(min(a.x, b.x), min(c.x, d.x))
@@ -308,10 +309,11 @@ public enum DiagramLayoutLinter {
             for i in scene.edges.indices where scene.edges[i].polyline.count >= 2 {
                 for j in scene.edges.indices where j > i && scene.edges[j].polyline.count >= 2 {
                     let pi = scene.edges[i].polyline, pj = scene.edges[j].polyline
+                    let limit = DiagramLayoutEngine.doubledLimit(pi, pj)
                     var doubled = false
                     for a in 0..<(pi.count - 1) where !doubled {
                         for b in 0..<(pj.count - 1)
-                        where overlapRun(pi[a], pi[a + 1], pj[b], pj[b + 1]) > doubleTol {
+                        where overlapRun(pi[a], pi[a + 1], pj[b], pj[b + 1]) > limit {
                             doubled = true; break
                         }
                     }

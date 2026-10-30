@@ -208,6 +208,22 @@ final class RouteSeparationTests: XCTestCase {
         XCTAssertTrue(found.isEmpty, "\(found)")
     }
 
+    func testARouteStraightenedBySlidingDropsItsQueuedPairs() {
+        // A four-point route doubles one edge on its first run and another on
+        // its jog. Sliding its first run by the jog straightens it to two
+        // points; the pair queued for its old jog must not be read again.
+        let source = CGRect(x: -56, y: -30, width: 56, height: 60), target = CGRect(x: 40, y: -6, width: 56, height: 32)
+        var routes: [[CGPoint]] = [
+            [CGPoint(x: 0, y: 0), CGPoint(x: 20, y: 0), CGPoint(x: 20, y: 10), CGPoint(x: 40, y: 10)],
+            [CGPoint(x: 5, y: -40), CGPoint(x: 5, y: 0), CGPoint(x: 15, y: 0), CGPoint(x: 15, y: -40)],
+            [CGPoint(x: 30, y: -40), CGPoint(x: 30, y: 2), CGPoint(x: 20, y: 2),
+             CGPoint(x: 20, y: 8), CGPoint(x: 30, y: 8), CGPoint(x: 30, y: 50)],
+        ]
+        DiagramLayoutEngine.separateDoubledRuns(&routes, fixed: [1, 2], ignored: [],
+                                                obstacles: [source, target], track: DiagramLayoutEngine.flowchartJogTrack)
+        XCTAssertEqual(routes[0], [CGPoint(x: 0, y: 10), CGPoint(x: 40, y: 10)])
+    }
+
     func testNudgingARunApartNeverTakesItIntoANode() {
         // n6 → n2's run between its dummies shared a line with another edge;
         // pushing it the 20pt apart put it through n0 and n1, and the jog
@@ -292,6 +308,22 @@ final class RouteSeparationTests: XCTestCase {
         }
     }
 
+    func testAJogNeverHandsOffOnAnotherEdgesLine() {
+        // Two jogs in one gap whose runs meet on one line, one's run on down
+        // from its step where the other's comes down to its own: above the
+        // other, the first would share that line between the two steps. A
+        // plain crossing is what the order must take instead.
+        let source = "flowchart TD\n  S3 --> T1\n  S0 --> T1\n  S1 --> T0\n  S2 --> T0\n  S0 --> T0\n  S2 --> T1"
+        guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
+        let edges = DiagramLayoutEngine.layout(chart, measure: measure).edges
+        for i in edges.indices {
+            for j in edges.indices where i < j {
+                XCTAssertFalse(Self.share(edges[i].points, edges[j].points),
+                               "edges \(i) and \(j) share a line: \(edges[i].points) \(edges[j].points)")
+            }
+        }
+    }
+
     func testCrossingsBetweenTwoRowsOnlyFall() {
         // A ratchet over seeded random two-row charts: the crossings between
         // edges that share a node, which ordering each gap's jogs removes.
@@ -315,24 +347,22 @@ final class RouteSeparationTests: XCTestCase {
         if total < Self.twoRowCrossings { print("RATCHET twoRowCrossings can fall to \(total)") }
     }
 
-    func testHookedEndsOnlyFall() {
-        // A ratchet over the dense random charts: ends that bend within an
-        // arrowhead and a step of their node (`edge-end-hooked`).
-        var total = 0
+    func testNoEndHooks() {
+        // Over the dense random charts, no end bends within an arrowhead and
+        // a step of its node (`edge-end-hooked`): every pass that moves a
+        // bend refuses one that would.
+        var found: [String] = []
         for source in randomCharts(seed: 0x510E_527F_ADE6_82D1, count: 1000, subgraphs: false)
             + randomCharts(seed: 0x9B05_688C_2B3E_6C1F, count: 1000, subgraphs: true) {
             guard case .flowchart(let chart)? = MermaidParser.parse(source) else { return XCTFail("parse") }
             let layout = DiagramLayoutEngine.layout(chart, measure: measure)
-            total += DiagramLayoutLinter.lint(DiagramScene.from(layout, measure: measure))
-                .filter { $0.kind == "edge-end-hooked" }.count
+            found += DiagramLayoutLinter.lint(DiagramScene.from(layout, measure: measure))
+                .filter { $0.kind == "edge-end-hooked" }.map { "\($0.detail)\n\(source)" }
         }
-        XCTAssertLessThanOrEqual(total, Self.hookedEnds, "hooked ends rose")
-        if total < Self.hookedEnds { print("RATCHET hookedEnds can fall to \(total)") }
+        XCTAssertEqual(found, [])
     }
 
-    private static let hookedEnds = 28
-
-    private static let twoRowCrossings = 125
+    private static let twoRowCrossings = 110
 
     /// Whether two orthogonal routes cross: a run of one passes strictly
     /// through a run of the other.
@@ -345,6 +375,19 @@ final class RouteSeparationTests: XCTestCase {
                       abs(h.0.x - h.1.x) > 0.5, abs(v.0.y - v.1.y) > 0.5 else { continue }
                 if min(h.0.x, h.1.x) < v.0.x, v.0.x < max(h.0.x, h.1.x),
                    min(v.0.y, v.1.y) < h.0.y, h.0.y < max(v.0.y, v.1.y) { return true }
+            }
+        }
+        return false
+    }
+
+    /// Whether two orthogonal routes share any length of one line.
+    private static func share(_ a: [CGPoint], _ b: [CGPoint]) -> Bool {
+        for (p, q) in zip(a, a.dropFirst()) {
+            for (r, s) in zip(b, b.dropFirst()) {
+                if abs(p.y - q.y) < 0.5, abs(r.y - s.y) < 0.5, abs(p.y - r.y) < 0.5,
+                   min(max(p.x, q.x), max(r.x, s.x)) - max(min(p.x, q.x), min(r.x, s.x)) > 0.5 { return true }
+                if abs(p.x - q.x) < 0.5, abs(r.x - s.x) < 0.5, abs(p.x - r.x) < 0.5,
+                   min(max(p.y, q.y), max(r.y, s.y)) - max(min(p.y, q.y), min(r.y, s.y)) > 0.5 { return true }
             }
         }
         return false

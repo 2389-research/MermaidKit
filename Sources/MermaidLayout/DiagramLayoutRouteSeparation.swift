@@ -12,7 +12,8 @@ import CoreGraphics
 /// as one doubled connector, they are the `edges-doubled` the linter rejects.
 ///
 /// This pass finds exactly what that rule finds, two segments of different
-/// edges on one line (within 1pt) overlapping by more than 8pt, and moves one
+/// edges on one line (within 1pt) overlapping by more than they may
+/// (`doubledLimit`: 8pt where the two share an end, else any length), and moves one
 /// of them aside, a jog track at a time, until it is clear (or, where no
 /// whole track clears it, half a track: two edges that cross in an X between
 /// aligned ports overlap by their jogs' distance on both columns, so only
@@ -26,6 +27,16 @@ extension DiagramLayoutEngine {
     /// Overlap along one line beyond which two runs read as one (the
     /// linter's `edges-doubled` tolerance).
     static let doubledRunTolerance: CGFloat = 8
+
+    /// How far two edges may share a line before they read as one. Edges
+    /// with an end in common leave or meet it on stubs that may lie together
+    /// for `doubledRunTolerance`; two that don't share any length only to
+    /// meet and part, and the reader can't tell which goes where.
+    static func doubledLimit(_ a: [CGPoint], _ b: [CGPoint]) -> CGFloat {
+        guard let a0 = a.first, let a1 = a.last, let b0 = b.first, let b1 = b.last else { return doubledRunTolerance }
+        let shared = [a0, a1].contains { p in [b0, b1].contains { hypot($0.x - p.x, $0.y - p.y) < 1 } }
+        return shared ? doubledRunTolerance : 0.5
+    }
 
     static func separateDoubledRuns(
         _ routes: inout [[CGPoint]], fixed: Set<Int>, ignored: Set<Int>,
@@ -82,7 +93,8 @@ extension DiagramLayoutEngine {
             var out: [Segment] = []
             for line in (c - 1)...(c + 1) {
                 for t in table[Line(horizontal: h, at: line)] ?? [] where t.edge != s.edge
-                    && overlap(a, b, routes[t.edge][t.index], routes[t.edge][t.index + 1]) > doubledRunTolerance {
+                    && overlap(a, b, routes[t.edge][t.index], routes[t.edge][t.index + 1])
+                        > doubledLimit(routes[s.edge], routes[t.edge]) {
                     out.append(t)
                 }
             }
@@ -94,9 +106,9 @@ extension DiagramLayoutEngine {
             return insetObstacles.contains { $0.intersects(seg) }
         }
         // The overlaps (beyond half a point) the segments around `k` of `route`
-        // would have with other edges.
-        func overlaps(_ e: Int, _ k: Int, _ route: [CGPoint]) -> [CGFloat] {
-            var out: [CGFloat] = []
+        // would have with other edges, each with how far it may go.
+        func overlaps(_ e: Int, _ k: Int, _ route: [CGPoint]) -> [(run: CGFloat, limit: CGFloat)] {
+            var out: [(run: CGFloat, limit: CGFloat)] = []
             for j in max(k - 1, 0)...min(k + 1, route.count - 2) {
                 let a = route[j], b = route[j + 1]
                 guard let h = horizontalRun(a, b) else { continue }
@@ -104,7 +116,7 @@ extension DiagramLayoutEngine {
                 for line in (c - 1)...(c + 1) {
                     for t in table[Line(horizontal: h, at: line)] ?? [] where t.edge != e {
                         let o = overlap(a, b, routes[t.edge][t.index], routes[t.edge][t.index + 1])
-                        if o > 0.5 { out.append(o) }
+                        if o > 0.5 { out.append((o, doubledLimit(route, routes[t.edge]))) }
                     }
                 }
             }
@@ -146,6 +158,44 @@ extension DiagramLayoutEngine {
             guard keeps(pts[n - 3], pts[n - 2], shifted(pts[n - 2]), h) else { return .tooFar }
             return .grade(0, Array(pts[..<(n - 2)]) + [shifted(pts[n - 2]), out, pts[n - 1]], n - 2)
         }
+        // An end run square to its node's face can slide along the face, its
+        // port with it, while the port stays clear of the face's corners and
+        // the run beyond keeps its way. Two edges crossing in an X between
+        // ports that line up share a line wherever their jogs go; a port
+        // moved is all that parts them. Never off a decision's vertex.
+        func slide(_ s: Segment, by delta: CGFloat) -> Move? {
+            let pts = routes[s.edge], n = pts.count
+            let start = s.index == 0, end = s.index + 2 == n
+            guard !fixed.contains(s.edge), n >= 4, start || end,
+                  let h = horizontalRun(pts[s.index], pts[s.index + 1]) else { return nil }
+            let (tip, next, beyond) = start ? (0, 1, 2) : (n - 1, n - 2, n - 3)
+            let p = pts[tip]
+            guard let face = obstacles.first(where: { f in
+                h ? (abs(p.x - f.minX) < 0.5 || abs(p.x - f.maxX) < 0.5) && p.y > f.minY && p.y < f.maxY
+                  : (abs(p.y - f.minY) < 0.5 || abs(p.y - f.maxY) < 0.5) && p.x > f.minX && p.x < f.maxX
+            }) else { return nil }
+            guard !decisions.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(p) }) else { return .immovable }
+            func shifted(_ q: CGPoint) -> CGPoint { h ? CGPoint(x: q.x, y: q.y + delta) : CGPoint(x: q.x + delta, y: q.y) }
+            let (lo, hi) = h ? (face.minY, face.maxY) : (face.minX, face.maxX)
+            let margin = min(8, (hi - lo) / 4), at = along(shifted(p), h)
+            guard abs(delta) <= track, at >= lo + margin, at <= hi - margin else { return .tooFar }
+            // Nor past another edge's end on the face, which would cross it.
+            let was = along(p, h), face0 = h ? p.x : p.y
+            for (e, other) in routes.enumerated() where e != s.edge && !ignored.contains(e) {
+                for q in [other.first, other.last].compactMap({ $0 }) where abs((h ? q.x : q.y) - face0) < 0.5 {
+                    let o = along(q, h)
+                    if abs(o - was) > 0.5, min(was, at) - 0.5 <= o, o <= max(was, at) + 0.5 { return .tooFar }
+                }
+            }
+            var route = pts
+            route[tip] = shifted(p); route[next] = shifted(pts[next])
+            // A slide by the whole of a four-point route's jog straightens it.
+            if n == 4, abs(along(route[next], h) - along(pts[beyond], h)) < 0.5 {
+                return .grade(0, start ? [route[0], pts[3]] : [pts[0], route[3]], 0)
+            }
+            guard keeps(pts[beyond], pts[next], route[next], h) else { return .tooFar }
+            return .grade(0, route, s.index)
+        }
         // How segment `s` moved by `delta` across its line would do, without
         // moving it: grade 0 if nothing it changes shares a line with another
         // edge at all, 1 if only within the tolerance, 2 if fewer pairs are
@@ -155,7 +205,7 @@ extension DiagramLayoutEngine {
         func evaluate(_ s: Segment, by delta: CGFloat, better than: Int, doubledNow: Int) -> Move {
             var pts = routes[s.edge]
             var k = s.index
-            if let face = offFace(s, by: delta) {
+            if let face = offFace(s, by: delta) ?? slide(s, by: delta) {
                 guard case .grade(_, let route, let moved) = face else { return face }
                 pts = route; k = moved
             } else {
@@ -179,7 +229,7 @@ extension DiagramLayoutEngine {
                 pts[k] = a; pts[k + 1] = b
             }
             let found = overlaps(s.edge, k, pts)
-            let doubled = found.filter { $0 > doubledRunTolerance }.count
+            let doubled = found.filter { $0.run > $0.limit }.count
             let grade: Int
             if found.isEmpty { grade = 0 }
             else if doubled == 0 { grade = 1 }
@@ -187,7 +237,7 @@ extension DiagramLayoutEngine {
             else { return .refused }
             // Nodes last: the costliest test, and only for a move worth taking.
             guard grade < than else { return .refused }
-            for j in (k - 1)...(k + 1) where crossesObstacle(pts[j], pts[j + 1]) { return .refused }
+            for j in max(k - 1, 0)...min(k + 1, pts.count - 2) where crossesObstacle(pts[j], pts[j + 1]) { return .refused }
             return .grade(grade, pts, k)
         }
 
@@ -200,7 +250,7 @@ extension DiagramLayoutEngine {
             for offsets in [offsets, halves] where best?.grade != 0 {
                 for c in candidates {
                     let route = routes[c.edge]
-                    let doubledNow = overlaps(c.edge, c.index, route).filter { $0 > doubledRunTolerance }.count
+                    let doubledNow = overlaps(c.edge, c.index, route).filter { $0.run > $0.limit }.count
                     var blocked: Set<Bool> = []          // signs gone too far
                     for delta in offsets where !blocked.contains(delta > 0) {
                         switch evaluate(c, by: delta, better: best?.grade ?? 3, doubledNow: doubledNow) {
@@ -237,8 +287,11 @@ extension DiagramLayoutEngine {
             head += 1
             budget -= 1
             let pts = routes[s.edge], other = routes[t.edge]
-            guard overlap(pts[s.index], pts[s.index + 1], other[t.index], other[t.index + 1])
-                    > doubledRunTolerance else { continue }
+            // A route a slide straightened has lost the segments queued for
+            // it; what it still doubles was queued afresh from its new ones.
+            guard s.index + 1 < pts.count, t.index + 1 < other.count,
+                  overlap(pts[s.index], pts[s.index + 1], other[t.index], other[t.index + 1])
+                    > doubledLimit(pts, other) else { continue }
             // The later edge's segment moves first; failing that, the earlier.
             // A segment that can't move (it meets a node) can still be
             // shortened clear of the other: move the jog beside it instead.
@@ -255,7 +308,7 @@ extension DiagramLayoutEngine {
                 let oldCount = routes[best.edge].count
                 routes[best.edge] = best.route
                 if best.route.count == oldCount {
-                    for j in (best.moved - 1)...(best.moved + 1) { file(best.edge, j) }
+                    for j in max(best.moved - 1, 0)...min(best.moved + 1, oldCount - 2) { file(best.edge, j) }
                 } else {
                     refile(best.edge, from: 0, oldCount: oldCount)
                 }
@@ -263,7 +316,7 @@ extension DiagramLayoutEngine {
             }
             // What a move that only left fewer pairs still doubles waits its turn.
             if let m = moved {
-                for j in (m.index - 1)...(m.index + 1) {
+                for j in max(m.index - 1, 0)...min(m.index + 1, routes[m.edge].count - 2) {
                     let c = Segment(edge: m.edge, index: j)
                     for p in doubled(c) { work.append(p.edge > c.edge ? (c, p) : (p, c)) }
                 }
@@ -291,11 +344,14 @@ extension DiagramLayoutEngine {
     /// crosses, it may stop as short of its source, where the caption still
     /// fits, or go back to its own fan track (`captionBends`).
     /// No move brings a run within `near` of another edge's, where the two
-    /// would draw as one or be straightened onto each other.
+    /// would draw as one or be straightened onto each other, nor shortens a
+    /// run off a node below `endRun` (save off a decision's vertex), where
+    /// its end would hook.
     static func orderJogsInGaps(
         _ routes: inout [[CGPoint]], gaps: [(lo: CGFloat, hi: CGFloat)],
         horizontal: Bool, captionBends: [Int: (natural: CGFloat, source: CGFloat?)] = [:],
-        captioned: Set<Int> = [], track: CGFloat, near: CGFloat = 8, ignored: Set<Int>
+        captioned: Set<Int> = [], track: CGFloat, near: CGFloat = 8, ignored: Set<Int>,
+        endRun: CGFloat = 0, decisions: [CGRect] = []
     ) {
         guard !gaps.isEmpty else { return }
         func cross(_ p: CGPoint) -> CGFloat { horizontal ? p.y : p.x }
@@ -354,12 +410,17 @@ extension DiagramLayoutEngine {
                     jogs[p].pinned = true; jogs[p].options = []
                 }
             }
-            // cost[p][q]: crossings between p and q with p above q.
+            // cost[p][q]: crossings between p and q with p above q. Where
+            // p's run on down lies on the line of q's run from above, the two
+            // share that line between their steps and draw as one edge
+            // parting: that costs more than every crossing in the gap.
+            let handoff = 2 * n * n
             var cost = [[Int]](repeating: [Int](repeating: 0, count: n), count: n)
             var any = false
             for p in 0..<n {
                 for q in 0..<n where p != q && jogs[p].edge != jogs[q].edge {
                     cost[p][q] = (within(jogs[q].top, jogs[p]) ? 1 : 0) + (within(jogs[p].bottom, jogs[q]) ? 1 : 0)
+                        + (abs(jogs[p].bottom - jogs[q].top) < 0.5 ? handoff : 0)
                     if cost[p][q] > 0 { any = true }
                 }
             }
@@ -450,6 +511,17 @@ extension DiagramLayoutEngine {
             func crowds(_ assigned: [Int: CGFloat]) -> Bool {
                 assigned.contains { j, t in abs(t - jogs[j].main) > 0.01 && beside(j, at: t) > beside(j, at: jogs[j].main) }
             }
+            func hooks(_ assigned: [Int: CGFloat]) -> Bool {
+                assigned.contains { j, t in
+                    let jog = jogs[j], pts = current[jog.edge]
+                    return [jog.at - 1 == 0 ? pts.first : nil, jog.at + 2 == pts.count - 1 ? pts.last : nil]
+                        .compactMap { $0 }.contains { tip in
+                            let now = abs(t - main(tip))
+                            return now < abs(jog.main - main(tip)) && now < endRun
+                                && !decisions.contains { $0.insetBy(dx: -1, dy: -1).contains(tip) }
+                        }
+                }
+            }
             // Each bend where it is or at one of its other places, every way
             // while there are few: the fewest crossings wins, then the fewest
             // captions cut short (a bend back on its fan track), then the
@@ -478,7 +550,7 @@ extension DiagramLayoutEngine {
             ways.sort { ($0.crossings, $0.cut, $0.moved) < ($1.crossings, $1.cut, $1.moved) }
             guard let (_, assigned) = ways.lazy.filter({ $0.crossings < before }).compactMap({ way in
                 [true, false].lazy.compactMap { assign(way.order, at: way.at, keeping: $0) }
-                    .first { !crowds($0) }.map { (way, $0) }
+                    .first { !crowds($0) && !hooks($0) }.map { (way, $0) }
             }).first else { continue }
             for (j, t) in assigned where abs(t - jogs[j].main) > 0.01 {
                 let jog = jogs[j]

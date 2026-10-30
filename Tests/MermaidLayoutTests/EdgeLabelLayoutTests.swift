@@ -263,6 +263,25 @@ final class EdgeLabelLayoutTests: XCTestCase {
         XCTAssertEqual(hits.first?.severity, .error)
     }
 
+    /// `edges-doubled`, short: one edge's run on down from its step and
+    /// another's run down to its own lie on one line for only the few points
+    /// between the two steps. Neither end is shared, so the reader sees the
+    /// two edges meet and part, and can't tell which goes where.
+    func testAHandoffOnOneLineIsDoubled() {
+        let node = { (id: String, x: CGFloat, y: CGFloat) in
+            DiagramScene.Node(id: id, frame: CGRect(x: x, y: y, width: 56, height: 34)) }
+        let scene = DiagramScene(
+            name: "flowchart", size: CGSize(width: 330, height: 160),
+            nodes: [node("S0", 94, 12), node("S2", 258, 12), node("T1", 94, 115), node("T0", 176, 115)],
+            edges: [.init(polyline: [CGPoint(x: 137, y: 46), CGPoint(x: 137, y: 90),
+                                     CGPoint(x: 188, y: 90), CGPoint(x: 188, y: 115)], label: nil),
+                    .init(polyline: [CGPoint(x: 270, y: 46), CGPoint(x: 270, y: 85),
+                                     CGPoint(x: 137, y: 85), CGPoint(x: 137, y: 115)], label: nil)],
+            labels: [])
+        let hits = DiagramLayoutLinter.lint(scene).filter { $0.kind == "edges-doubled" }
+        XCTAssertEqual(hits.count, 1, "a 5pt handoff on one line must be flagged")
+    }
+
     // MARK: - Route quality on the real back-edge layout
 
     /// #3 — the `fail` back edge (`Decide -> Draft`) must have NO needless zag:
